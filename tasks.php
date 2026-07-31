@@ -81,6 +81,8 @@ $search = $_GET['search'] ?? '';
 $filter_status = $_GET['status'] ?? '';
 $filter_project = $_GET['project_id'] ?? '';
 $filter_assignee = $_GET['assigned_to'] ?? '';
+$start_date = $_GET['start_date'] ?? '';
+$end_date = $_GET['end_date'] ?? '';
 $view = $_GET['view'] ?? 'board'; // Default to board for tasks
 
 $query = "SELECT t.*, p.project_name, u.username as assigned_user FROM tasks t LEFT JOIN projects p ON t.project_id = p.id LEFT JOIN users u ON t.assigned_to = u.id WHERE 1=1 ";
@@ -105,6 +107,14 @@ if ($filter_status) {
 if ($filter_project) {
     $query .= " AND t.project_id = ? ";
     $params[] = $filter_project;
+}
+if ($start_date) {
+    $query .= " AND t.due_date >= ? ";
+    $params[] = $start_date;
+}
+if ($end_date) {
+    $query .= " AND t.due_date <= ? ";
+    $params[] = $end_date;
 }
 $query .= " ORDER BY t.due_date ASC, t.priority ASC";
 
@@ -136,9 +146,11 @@ include 'header.php';
 
 <div class="card mb-4">
     <div class="card-body bg-light rounded d-flex flex-wrap gap-2">
-        <form method="GET" class="d-flex w-100 gap-2">
+        <form method="GET" class="d-flex w-100 gap-2 flex-wrap">
             <input type="hidden" name="view" value="<?= h($view) ?>">
-            <input type="text" name="search" class="form-control" placeholder="Search tasks..." value="<?= h($search) ?>">
+            <input type="text" name="search" class="form-control" placeholder="Search tasks..." value="<?= h($search) ?>" style="min-width: 150px; flex: 1;">
+            <input type="date" name="start_date" class="form-control" value="<?= h($start_date) ?>" title="Start Due Date" style="max-width: 150px;">
+            <input type="date" name="end_date" class="form-control" value="<?= h($end_date) ?>" title="End Due Date" style="max-width: 150px;">
             <select name="status" class="form-select" style="max-width: 150px;">
                 <option value="">All Statuses</option>
                 <?php foreach($all_statuses as $s): ?>

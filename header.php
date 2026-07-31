@@ -70,6 +70,7 @@ if (isLoggedIn()) {
                     <ul class="dropdown-menu" aria-labelledby="adminDropdown">
                         <li><a class="dropdown-item" href="users.php">Manage Users</a></li>
                         <li><a class="dropdown-item" href="lead_master.php">Lead Master Sheet</a></li>
+                        <li><a class="dropdown-item" href="admin_daily_work.php">Team Daily Work</a></li>
                     </ul>
                 </li>
                 <?php else: ?>
@@ -118,6 +119,8 @@ if (isLoggedIn()) {
                         <?= h(getCurrentUsername()) ?>
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li><a class="dropdown-item" href="profile.php"><i class="bi bi-person me-2"></i>My Profile</a></li>
+                        <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item text-danger" href="logout.php"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
                     </ul>
                 </li>

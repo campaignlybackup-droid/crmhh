@@ -104,6 +104,8 @@ $search = $_GET['search'] ?? '';
 $filter_status = $_GET['status'] ?? '';
 $filter_client = $_GET['client_id'] ?? '';
 $filter_assignee = $_GET['assigned_to'] ?? '';
+$start_date = $_GET['start_date'] ?? '';
+$end_date = $_GET['end_date'] ?? '';
 
 $query = "SELECT i.*, c.client_name, u.username as assigned_user FROM invoices i LEFT JOIN clients c ON i.client_id = c.id LEFT JOIN users u ON i.assigned_to = u.id WHERE 1=1 ";
 $params = [];
@@ -128,6 +130,14 @@ if ($filter_client) {
     $query .= " AND i.client_id = ? ";
     $params[] = $filter_client;
 }
+if ($start_date) {
+    $query .= " AND i.issue_date >= ? ";
+    $params[] = $start_date;
+}
+if ($end_date) {
+    $query .= " AND i.issue_date <= ? ";
+    $params[] = $end_date;
+}
 $query .= " ORDER BY i.created_at DESC";
 
 $stmt = $pdo->prepare($query);
@@ -150,8 +160,10 @@ include 'header.php';
 
 <div class="card mb-4">
     <div class="card-body bg-light rounded d-flex flex-wrap gap-2">
-        <form method="GET" class="d-flex w-100 gap-2">
-            <input type="text" name="search" class="form-control" placeholder="Search by Invoice #..." value="<?= h($search) ?>">
+        <form method="GET" class="d-flex w-100 gap-2 flex-wrap">
+            <input type="text" name="search" class="form-control" placeholder="Search by Invoice #..." value="<?= h($search) ?>" style="min-width: 150px; flex: 1;">
+            <input type="date" name="start_date" class="form-control" value="<?= h($start_date) ?>" title="Start Issue Date" style="max-width: 150px;">
+            <input type="date" name="end_date" class="form-control" value="<?= h($end_date) ?>" title="End Issue Date" style="max-width: 150px;">
             <select name="status" class="form-select" style="max-width: 150px;">
                 <option value="">All Statuses</option>
                 <?php foreach(['Unpaid', 'Paid', 'Overdue'] as $s): ?>

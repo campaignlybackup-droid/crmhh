@@ -178,6 +178,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $search = $_GET['search'] ?? '';
 $filter_status = $_GET['status'] ?? '';
 $filter_assignee = $_GET['assigned_to'] ?? '';
+$start_date = $_GET['start_date'] ?? '';
+$end_date = $_GET['end_date'] ?? '';
 $view = $_GET['view'] ?? 'table';
 
 $query = "SELECT l.*, p.project_name, u.username as assigned_user FROM leads l LEFT JOIN projects p ON l.project_id = p.id LEFT JOIN users u ON l.assigned_to = u.id WHERE 1=1 ";
@@ -200,6 +202,14 @@ if ($search) {
 if ($filter_status) {
     $query .= " AND l.status = ? ";
     $params[] = $filter_status;
+}
+if ($start_date) {
+    $query .= " AND l.created_at >= ? ";
+    $params[] = $start_date . " 00:00:00";
+}
+if ($end_date) {
+    $query .= " AND l.created_at <= ? ";
+    $params[] = $end_date . " 23:59:59";
 }
 $query .= " ORDER BY l.created_at DESC";
 
@@ -234,9 +244,11 @@ include 'header.php';
 
 <div class="card mb-4">
     <div class="card-body bg-light rounded d-flex flex-wrap gap-2">
-        <form method="GET" class="d-flex w-100 gap-2">
+        <form method="GET" class="d-flex w-100 gap-2 flex-wrap">
             <input type="hidden" name="view" value="<?= h($view) ?>">
-            <input type="text" name="search" class="form-control" placeholder="Search by name, contact or email..." value="<?= h($search) ?>">
+            <input type="text" name="search" class="form-control" placeholder="Search by name, contact or email..." value="<?= h($search) ?>" style="min-width: 150px; flex: 1;">
+            <input type="date" name="start_date" class="form-control" value="<?= h($start_date) ?>" title="Start Created Date" style="max-width: 150px;">
+            <input type="date" name="end_date" class="form-control" value="<?= h($end_date) ?>" title="End Created Date" style="max-width: 150px;">
             <select name="status" class="form-select" style="max-width: 150px;">
                 <option value="">All Statuses</option>
                 <?php foreach($all_statuses as $s): ?>

@@ -36,8 +36,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$stmt = $pdo->prepare("SELECT * FROM daily_work WHERE user_id = ? ORDER BY work_date DESC, created_at DESC");
-$stmt->execute([$user_id]);
+$start_date = $_GET['start_date'] ?? '';
+$end_date = $_GET['end_date'] ?? '';
+
+$query = "SELECT * FROM daily_work WHERE user_id = ?";
+$params = [$user_id];
+
+if ($start_date) {
+    $query .= " AND work_date >= ?";
+    $params[] = $start_date;
+}
+if ($end_date) {
+    $query .= " AND work_date <= ?";
+    $params[] = $end_date;
+}
+
+$query .= " ORDER BY work_date DESC, created_at DESC";
+$stmt = $pdo->prepare($query);
+$stmt->execute($params);
 $work_logs = $stmt->fetchAll();
 
 include 'header.php';
@@ -52,6 +68,24 @@ include 'header.php';
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#workModal" onclick="resetWorkForm()">
             <i class="bi bi-plus-lg"></i> Log Work
         </button>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body bg-light rounded">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small fw-bold text-muted">START DATE</label>
+                <input type="date" name="start_date" class="form-control" value="<?= h($start_date) ?>">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold text-muted">END DATE</label>
+                <input type="date" name="end_date" class="form-control" value="<?= h($end_date) ?>">
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary w-100">Filter</button>
+            </div>
+        </form>
     </div>
 </div>
 

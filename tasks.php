@@ -258,8 +258,17 @@ include 'header.php';
                                     <?= strtoupper(substr($task['assigned_user'] ?? '?', 0, 1)) ?>
                                 </div>
                             </div>
-                            <div class="small <?= $dateClass ?>">
-                                <i class="bi bi-calendar"></i> <?= h($task['due_date'] ?? 'No Date') ?>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="small <?= $dateClass ?>">
+                                    <i class="bi bi-calendar"></i> <?= h($task['due_date'] ?? 'No Date') ?>
+                                </div>
+                                <?php if ($isSuper): ?>
+                                <form method="POST" class="m-0 d-inline" onsubmit="return confirm('Delete this task?');">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="id" value="<?= $task['id'] ?>">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger p-0 px-1 border-0" title="Delete"><i class="bi bi-trash"></i></button>
+                                </form>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>

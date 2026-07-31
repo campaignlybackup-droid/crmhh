@@ -355,9 +355,16 @@ include 'header.php';
                                     <?php endforeach; ?>
                                 </select>
                             </form>
-                            <?php if ($lead['deal_value'] > 0): ?>
-                                <span class="fw-bold text-success small">AED <?= number_format($lead['deal_value']) ?></span>
-                            <?php endif; ?>
+                            <div class="d-flex align-items-center gap-2">
+                                <?php if ($lead['deal_value'] > 0): ?>
+                                    <span class="fw-bold text-success small">AED <?= number_format($lead['deal_value']) ?></span>
+                                <?php endif; ?>
+                                <form method="POST" class="m-0 d-inline" onsubmit="return confirm('Delete this lead?');">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="id" value="<?= $lead['id'] ?>">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger p-0 px-1 border-0" title="Delete"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </div>
                         </div>
                     </div>
                 <?php endforeach; ?>

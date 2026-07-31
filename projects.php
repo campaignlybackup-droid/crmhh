@@ -292,7 +292,14 @@ include 'header.php';
                             </div>
                         </div>
                         <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center small text-muted">
-                            <span class="fw-bold text-success">AED <?= number_format($project['project_value']) ?></span>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fw-bold text-success">AED <?= number_format($project['project_value']) ?></span>
+                                <form method="POST" class="m-0 d-inline" onsubmit="return confirm('Delete this project?');">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="id" value="<?= $project['id'] ?>">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger p-0 px-1 border-0" title="Delete"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </div>
                             <?php if ($isSuper): ?>
                             <span><i class="bi bi-person-badge"></i> <?= h($project['assigned_user'] ?: 'Unassigned') ?></span>
                             <?php endif; ?>

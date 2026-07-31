@@ -1,0 +1,144 @@
+:root {
+    --primary-color: #4361ee;
+    --primary-hover: #3a56d4;
+    --dark-bg: #1e1e2f;
+    --dark-nav: #2a2a3c;
+    --light-bg: #f4f7fe;
+    --card-bg: #ffffff;
+    --text-main: #2b3674;
+    --text-muted: #a3aed1;
+    --border-color: #e0e5f2;
+}
+
+body {
+    background-color: var(--light-bg);
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif; /* We'll import this in header */
+    margin: 0;
+    padding: 0;
+}
+
+/* Navbar overrides */
+.navbar-custom {
+    background-color: var(--dark-nav);
+}
+
+.navbar-custom .navbar-brand,
+.navbar-custom .nav-link {
+    color: #ffffff !important;
+}
+
+.navbar-custom .nav-link:hover {
+    color: var(--text-muted) !important;
+}
+
+/* Cards */
+.card {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 4px 20px 0 rgba(0,0,0,0.05);
+    background-color: var(--card-bg);
+    margin-bottom: 20px;
+}
+
+.card-header {
+    background-color: transparent;
+    border-bottom: 1px solid var(--border-color);
+    padding: 20px;
+    font-weight: 600;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+/* Dashboard Widget Cards */
+.widget-card {
+    transition: transform 0.3s ease;
+}
+
+.widget-card:hover {
+    transform: translateY(-5px);
+}
+
+.widget-icon {
+    font-size: 2.5rem;
+    opacity: 0.8;
+}
+
+/* Tables */
+.table {
+    vertical-align: middle;
+}
+
+.table th {
+    border-bottom-width: 1px;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.table td {
+    color: var(--text-main);
+    font-weight: 500;
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    border-radius: 8px;
+    padding: 8px 20px;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-hover);
+    border-color: var(--primary-hover);
+}
+
+/* Status Pills */
+.badge-status {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.75rem;
+}
+
+/* Badges Custom Colors */
+.bg-soft-primary { background-color: rgba(67, 97, 238, 0.1); color: #4361ee; }
+.bg-soft-success { background-color: rgba(25, 135, 84, 0.1); color: #198754; }
+.bg-soft-warning { background-color: rgba(255, 193, 7, 0.1); color: #ffc107; }
+.bg-soft-danger { background-color: rgba(220, 53, 69, 0.1); color: #dc3545; }
+.bg-soft-info { background-color: rgba(13, 202, 240, 0.1); color: #0dcaf0; }
+.bg-soft-secondary { background-color: rgba(108, 117, 125, 0.1); color: #6c757d; }
+
+/* Notification Bell */
+.notification-bell {
+    position: relative;
+    cursor: pointer;
+}
+
+.notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background-color: #dc3545;
+    color: white;
+    border-radius: 50%;
+    padding: 3px 6px;
+    font-size: 0.6rem;
+}
+
+/* Dropdown */
+.dropdown-menu {
+    border: none;
+    box-shadow: 0 4px 20px 0 rgba(0,0,0,0.1);
+    border-radius: 10px;
+}
+
+/* Container spacing */
+.main-content {
+    padding: 30px 15px;
+}

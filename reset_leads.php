@@ -8,11 +8,17 @@ if (!isSuperAdmin()) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_reset'])) {
     try {
+        // Disable foreign key checks to allow truncation
+        $pdo->exec("SET FOREIGN_KEY_CHECKS = 0");
+        
         // TRUNCATE empties the table and resets the auto-increment ID back to 1
         $pdo->exec("TRUNCATE TABLE leads");
         
         // Also clear the lead_history table to remove all history logs
         $pdo->exec("TRUNCATE TABLE lead_history");
+        
+        // Re-enable foreign key checks
+        $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
         
         $_SESSION['flash_success'] = "All leads and their history have been permanently deleted.";
     } catch (PDOException $e) {

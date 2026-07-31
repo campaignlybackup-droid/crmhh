@@ -12,7 +12,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         $action = $_POST['action'];
 
-        if ($action === 'add' && $isSuper) {
+        if ($action === 'bulk') {
+            $bulk_action = $_POST['bulk_action'] ?? '';
+            $selected_ids = $_POST['selected_ids'] ?? [];
+            if (!empty($selected_ids)) {
+                $placeholders = implode(',', array_fill(0, count($selected_ids), '?'));
+                $params = $selected_ids;
+
+                if (!$isSuper) {
+                    $checkStmt = $pdo->prepare("SELECT id FROM tasks WHERE id IN ($placeholders) AND assigned_to = ?");
+                    $checkParams = $selected_ids;
+                    $checkParams[] = $user_id;
+                    $checkStmt->execute($checkParams);
+                    $selected_ids = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
+                    $placeholders = implode(',', array_fill(0, count($selected_ids), '?'));
+                    $params = $selected_ids;
+                }
+
+                if (!empty($selected_ids)) {
+                    if ($bulk_action === 'delete' && $isSuper) {
+                        $stmt = $pdo->prepare("DELETE FROM tasks WHERE id IN ($placeholders)");
+                        $stmt->execute($params);
+                        $_SESSION['flash_success'] = count($selected_ids) . " tasks deleted.";
+                    } elseif ($bulk_action === 'status') {
+                        $new_status = $_POST['bulk_status'] ?? '';
+                        if ($new_status) {
+                            $stmt = $pdo->prepare("UPDATE tasks SET status = ? WHERE id IN ($placeholders)");
+                            array_unshift($params, $new_status);
+                            $stmt->execute($params);
+                            $_SESSION['flash_success'] = count($selected_ids) . " tasks updated.";
+                        }
+                    } elseif ($bulk_action === 'assign' && $isSuper) {
+                        $new_assignee = $_POST['bulk_assignee'] ?? null;
+                        $stmt = $pdo->prepare("UPDATE tasks SET assigned_to = ? WHERE id IN ($placeholders)");
+                        array_unshift($params, $new_assignee ?: null);
+                        $stmt->execute($params);
+                        $_SESSION['flash_success'] = count($selected_ids) . " tasks reassigned.";
+                    }
+                }
+            }
+            header("Location: tasks.php");
+            exit;
+        } else if ($action === 'add' && $isSuper) {
             $task_name = $_POST['task_name'];
             $status = $_POST['status'];
             $assigned_to = $_POST['assigned_to'] ?: null;
@@ -228,13 +269,42 @@ include 'header.php';
     </div>
 <?php else: ?>
     <!-- TABLE VIEW -->
+    <form id="bulkForm" method="POST" action="tasks.php">
+        <input type="hidden" name="action" value="bulk">
+        
+        <div id="bulkActionBar" class="card mb-3 border-primary shadow-sm" style="display: none;">
+            <div class="card-body bg-primary bg-opacity-10 py-2 d-flex align-items-center gap-3 flex-wrap">
+                <span class="fw-bold text-primary"><span id="selectedCount">0</span> selected</span>
+                <select name="bulk_action" id="bulkActionSelect" class="form-select form-select-sm" style="width: auto;" onchange="toggleBulkOptions()">
+                    <option value="">Choose bulk action...</option>
+                    <option value="status">Change Status</option>
+                    <?php if ($isSuper): ?><option value="assign">Reassign</option><?php endif; ?>
+                    <?php if ($isSuper): ?><option value="delete">Delete</option><?php endif; ?>
+                </select>
+                
+                <select name="bulk_status" id="bulkStatusSelect" class="form-select form-select-sm" style="width: auto; display: none;">
+                    <?php foreach($all_statuses as $s) echo "<option value=\"$s\">$s</option>"; ?>
+                </select>
+                
+                <?php if ($isSuper): ?>
+                <select name="bulk_assignee" id="bulkAssigneeSelect" class="form-select form-select-sm" style="width: auto; display: none;">
+                    <option value="">Unassigned</option>
+                    <?php foreach($users as $u) echo "<option value=\"{$u['id']}\">".h($u['username'])."</option>"; ?>
+                </select>
+                <?php endif; ?>
+                
+                <button type="submit" class="btn btn-sm btn-primary" onclick="return confirm('Apply this bulk action?')">Apply</button>
+            </div>
+        </div>
+
     <div class="card">
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
                     <thead class="bg-light">
                         <tr>
-                            <th class="ps-3">Task Name</th>
+                            <th style="width: 40px;" class="ps-3"><input type="checkbox" class="form-check-input" id="selectAll"></th>
+                            <th>Task Name</th>
                             <th>Project</th>
                             <th>Status</th>
                             <th>Priority</th>
@@ -249,7 +319,8 @@ include 'header.php';
                         <?php else: ?>
                             <?php foreach($tasks as $task): ?>
                             <tr>
-                                <td class="ps-3 fw-bold"><?= h($task['task_name']) ?></td>
+                                <td class="ps-3"><input type="checkbox" class="form-check-input row-checkbox" name="selected_ids[]" value="<?= $task['id'] ?>"></td>
+                                <td class="fw-bold"><?= h($task['task_name']) ?></td>
                                 <td><?= h($task['project_name'] ?? 'N/A') ?></td>
                                 <td>
                                     <?php
@@ -301,6 +372,7 @@ include 'header.php';
             </div>
         </div>
     </div>
+    </form>
 <?php endif; ?>
 
 <!-- Add/Edit Task Modal -->
@@ -401,6 +473,46 @@ function editTask(task) {
     
     var modal = new bootstrap.Modal(document.getElementById('taskModal'));
     modal.show();
+}
+
+// Bulk Actions Logic
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAll = document.getElementById('selectAll');
+    const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+    const bulkActionBar = document.getElementById('bulkActionBar');
+    const selectedCount = document.getElementById('selectedCount');
+
+    function updateBulkBar() {
+        if (!bulkActionBar) return;
+        const checkedCount = document.querySelectorAll('.row-checkbox:checked').length;
+        selectedCount.textContent = checkedCount;
+        if (checkedCount > 0) {
+            bulkActionBar.style.display = 'block';
+        } else {
+            bulkActionBar.style.display = 'none';
+        }
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            rowCheckboxes.forEach(cb => cb.checked = this.checked);
+            updateBulkBar();
+        });
+    }
+
+    rowCheckboxes.forEach(cb => {
+        cb.addEventListener('change', function() {
+            if (!this.checked && selectAll) selectAll.checked = false;
+            updateBulkBar();
+        });
+    });
+});
+
+function toggleBulkOptions() {
+    const action = document.getElementById('bulkActionSelect').value;
+    document.getElementById('bulkStatusSelect').style.display = (action === 'status') ? 'inline-block' : 'none';
+    const assignSelect = document.getElementById('bulkAssigneeSelect');
+    if (assignSelect) assignSelect.style.display = (action === 'assign') ? 'inline-block' : 'none';
 }
 </script>
 

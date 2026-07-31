@@ -27,7 +27,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         $action = $_POST['action'];
 
-        if ($action === 'add' || $action === 'edit') {
+        if ($action === 'bulk') {
+            $bulk_action = $_POST['bulk_action'] ?? '';
+            $selected_ids = $_POST['selected_ids'] ?? [];
+            if (!empty($selected_ids)) {
+                $placeholders = implode(',', array_fill(0, count($selected_ids), '?'));
+                $params = $selected_ids;
+
+                if (!$isSuper) {
+                    $checkStmt = $pdo->prepare("SELECT id FROM leads WHERE id IN ($placeholders) AND assigned_to = ?");
+                    $checkParams = $selected_ids;
+                    $checkParams[] = $user_id;
+                    $checkStmt->execute($checkParams);
+                    $selected_ids = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
+                    $placeholders = implode(',', array_fill(0, count($selected_ids), '?'));
+                    $params = $selected_ids;
+                }
+
+                if (!empty($selected_ids)) {
+                    if ($bulk_action === 'delete') {
+                        $stmt = $pdo->prepare("DELETE FROM leads WHERE id IN ($placeholders)");
+                        $stmt->execute($params);
+                        $_SESSION['flash_success'] = count($selected_ids) . " leads deleted.";
+                    } elseif ($bulk_action === 'status') {
+                        $new_status = $_POST['bulk_status'] ?? '';
+                        if ($new_status) {
+                            $stmt = $pdo->prepare("UPDATE leads SET status = ? WHERE id IN ($placeholders)");
+                            array_unshift($params, $new_status);
+                            $stmt->execute($params);
+                            $_SESSION['flash_success'] = count($selected_ids) . " leads updated.";
+                        }
+                    } elseif ($bulk_action === 'assign' && $isSuper) {
+                        $new_assignee = $_POST['bulk_assignee'] ?? null;
+                        $stmt = $pdo->prepare("UPDATE leads SET assigned_to = ? WHERE id IN ($placeholders)");
+                        array_unshift($params, $new_assignee ?: null);
+                        $stmt->execute($params);
+                        $_SESSION['flash_success'] = count($selected_ids) . " leads reassigned.";
+                    }
+                }
+            }
+            header("Location: leads.php");
+            exit;
+        } elseif ($action === 'add' || $action === 'edit') {
             $id = $_POST['id'] ?? null;
             $name = $_POST['name'];
             $status = $_POST['status'];
@@ -326,13 +367,43 @@ include 'header.php';
 
 <?php else: ?>
     <!-- TABLE VIEW -->
+    <form id="bulkForm" method="POST" action="leads.php">
+        <input type="hidden" name="action" value="bulk">
+        
+        <!-- Bulk Action Bar -->
+        <div id="bulkActionBar" class="card mb-3 border-primary shadow-sm" style="display: none;">
+            <div class="card-body bg-primary bg-opacity-10 py-2 d-flex align-items-center gap-3 flex-wrap">
+                <span class="fw-bold text-primary"><span id="selectedCount">0</span> selected</span>
+                <select name="bulk_action" id="bulkActionSelect" class="form-select form-select-sm" style="width: auto;" onchange="toggleBulkOptions()">
+                    <option value="">Choose bulk action...</option>
+                    <option value="status">Change Status</option>
+                    <?php if ($isSuper): ?><option value="assign">Reassign</option><?php endif; ?>
+                    <option value="delete">Delete</option>
+                </select>
+                
+                <select name="bulk_status" id="bulkStatusSelect" class="form-select form-select-sm" style="width: auto; display: none;">
+                    <?php foreach($all_statuses as $s) echo "<option value=\"$s\">$s</option>"; ?>
+                </select>
+                
+                <?php if ($isSuper): ?>
+                <select name="bulk_assignee" id="bulkAssigneeSelect" class="form-select form-select-sm" style="width: auto; display: none;">
+                    <option value="">Unassigned</option>
+                    <?php foreach($users as $u) echo "<option value=\"{$u['id']}\">".h($u['username'])."</option>"; ?>
+                </select>
+                <?php endif; ?>
+                
+                <button type="submit" class="btn btn-sm btn-primary" onclick="return confirm('Apply this bulk action?')">Apply</button>
+            </div>
+        </div>
+
     <div class="card">
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0 align-middle">
                     <thead class="bg-light">
                         <tr>
-                            <th class="ps-3">Name</th>
+                            <th style="width: 40px;" class="ps-3"><input type="checkbox" class="form-check-input" id="selectAll"></th>
+                            <th>Name</th>
                             <th>Contact</th>
                             <th>Status (Quick Edit)</th>
                             <th>Value / Assignee</th>
@@ -346,7 +417,8 @@ include 'header.php';
                         <?php else: ?>
                             <?php foreach($leads as $lead): ?>
                             <tr>
-                                <td class="ps-3 fw-bold"><?= h($lead['name']) ?></td>
+                                <td class="ps-3"><input type="checkbox" class="form-check-input row-checkbox" name="selected_ids[]" value="<?= $lead['id'] ?>"></td>
+                                <td class="fw-bold"><?= h($lead['name']) ?></td>
                                 <td>
                                     <div class="small"><?= h($lead['contact_name']) ?></div>
                                     <div class="text-muted small"><?= h($lead['email']) ?></div>
@@ -390,6 +462,7 @@ include 'header.php';
             </div>
         </div>
     </div>
+    </form>
 <?php endif; ?>
 
 <!-- Add/Edit Lead Modal -->
@@ -565,6 +638,46 @@ function editLead(lead) {
     
     var modal = new bootstrap.Modal(document.getElementById('leadModal'));
     modal.show();
+}
+
+// Bulk Actions Logic
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAll = document.getElementById('selectAll');
+    const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+    const bulkActionBar = document.getElementById('bulkActionBar');
+    const selectedCount = document.getElementById('selectedCount');
+
+    function updateBulkBar() {
+        if (!bulkActionBar) return;
+        const checkedCount = document.querySelectorAll('.row-checkbox:checked').length;
+        selectedCount.textContent = checkedCount;
+        if (checkedCount > 0) {
+            bulkActionBar.style.display = 'block';
+        } else {
+            bulkActionBar.style.display = 'none';
+        }
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            rowCheckboxes.forEach(cb => cb.checked = this.checked);
+            updateBulkBar();
+        });
+    }
+
+    rowCheckboxes.forEach(cb => {
+        cb.addEventListener('change', function() {
+            if (!this.checked && selectAll) selectAll.checked = false;
+            updateBulkBar();
+        });
+    });
+});
+
+function toggleBulkOptions() {
+    const action = document.getElementById('bulkActionSelect').value;
+    document.getElementById('bulkStatusSelect').style.display = (action === 'status') ? 'inline-block' : 'none';
+    const assignSelect = document.getElementById('bulkAssigneeSelect');
+    if (assignSelect) assignSelect.style.display = (action === 'assign') ? 'inline-block' : 'none';
 }
 </script>
 

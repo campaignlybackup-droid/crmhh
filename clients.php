@@ -182,7 +182,7 @@ include 'header.php';
                         <th class="ps-3">Client Name</th>
                         <th>Contact</th>
                         <th>Status</th>
-                        <th>Billed / Assignee</th>
+                        <th>Assignee</th>
                         <th>Links / Files</th>
                         <th class="text-end pe-3">Actions</th>
                     </tr>
@@ -209,8 +209,9 @@ include 'header.php';
                                 <span class="badge badge-status <?= $sc ?>"><?= h($client['status']) ?></span>
                             </td>
                             <td>
-                                <div class="fw-bold text-success">AED <?= number_format($client['total_billed'], 2) ?></div>
                                 <?php if ($isSuper): ?>
+                                    <div class="small text-muted"><i class="bi bi-person-badge"></i> <?= h($client['assigned_user'] ?? 'Unassigned') ?></div>
+                                <?php else: ?>
                                     <div class="small text-muted"><i class="bi bi-person-badge"></i> <?= h($client['assigned_user'] ?? 'Unassigned') ?></div>
                                 <?php endif; ?>
                             </td>
@@ -279,10 +280,6 @@ include 'header.php';
                     <input type="text" name="primary_contact" id="clientContact" class="form-control">
                 </div>
                 
-                <div class="mb-3">
-                    <label class="form-label text-muted small fw-bold">TOTAL BILLED (AED)</label>
-                    <input type="number" step="0.01" name="total_billed" id="clientBilled" class="form-control" placeholder="0.00">
-                </div>
                 
                 <div class="mb-3">
                     <label class="form-label text-muted small fw-bold">DRIVE FOLDER URL</label>
@@ -317,7 +314,6 @@ function resetForm() {
     document.getElementById('clientStatus').value = 'Active';
     <?php if ($isSuper): ?>document.getElementById('clientAssigned').value = '';<?php endif; ?>
     document.getElementById('clientContact').value = '';
-    document.getElementById('clientBilled').value = '';
     document.getElementById('clientDrive').value = '';
     document.getElementById('clientDate').value = '';
 }
@@ -330,7 +326,6 @@ function editClient(client) {
     document.getElementById('clientStatus').value = client.status;
     <?php if ($isSuper): ?>document.getElementById('clientAssigned').value = client.assigned_to || '';<?php endif; ?>
     document.getElementById('clientContact').value = client.primary_contact;
-    document.getElementById('clientBilled').value = client.total_billed;
     document.getElementById('clientDrive').value = client.drive_folder_url;
     document.getElementById('clientDate').value = client.onboarding_date;
     

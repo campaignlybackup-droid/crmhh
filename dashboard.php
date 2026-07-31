@@ -82,36 +82,7 @@ include 'header.php';
 <?php if ($isSuper): ?>
 <!-- SUPERADMIN DASHBOARD -->
 <div class="row">
-    <!-- Widgets -->
-    <div class="col-md-3 col-sm-6">
-        <div class="card widget-card">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-muted text-uppercase fw-bold mb-2">Total Revenue</h6>
-                    <h3 class="mb-0 fw-bold text-success">AED <?= number_format($totalRevenue) ?></h3>
-                </div>
-                <div class="widget-icon text-success bg-soft-success rounded p-3">
-                    <i class="bi bi-cash-stack"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-3 col-sm-6">
-        <div class="card widget-card">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-muted text-uppercase fw-bold mb-2">Outstanding</h6>
-                    <h3 class="mb-0 fw-bold text-warning">AED <?= number_format($outstanding) ?></h3>
-                </div>
-                <div class="widget-icon text-warning bg-soft-warning rounded p-3">
-                    <i class="bi bi-receipt"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-3 col-sm-6">
+    <div class="col-md-6 col-sm-6">
         <div class="card widget-card">
             <div class="card-body d-flex align-items-center justify-content-between">
                 <div>
@@ -125,7 +96,7 @@ include 'header.php';
         </div>
     </div>
 
-    <div class="col-md-3 col-sm-6">
+    <div class="col-md-6 col-sm-6">
         <div class="card widget-card">
             <div class="card-body d-flex align-items-center justify-content-between">
                 <div>

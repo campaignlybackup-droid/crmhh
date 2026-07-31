@@ -72,11 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $project_name = $_POST['project_name'];
             $status = $_POST['status'];
             $client_id = $_POST['client_id'] ?: null;
-            $project_value = $_POST['project_value'] ?: 0.00;
+            $project_value = $_POST['project_value'] ?? 0.00;
             $shoot_date = $_POST['shoot_date'] ?: null;
             $delivery_date = $_POST['delivery_date'] ?: null;
             $drive_folder_url = $_POST['drive_folder_url'];
-            $payment_status = $_POST['payment_status'];
+            $payment_status = $_POST['payment_status'] ?? 'Unpaid';
             $total_videos_planned = $_POST['total_videos_planned'] ?: 0;
             $videos_shot = $_POST['videos_shot'] ?: 0;
             $videos_edited = $_POST['videos_edited'] ?: 0;
@@ -272,12 +272,7 @@ include 'header.php';
                         </div>
                         <div class="d-flex justify-content-between align-items-center mt-2 small">
                             <span><i class="bi bi-camera"></i> <?= h($project['shoot_date'] ?? 'TBD') ?></span>
-                            <?php
-                                $pc = 'bg-soft-secondary';
-                                if ($project['payment_status'] == 'Paid in Full') $pc = 'bg-soft-success';
-                                if ($project['payment_status'] == 'Unpaid') $pc = 'bg-soft-danger';
-                            ?>
-                            <span class="badge <?= $pc ?>"><?= h($project['payment_status']) ?></span>
+
                         </div>
                         <div class="mt-2 small text-muted">
                             <?php
@@ -293,7 +288,7 @@ include 'header.php';
                         </div>
                         <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center small text-muted">
                             <div class="d-flex align-items-center gap-2">
-                                <span class="fw-bold text-success">AED <?= number_format($project['project_value']) ?></span>
+
                                 <form method="POST" class="m-0 d-inline" onsubmit="return confirm('Delete this project?');">
                                     <input type="hidden" name="action" value="delete">
                                     <input type="hidden" name="id" value="<?= $project['id'] ?>">
@@ -351,7 +346,7 @@ include 'header.php';
                             <th>Status</th>
                             <th>Dates</th>
                             <th>Video Status</th>
-                            <th>Value / Assignee</th>
+                            <th>Assignee</th>
                             <th class="text-end pe-3">Actions</th>
                         </tr>
                     </thead>
@@ -398,8 +393,9 @@ include 'header.php';
                                     </div>
                                 </td>
                                 <td>
-                                    <div class="fw-bold text-success small">AED <?= number_format($project['project_value'], 2) ?></div>
                                     <?php if ($isSuper): ?>
+                                    <div class="text-muted small"><i class="bi bi-person-badge"></i> <?= h($project['assigned_user'] ?? 'Unassigned') ?></div>
+                                    <?php else: ?>
                                     <div class="text-muted small"><i class="bi bi-person-badge"></i> <?= h($project['assigned_user'] ?? 'Unassigned') ?></div>
                                     <?php endif; ?>
                                 </td>
@@ -457,12 +453,6 @@ include 'header.php';
                         </select>
                     </div>
 
-                    <div class="col-md-6">
-                        <label class="form-label text-muted small fw-bold">PAYMENT STATUS</label>
-                        <select name="payment_status" id="projectPayment" class="form-select">
-                            <?php foreach(['Unpaid', '50% Received', 'Paid in Full'] as $p) echo "<option value=\"$p\">$p</option>"; ?>
-                        </select>
-                    </div>
 
                     <?php if ($isSuper): ?>
                     <div class="col-md-12">
@@ -501,10 +491,6 @@ include 'header.php';
                         <input type="number" name="videos_uploaded" id="projectUploaded" class="form-control" value="0" min="0">
                     </div>
 
-                    <div class="col-md-4">
-                        <label class="form-label text-muted small fw-bold">PROJECT VALUE (AED)</label>
-                        <input type="number" step="0.01" name="project_value" id="projectValue" class="form-control" placeholder="0.00">
-                    </div>
 
                     <div class="col-md-8">
                         <label class="form-label text-muted small fw-bold">DRIVE FOLDER URL</label>
@@ -528,7 +514,6 @@ function resetForm() {
     document.getElementById('projectName').value = '';
     document.getElementById('projectStatus').value = 'Briefing';
     document.getElementById('projectClient').value = '';
-    document.getElementById('projectValue').value = '';
     document.getElementById('projectShoot').value = '';
     document.getElementById('projectDelivery').value = '';
     document.getElementById('projectPlanned').value = '0';
@@ -537,7 +522,6 @@ function resetForm() {
     document.getElementById('projectUploaded').value = '0';
     <?php if ($isSuper): ?>document.getElementById('projectAssigned').value = '';<?php endif; ?>
     document.getElementById('projectDrive').value = '';
-    document.getElementById('projectPayment').value = 'Unpaid';
 }
 
 function editProject(project) {
@@ -547,7 +531,6 @@ function editProject(project) {
     document.getElementById('projectName').value = project.project_name;
     document.getElementById('projectStatus').value = project.status;
     document.getElementById('projectClient').value = project.client_id || '';
-    document.getElementById('projectValue').value = project.project_value;
     document.getElementById('projectShoot').value = project.shoot_date;
     document.getElementById('projectDelivery').value = project.delivery_date;
     document.getElementById('projectPlanned').value = project.total_videos_planned;
@@ -556,7 +539,6 @@ function editProject(project) {
     document.getElementById('projectUploaded').value = project.videos_uploaded;
     <?php if ($isSuper): ?>document.getElementById('projectAssigned').value = project.assigned_to || '';<?php endif; ?>
     document.getElementById('projectDrive').value = project.drive_folder_url;
-    document.getElementById('projectPayment').value = project.payment_status;
     
     var modal = new bootstrap.Modal(document.getElementById('projectModal'));
     modal.show();

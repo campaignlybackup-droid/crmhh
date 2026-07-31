@@ -195,11 +195,6 @@ include 'header.php';
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label text-muted small fw-bold">SALARY (AED)</label>
-                        <input type="number" step="0.01" name="salary" id="userSalary" class="form-control" placeholder="0.00">
-                    </div>
-
-                    <div class="col-md-6">
                         <label class="form-label text-muted small fw-bold">START DATE</label>
                         <input type="date" name="start_date" id="userStart" class="form-control">
                     </div>
@@ -231,7 +226,6 @@ function resetForm() {
     document.getElementById('userStatus').value = 'Active';
     document.getElementById('userDesignation').value = '';
     document.getElementById('userDepartment').value = '';
-    document.getElementById('userSalary').value = '';
     document.getElementById('userStart').value = '';
     document.getElementById('userPass').value = '';
     document.getElementById('userPass').required = true;
@@ -248,7 +242,6 @@ function editUser(user) {
     document.getElementById('userStatus').value = user.status;
     document.getElementById('userDesignation').value = user.designation || '';
     document.getElementById('userDepartment').value = user.department || '';
-    document.getElementById('userSalary').value = user.salary || '';
     document.getElementById('userStart').value = user.start_date;
     document.getElementById('userPass').value = '';
     document.getElementById('userPass').required = false;

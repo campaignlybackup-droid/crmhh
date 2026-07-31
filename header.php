@@ -57,12 +57,6 @@ if (isLoggedIn()) {
                 <li class="nav-item">
                     <a class="nav-link" href="content_calendar.php">Content Calendar</a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="invoices.php">Invoices</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="proposals.php">Proposals</a>
-                </li>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         Admin

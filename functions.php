@@ -2,6 +2,17 @@
 session_start();
 require_once 'config.php';
 
+// Define the external upload directory (outside public_html)
+define('UPLOAD_DIR', realpath(__DIR__ . '/..') . '/crm_uploads/');
+
+function ensureUploadDirExists($subdir = '') {
+    $path = UPLOAD_DIR . $subdir;
+    if (!file_exists($path)) {
+        mkdir($path, 0777, true);
+    }
+    return $path;
+}
+
 // Authentication Helpers
 function isLoggedIn() {
     return isset($_SESSION['user_id']);

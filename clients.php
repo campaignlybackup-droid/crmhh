@@ -38,11 +38,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Handle File Upload for Contract
             $contract_file = null;
             if (isset($_FILES['contract']) && $_FILES['contract']['error'] == UPLOAD_ERR_OK) {
-                $upload_dir = 'uploads/contracts/';
+                $upload_dir = ensureUploadDirExists('contracts/');
                 $file_name = time() . '_' . basename($_FILES['contract']['name']);
                 $target_path = $upload_dir . $file_name;
                 if (move_uploaded_file($_FILES['contract']['tmp_name'], $target_path)) {
-                    $contract_file = $target_path;
+                    // Store the relative path in the database
+                    $contract_file = 'contracts/' . $file_name;
                 }
             }
 
@@ -218,7 +219,7 @@ include 'header.php';
                                     <a href="<?= h($client['drive_folder_url']) ?>" target="_blank" class="btn btn-sm btn-light mb-1"><i class="bi bi-folder text-warning"></i> Drive</a>
                                 <?php endif; ?>
                                 <?php if($client['contract_file']): ?>
-                                    <a href="<?= h($client['contract_file']) ?>" target="_blank" class="btn btn-sm btn-light mb-1"><i class="bi bi-file-earmark-text text-primary"></i> Contract</a>
+                                    <a href="download.php?file=<?= urlencode($client['contract_file']) ?>" target="_blank" class="btn btn-sm btn-light mb-1"><i class="bi bi-file-earmark-text text-primary"></i> Contract</a>
                                 <?php endif; ?>
                             </td>
                             <td class="text-end pe-3">

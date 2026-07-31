@@ -123,7 +123,7 @@ include 'header.php';
                         </a>
                     <?php endif; ?>
                     <?php if($client['contract_file']): ?>
-                        <a href="<?= h($client['contract_file']) ?>" target="_blank" class="btn btn-outline-primary text-start">
+                        <a href="download.php?file=<?= urlencode($client['contract_file']) ?>" target="_blank" class="btn btn-outline-primary text-start">
                             <i class="bi bi-file-earmark-text me-2"></i> View Contract
                         </a>
                     <?php endif; ?>

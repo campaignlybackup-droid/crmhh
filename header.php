@@ -75,7 +75,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
             
             <div class="sidebar-nav-title">Company</div>
             <a href="content_calendar.php" class="sidebar-link <?= $current_page == 'content_calendar.php' ? 'active' : '' ?>">
-                <i class="bi bi-calendar-event"></i> Content
+                <i class="bi bi-calendar-event-fill"></i> Content Calendar
+            </a>
+            <a href="hr.php" class="sidebar-link <?= $current_page == 'hr.php' ? 'active' : '' ?>">
+                <i class="bi bi-person-badge-fill"></i> HR & Leaves
             </a>
             <a href="invoices.php" class="sidebar-link <?= $current_page == 'invoices.php' ? 'active' : '' ?>">
                 <i class="bi bi-receipt"></i> Invoices

@@ -9,19 +9,20 @@ CREATE TABLE IF NOT EXISTS departments (
 );
 
 -- 2. Modify Users Table
-ALTER TABLE users 
-    MODIFY COLUMN role ENUM('superadmin', 'manager', 'employee', 'user') DEFAULT 'user',
-    ADD COLUMN department_id INT DEFAULT NULL,
-    ADD COLUMN reporting_manager_id INT DEFAULT NULL,
-    ADD COLUMN designation VARCHAR(255) DEFAULT NULL,
-    ADD COLUMN employment_type ENUM('Full-time', 'Part-time', 'Contract') DEFAULT NULL,
-    ADD COLUMN joining_date DATE DEFAULT NULL,
-    ADD COLUMN skills TEXT DEFAULT NULL,
-    ADD COLUMN emergency_contact VARCHAR(255) DEFAULT NULL,
-    ADD COLUMN working_hours VARCHAR(255) DEFAULT NULL,
-    ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL,
-    ADD CONSTRAINT fk_user_department FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
-    ADD CONSTRAINT fk_user_manager FOREIGN KEY (reporting_manager_id) REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE users MODIFY COLUMN role ENUM('superadmin', 'manager', 'employee', 'user') DEFAULT 'user';
+ALTER TABLE users ADD COLUMN department_id INT DEFAULT NULL;
+ALTER TABLE users ADD COLUMN reporting_manager_id INT DEFAULT NULL;
+ALTER TABLE users ADD COLUMN designation VARCHAR(255) DEFAULT NULL;
+ALTER TABLE users ADD COLUMN employment_type ENUM('Full-time', 'Part-time', 'Contract') DEFAULT NULL;
+ALTER TABLE users ADD COLUMN joining_date DATE DEFAULT NULL;
+ALTER TABLE users ADD COLUMN skills TEXT DEFAULT NULL;
+ALTER TABLE users ADD COLUMN emergency_contact VARCHAR(255) DEFAULT NULL;
+ALTER TABLE users ADD COLUMN working_hours VARCHAR(255) DEFAULT NULL;
+ALTER TABLE users ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL;
+
+-- We add constraints separately to avoid syntax errors if column exists but constraint doesn't
+ALTER TABLE users ADD CONSTRAINT fk_user_department FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL;
+ALTER TABLE users ADD CONSTRAINT fk_user_manager FOREIGN KEY (reporting_manager_id) REFERENCES users(id) ON DELETE SET NULL;
 
 -- 3. Universal Components
 CREATE TABLE IF NOT EXISTS comments (
@@ -78,13 +79,12 @@ ALTER TABLE leads ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL;
 ALTER TABLE invoices ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL;
 
 -- 5. Tasks Enhancements
-ALTER TABLE tasks
-    ADD COLUMN description TEXT DEFAULT NULL,
-    ADD COLUMN estimated_time DECIMAL(8,2) DEFAULT NULL,
-    ADD COLUMN actual_time DECIMAL(8,2) DEFAULT NULL,
-    ADD COLUMN reviewer_id INT DEFAULT NULL,
-    ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL,
-    ADD CONSTRAINT fk_task_reviewer FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD COLUMN description TEXT DEFAULT NULL;
+ALTER TABLE tasks ADD COLUMN estimated_time DECIMAL(8,2) DEFAULT NULL;
+ALTER TABLE tasks ADD COLUMN actual_time DECIMAL(8,2) DEFAULT NULL;
+ALTER TABLE tasks ADD COLUMN reviewer_id INT DEFAULT NULL;
+ALTER TABLE tasks ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL;
+ALTER TABLE tasks ADD CONSTRAINT fk_task_reviewer FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE SET NULL;
 
 -- 6. HR Module
 CREATE TABLE IF NOT EXISTS attendance (

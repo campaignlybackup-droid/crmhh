@@ -72,40 +72,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_success'] = "Task created successfully.";
             header("Location: tasks.php");
             exit;
-        } else if ($action === 'edit') {
-            $id = $_POST['id'];
-            $status = $_POST['status'];
-            
-            $stmt = $pdo->prepare("SELECT * FROM tasks WHERE id = ?");
-            $stmt->execute([$id]);
-            $task = $stmt->fetch();
-
-            if ($isSuper || ($task && $task['assigned_to'] == $user_id)) {
-                if ($isSuper) {
-                    $task_name = $_POST['task_name'];
-                    $assigned_to = $_POST['assigned_to'] ?: null;
-                    $due_date = $_POST['due_date'] ?: null;
-                    $priority = $_POST['priority'];
-                    $project_id = $_POST['project_id'] ?: null;
-
-                    $stmt = $pdo->prepare("UPDATE tasks SET task_name=?, status=?, assigned_to=?, due_date=?, priority=?, project_id=? WHERE id=?");
-                    $stmt->execute([$task_name, $status, $assigned_to, $due_date, $priority, $project_id, $id]);
-                    logActivity($pdo, 'Updated Task', 'Task', $id, "Status: $status");
-                    
-                    if ($assigned_to && $assigned_to != $task['assigned_to']) {
-                        addNotification($pdo, $assigned_to, "You have been assigned to task: $task_name");
-                    }
-                } else {
-                    $stmt = $pdo->prepare("UPDATE tasks SET status=? WHERE id=?");
-                    $stmt->execute([$status, $id]);
-                    logActivity($pdo, 'Updated Task Status', 'Task', $id, "Status: $status");
-                }
-                $_SESSION['flash_success'] = "Task updated successfully.";
-            } else {
-                $_SESSION['flash_error'] = "Unauthorized to edit this task.";
-            }
-            header("Location: tasks.php");
-            exit;
         } elseif ($action === 'delete' && $isSuper) {
             $id = $_POST['id'];
             $stmt = $pdo->prepare("DELETE FROM tasks WHERE id = ?");
@@ -246,7 +212,7 @@ include 'header.php';
                         $isOverdue = ($task['status'] != 'Done' && strtotime($task['due_date']) < strtotime('today'));
                         $dateClass = $isOverdue ? 'text-danger fw-bold' : 'text-muted';
                     ?>
-                    <div class="kanban-card priority-<?= $task['priority'] ?>" onclick='editTask(<?= json_encode($task) ?>)'>
+                    <div class="kanban-card priority-<?= $task['priority'] ?>" onclick="window.location='task_view.php?id=<?= $task['id'] ?>'">
                         <div class="d-flex justify-content-between mb-1">
                             <span class="badge bg-light text-dark border small"><?= h($task['project_name'] ?: 'No Project') ?></span>
                         </div>
@@ -364,7 +330,7 @@ include 'header.php';
                                     <span class="<?= $dateClass ?>"><?= h($task['due_date'] ?? '-') ?></span>
                                 </td>
                                 <td class="text-end pe-3">
-                                    <button class="btn btn-sm btn-outline-primary" onclick='editTask(<?= json_encode($task) ?>)'><i class="bi bi-pencil"></i></button>
+                                    <a href="task_view.php?id=<?= $task['id'] ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
                                     <?php if ($isSuper): ?>
                                     <form method="POST" class="d-inline" onsubmit="return confirm('Delete this task?');">
                                         <input type="hidden" name="action" value="delete">
@@ -467,22 +433,6 @@ function resetForm() {
     <?php endif; ?>
 }
 
-function editTask(task) {
-    document.getElementById('taskAction').value = 'edit';
-    document.getElementById('taskId').value = task.id;
-    document.getElementById('taskModalTitle').innerText = 'Edit Task';
-    document.getElementById('taskName').value = task.task_name;
-    document.getElementById('taskStatus').value = task.status;
-    <?php if ($isSuper): ?>
-    document.getElementById('taskProject').value = task.project_id || '';
-    document.getElementById('taskPriority').value = task.priority;
-    document.getElementById('taskDue').value = task.due_date;
-    document.getElementById('taskAssigned').value = task.assigned_to || '';
-    <?php endif; ?>
-    
-    var modal = new bootstrap.Modal(document.getElementById('taskModal'));
-    modal.show();
-}
 
 // Bulk Actions Logic
 document.addEventListener('DOMContentLoaded', function() {

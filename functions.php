@@ -22,6 +22,15 @@ function isSuperAdmin() {
     return isset($_SESSION['role']) && $_SESSION['role'] === 'superadmin';
 }
 
+function isManager() {
+    return isset($_SESSION['role']) && in_array($_SESSION['role'], ['superadmin', 'manager']);
+}
+
+function isEmployee() {
+    // Everyone who is logged in is at least an employee
+    return isset($_SESSION['user_id']); 
+}
+
 function requireLogin() {
     if (!isLoggedIn()) {
         header("Location: login.php");
@@ -32,7 +41,18 @@ function requireLogin() {
 function requireSuperAdmin() {
     requireLogin();
     if (!isSuperAdmin()) {
-        die("Unauthorized access.");
+        $_SESSION['flash_error'] = "Unauthorized access. Super Admin only.";
+        header("Location: dashboard.php");
+        exit;
+    }
+}
+
+function requireManager() {
+    requireLogin();
+    if (!isManager()) {
+        $_SESSION['flash_error'] = "Unauthorized access. Manager only.";
+        header("Location: dashboard.php");
+        exit;
     }
 }
 

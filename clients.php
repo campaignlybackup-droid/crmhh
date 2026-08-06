@@ -1,6 +1,6 @@
 <?php
 require_once 'functions.php';
-requireLogin();
+requireManager();
 
 $isSuper = isSuperAdmin();
 $user_id = getCurrentUserId();

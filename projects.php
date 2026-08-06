@@ -3,6 +3,7 @@ require_once 'functions.php';
 requireLogin();
 
 $isSuper = isSuperAdmin();
+$isManager = isManager();
 $user_id = getCurrentUserId();
 
 // Fetch clients for dropdowns based on assignment (superadmin sees all, user sees their assigned clients)
@@ -41,9 +42,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $placeholders = implode(',', array_fill(0, count($selected_ids), '?'));
                 $params = $selected_ids;
 
-                if (!$isSuper) {
-                    $checkStmt = $pdo->prepare("SELECT id FROM projects WHERE id IN ($placeholders) AND assigned_to = ?");
+                if (!$isSuper && !$isManager) {
+                    $checkStmt = $pdo->prepare("SELECT id FROM projects WHERE id IN ($placeholders) AND (assigned_to = ? OR id IN (SELECT project_id FROM tasks WHERE assigned_to = ?))");
                     $checkParams = $selected_ids;
+                    $checkParams[] = $user_id;
                     $checkParams[] = $user_id;
                     $checkStmt->execute($checkParams);
                     $selected_ids = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
@@ -163,8 +165,9 @@ $view = $_GET['view'] ?? 'table';
 $query = "SELECT p.*, c.client_name, u.username as assigned_user FROM projects p LEFT JOIN clients c ON p.client_id = c.id LEFT JOIN users u ON p.assigned_to = u.id WHERE p.deleted_at IS NULL ";
 $params = [];
 
-if (!$isSuper) {
-    $query .= " AND p.assigned_to = ? ";
+if (!$isSuper && !$isManager) {
+    $query .= " AND (p.assigned_to = ? OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to = ?)) ";
+    $params[] = $user_id;
     $params[] = $user_id;
 } else if ($filter_assignee) {
     $query .= " AND p.assigned_to = ? ";

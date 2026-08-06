@@ -3,9 +3,13 @@
 $unread_count = 0;
 $notifications = [];
 if (isLoggedIn()) {
-    $notifications = getUnreadNotifications($pdo, getCurrentUserId());
+    $user_id = getCurrentUserId();
+    $notifications = getUnreadNotifications($pdo, $user_id);
     $unread_count = count($notifications);
 }
+$username = getCurrentUsername();
+$isSuper = isSuperAdmin();
+$isManager = isManager();
 $current_page = basename($_SERVER['PHP_SELF']);
 ?>
 <!DOCTYPE html>
@@ -53,22 +57,27 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <i class="bi bi-calendar-event-fill"></i> Calendar
             </a>
             
-            <?php if (isSuperAdmin()): ?>
             <a href="projects.php" class="sidebar-link <?= $current_page == 'projects.php' ? 'active' : '' ?>">
                 <i class="bi bi-briefcase-fill"></i> Projects
             </a>
             <a href="tasks.php" class="sidebar-link <?= $current_page == 'tasks.php' ? 'active' : '' ?>">
                 <i class="bi bi-check2-square"></i> Tasks
             </a>
+            
+            <?php if ($isManager): ?>
             <a href="clients.php" class="sidebar-link <?= $current_page == 'clients.php' ? 'active' : '' ?>">
-                <i class="bi bi-building"></i> Clients
+                <i class="bi bi-people-fill"></i> Clients
             </a>
             <a href="leads.php" class="sidebar-link <?= $current_page == 'leads.php' ? 'active' : '' ?>">
                 <i class="bi bi-funnel-fill"></i> Leads
             </a>
+            <?php endif; ?>
+            
+            <?php if ($isSuper): ?>
             <a href="reports.php" class="sidebar-link <?= $current_page == 'reports.php' ? 'active' : '' ?>">
                 <i class="bi bi-bar-chart-line-fill"></i> Reports
             </a>
+            <?php endif; ?>
             <a href="workflows.php" class="sidebar-link <?= $current_page == 'workflows.php' ? 'active' : '' ?>">
                 <i class="bi bi-diagram-3-fill"></i> Workflows
             </a>
@@ -80,18 +89,19 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <a href="hr.php" class="sidebar-link <?= $current_page == 'hr.php' ? 'active' : '' ?>">
                 <i class="bi bi-person-badge-fill"></i> HR & Leaves
             </a>
+            
+            <?php if ($isSuper): ?>
             <a href="invoices.php" class="sidebar-link <?= $current_page == 'invoices.php' ? 'active' : '' ?>">
                 <i class="bi bi-receipt"></i> Invoices
             </a>
-            
-            <div class="sidebar-nav-title">Admin</div>
+            <div class="sidebar-heading mt-4 text-uppercase fw-bold text-muted" style="font-size: 0.75rem; padding: 0 1rem;">System Settings</div>
             <a href="users.php" class="sidebar-link <?= $current_page == 'users.php' ? 'active' : '' ?>">
-                <i class="bi bi-people-fill"></i> HR & Users
+                <i class="bi bi-person-gear"></i> Users
             </a>
-            <a href="admin_daily_work.php" class="sidebar-link <?= $current_page == 'admin_daily_work.php' ? 'active' : '' ?>">
-                <i class="bi bi-journal-text"></i> Team Daily Work
+            <a href="workflows.php" class="sidebar-link <?= $current_page == 'workflows.php' ? 'active' : '' ?>">
+                <i class="bi bi-diagram-3-fill"></i> Workflows
             </a>
-            <?php else: ?>
+            <?php endif; ?>
             <a href="tasks.php" class="sidebar-link <?= $current_page == 'tasks.php' ? 'active' : '' ?>">
                 <i class="bi bi-check2-square"></i> My Tasks
             </a>

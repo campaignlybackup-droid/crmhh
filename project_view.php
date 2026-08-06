@@ -16,7 +16,20 @@ $stmt = $pdo->prepare("SELECT p.*, c.client_name, u.username as assigned_user FR
 $stmt->execute([$project_id]);
 $project = $stmt->fetch();
 
-if (!$project || (!$isSuper && $project['assigned_to'] != $user_id)) {
+// Check access
+$has_access = false;
+$isManager = isManager();
+if ($isSuper || $isManager || $project['assigned_to'] == $user_id) {
+    $has_access = true;
+} else {
+    $tCheck = $pdo->prepare("SELECT id FROM tasks WHERE project_id = ? AND assigned_to = ? LIMIT 1");
+    $tCheck->execute([$project_id, $user_id]);
+    if ($tCheck->fetch()) {
+        $has_access = true;
+    }
+}
+
+if (!$project || !$has_access) {
     $_SESSION['flash_error'] = "Project not found or unauthorized.";
     header("Location: projects.php");
     exit;
@@ -355,6 +368,8 @@ include 'header.php';
             </div>
             <div class="card-body">
                 
+                <?php $canEditStage = ($isSuper || $isManager || $project['assigned_to'] == $user_id); ?>
+                <?php if ($canEditStage): ?>
                 <!-- Stage Details Form -->
                 <form method="POST" class="row g-3 mb-4 bg-secondary bg-opacity-10 p-3 rounded">
                     <input type="hidden" name="action" value="update_stage">
@@ -386,6 +401,22 @@ include 'header.php';
                         <button type="submit" class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-save"></i></button>
                     </div>
                 </form>
+                <?php else: ?>
+                <div class="row g-3 mb-4 bg-secondary bg-opacity-10 p-3 rounded">
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold text-muted d-block">OWNER</label>
+                        <span><?= h($active_stage['owner_name'] ?? 'Unassigned') ?></span>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold text-muted d-block">APPROVER</label>
+                        <span><?= h($active_stage['approver_name'] ?? 'None Needed') ?></span>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold text-muted d-block">DEADLINE</label>
+                        <span><?= $active_stage['deadline'] ? h($active_stage['deadline']) : '-' ?></span>
+                    </div>
+                </div>
+                <?php endif; ?>
 
                 <div class="row">
                     <!-- Checklists -->
@@ -425,7 +456,7 @@ include 'header.php';
                 </div>
 
                 <!-- Approval Section -->
-                <?php if ($active_stage['status'] !== 'Approved' && $active_stage['id'] == $current_project_stage_id): ?>
+                <?php if ($active_stage['status'] !== 'Approved' && $active_stage['id'] == $current_project_stage_id && $canEditStage): ?>
                     <div class="mt-4 pt-4 border-top text-end">
                         <form method="POST" onsubmit="return confirm('Ready to approve and move to the next stage?');">
                             <input type="hidden" name="action" value="approve_stage">

@@ -1,8 +1,6 @@
 <?php
 require_once 'functions.php';
-requireLogin();
-
-$isSuper = isSuperAdmin();
+requireSuperAdmin();
 $user_id = getCurrentUserId();
 
 // Fetch clients for dropdowns based on assignment (superadmin sees all, user sees their assigned clients)
@@ -51,7 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     } elseif ($bulk_action === 'status') {
                         $new_status = $_POST['bulk_status'] ?? '';
                         if ($new_status) {
-                            $stmt = $pdo->prepare("UPDATE invoices SET status = ? WHERE id IN ($placeholders)");
+                            if ($new_status === 'Paid') {
+                                $stmt = $pdo->prepare("UPDATE invoices SET status = ?, payment_date = CURRENT_DATE WHERE id IN ($placeholders)");
+                            } else {
+                                $stmt = $pdo->prepare("UPDATE invoices SET status = ?, payment_date = NULL WHERE id IN ($placeholders)");
+                            }
                             array_unshift($params, $new_status);
                             $stmt->execute($params);
                             $_SESSION['flash_success'] = count($selected_ids) . " invoices updated.";
@@ -90,8 +92,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($action === 'add') {
-                $stmt = $pdo->prepare("INSERT INTO invoices (invoice_number, client_id, amount, status, issue_date, due_date, drive_link, assigned_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$invoice_number, $client_id, $amount, $status, $issue_date, $due_date, $drive_link, $assigned_to]);
+                $payment_date = ($status === 'Paid') ? date('Y-m-d') : null;
+                $stmt = $pdo->prepare("INSERT INTO invoices (invoice_number, client_id, amount, status, issue_date, due_date, drive_link, assigned_to, payment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$invoice_number, $client_id, $amount, $status, $issue_date, $due_date, $drive_link, $assigned_to, $payment_date]);
                 $new_id = $pdo->lastInsertId();
                 logActivity($pdo, 'Created Invoice', 'Invoice', $new_id, $invoice_number);
                 
@@ -106,8 +109,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $oldInvoice = $stmt->fetch();
 
                 if ($isSuper || ($oldInvoice && $oldInvoice['assigned_to'] == $user_id)) {
-                    $stmt = $pdo->prepare("UPDATE invoices SET invoice_number=?, client_id=?, amount=?, status=?, issue_date=?, due_date=?, drive_link=?, assigned_to=? WHERE id=?");
-                    $stmt->execute([$invoice_number, $client_id, $amount, $status, $issue_date, $due_date, $drive_link, $assigned_to, $id]);
+                    $payment_date = ($status === 'Paid') ? date('Y-m-d') : null;
+                    $stmt = $pdo->prepare("UPDATE invoices SET invoice_number=?, client_id=?, amount=?, status=?, issue_date=?, due_date=?, drive_link=?, assigned_to=?, payment_date=? WHERE id=?");
+                    $stmt->execute([$invoice_number, $client_id, $amount, $status, $issue_date, $due_date, $drive_link, $assigned_to, $payment_date, $id]);
                     logActivity($pdo, 'Updated Invoice', 'Invoice', $id, "Status: $status");
                     
                     if ($isSuper && $assigned_to && $assigned_to != $oldInvoice['assigned_to']) {

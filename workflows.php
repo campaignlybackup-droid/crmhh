@@ -1,12 +1,6 @@
 <?php
 require_once 'functions.php';
-requireLogin();
-
-if (!isSuperAdmin()) {
-    $_SESSION['flash_error'] = "Access denied.";
-    header("Location: dashboard.php");
-    exit;
-}
+requireSuperAdmin();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';

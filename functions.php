@@ -1,7 +1,7 @@
 <?php
 session_start();
+require_once __DIR__ . '/autoload.php';
 require_once 'config.php';
-
 // Define the external upload directory (outside public_html)
 define('UPLOAD_DIR', realpath(__DIR__ . '/..') . '/crm_uploads/');
 

@@ -79,9 +79,13 @@ function notifySuperAdmins($pdo, $message) {
 }
 
 function getUnreadNotifications($pdo, $user_id) {
-    $stmt = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? AND is_read = FALSE ORDER BY created_at DESC");
-    $stmt->execute([$user_id]);
-    return $stmt->fetchAll();
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? AND is_read = FALSE ORDER BY created_at DESC");
+        $stmt->execute([$user_id]);
+        return $stmt->fetchAll();
+    } catch (PDOException $e) {
+        return [];
+    }
 }
 
 function markNotificationsRead($pdo, $user_id) {

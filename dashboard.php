@@ -78,7 +78,10 @@ try {
     // Financial Snippet
     $totalRevenueDashboard = 0;
     if ($isSuper) {
-        $totalRevenueDashboard = $pdo->query("SELECT SUM(amount) FROM invoices WHERE status = 'Paid'")->fetchColumn() ?: 0;
+        $invQuery = $pdo->query("SELECT SUM(amount) FROM invoices WHERE status = 'Paid'");
+        if ($invQuery) {
+            $totalRevenueDashboard = $invQuery->fetchColumn() ?: 0;
+        }
     }
 
 } catch (PDOException $e) {

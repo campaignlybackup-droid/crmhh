@@ -134,7 +134,12 @@ body {
     box-shadow: 0 4px 20px 0 rgba(0,0,0,0.03);
     margin-bottom: 24px;
     background-color: var(--bs-body-bg);
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.08);
 }
 
 .card-header {
@@ -155,8 +160,8 @@ body {
 }
 
 .widget-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 25px 0 rgba(0,0,0,0.08);
+    transform: translateY(-5px);
+    box-shadow: 0 12px 30px 0 rgba(0,0,0,0.12);
 }
 
 .widget-icon {
@@ -271,4 +276,105 @@ body {
     .sidebar.show + .sidebar-overlay {
         display: block;
     }
+}
+
+/* ==========================================================================
+   DARK MODE OVERRIDES (Premium Slate Theme)
+   Overrides Bootstrap's default harsh black/grays with deep slate tones.
+   ========================================================================== */
+
+[data-bs-theme="dark"] body {
+    background-color: #0F172A; /* Deep Slate Background */
+    color: #F8FAFC;
+}
+
+[data-bs-theme="dark"] .sidebar, 
+[data-bs-theme="dark"] .top-navbar,
+[data-bs-theme="dark"] .card,
+[data-bs-theme="dark"] .dropdown-menu {
+    background-color: #1E293B; /* Slightly lighter slate for depth */
+    border-color: #334155;
+}
+
+[data-bs-theme="dark"] .sidebar .brand {
+    border-color: #334155;
+}
+
+[data-bs-theme="dark"] .sidebar-link {
+    color: #CBD5E1;
+}
+
+[data-bs-theme="dark"] .sidebar-link:hover, 
+[data-bs-theme="dark"] .sidebar-link.active {
+    background-color: rgba(67, 97, 238, 0.15);
+    color: #818cf8; /* Soft glowing blue */
+}
+
+[data-bs-theme="dark"] .card-header,
+[data-bs-theme="dark"] .table th,
+[data-bs-theme="dark"] .table td,
+[data-bs-theme="dark"] .list-group-item,
+[data-bs-theme="dark"] .border-bottom,
+[data-bs-theme="dark"] .border-top,
+[data-bs-theme="dark"] hr {
+    border-color: #334155 !important;
+}
+
+[data-bs-theme="dark"] .text-body {
+    color: #F8FAFC !important;
+}
+
+[data-bs-theme="dark"] .text-muted {
+    color: #94A3B8 !important;
+}
+
+[data-bs-theme="dark"] .bg-light,
+[data-bs-theme="dark"] .bg-secondary.bg-opacity-10 {
+    background-color: #334155 !important;
+}
+
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+    background-color: #0F172A;
+    border-color: #334155;
+    color: #F8FAFC;
+}
+
+[data-bs-theme="dark"] .form-control:focus,
+[data-bs-theme="dark"] .form-select:focus {
+    background-color: #1E293B;
+    border-color: var(--primary-color);
+    color: #F8FAFC;
+    box-shadow: 0 0 0 0.25rem rgba(67, 97, 238, 0.25);
+}
+
+[data-bs-theme="dark"] .search-bar input {
+    background-color: #334155;
+    color: #F8FAFC;
+}
+
+[data-bs-theme="dark"] .search-bar input:focus {
+    background-color: #1E293B;
+}
+
+[data-bs-theme="dark"] .card:hover {
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
+
+[data-bs-theme="dark"] .widget-card:hover {
+    box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+}
+
+[data-bs-theme="dark"] .table-hover tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+[data-bs-theme="dark"] .modal-content {
+    background-color: #1E293B;
+    border-color: #334155;
+}
+
+[data-bs-theme="dark"] .modal-header,
+[data-bs-theme="dark"] .modal-footer {
+    border-color: #334155;
 }

@@ -6,323 +6,297 @@ $isSuper = isSuperAdmin();
 $user_id = getCurrentUserId();
 $db_error = false;
 
-if ($isSuper) {
-    try {
-        // Superadmin Queries
-        $totalRevenue = $pdo->query("SELECT SUM(amount) FROM invoices WHERE status = 'Paid'")->fetchColumn() ?: 0;
-        $outstanding = $pdo->query("SELECT SUM(amount) FROM invoices WHERE status != 'Paid'")->fetchColumn() ?: 0;
-        $activeProjects = $pdo->query("SELECT COUNT(*) FROM projects WHERE status != 'Delivered'")->fetchColumn() ?: 0;
-        
-        $todayAttendance = $pdo->query("SELECT COUNT(DISTINCT user_id) FROM daily_work WHERE DATE(work_date) = CURDATE()")->fetchColumn() ?: 0;
-        
-        $activityLog = $pdo->query("SELECT a.*, u.username FROM activity_log a LEFT JOIN users u ON a.user_id = u.id ORDER BY a.created_at DESC LIMIT 15")->fetchAll();
-        
-        $shootsQuery = "SELECT p.*, c.client_name, u.username as assigned_user FROM projects p LEFT JOIN clients c ON p.client_id = c.id LEFT JOIN users u ON p.assigned_to = u.id WHERE p.shoot_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 14 DAY) ORDER BY p.shoot_date ASC LIMIT 5";
-        $upcomingShoots = $pdo->query($shootsQuery)->fetchAll();
-        
-        // Overdue Check
-        $todayNotifs = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE DATE(created_at) = CURDATE() AND message LIKE '%overdue%'");
-        $todayNotifs->execute();
-        if ($todayNotifs->fetchColumn() == 0) {
-            $overdueTasks = $pdo->query("SELECT COUNT(*) FROM tasks WHERE due_date < CURDATE() AND status != 'Done'")->fetchColumn();
-            if ($overdueTasks > 0) notifySuperAdmins($pdo, "$overdueTasks tasks are overdue!");
-            
-            $overdueProj = $pdo->query("SELECT COUNT(*) FROM projects WHERE delivery_date < CURDATE() AND status != 'Delivered'")->fetchColumn();
-            if ($overdueProj > 0) notifySuperAdmins($pdo, "$overdueProj projects have missed delivery dates!");
-            
-            $missedLeads = $pdo->query("SELECT COUNT(*) FROM leads WHERE next_action_date < CURDATE() AND status NOT IN ('Won', 'Lost')")->fetchColumn();
-            if ($missedLeads > 0) notifySuperAdmins($pdo, "$missedLeads leads have missed their next action date!");
-        }
-    } catch (PDOException $e) {
-        $db_error = true;
-        $totalRevenue = $outstanding = $activeProjects = $todayAttendance = 0;
-        $activityLog = $upcomingShoots = [];
-    }
-} else {
-    try {
-        // Normal User Queries
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM projects WHERE status != 'Delivered' AND assigned_to = ?");
-        $stmt->execute([$user_id]);
-        $activeProjects = $stmt->fetchColumn() ?: 0;
+// Initialize Widget Data
+$pendingTasks = 0;
+$meetingsToday = 0;
+$approvalsWaiting = 0;
+$attentionProjects = 0;
 
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM tasks WHERE status != 'Done' AND assigned_to = ?");
-        $stmt->execute([$user_id]);
-        $pendingTasks = $stmt->fetchColumn() ?: 0;
-        
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM daily_work WHERE user_id = ? AND MONTH(work_date) = MONTH(CURDATE()) AND YEAR(work_date) = YEAR(CURDATE())");
-        $stmt->execute([$user_id]);
-        $monthPresence = $stmt->fetchColumn() ?: 0;
-        
-        $tasksQuery = "SELECT t.*, p.project_name FROM tasks t LEFT JOIN projects p ON t.project_id = p.id WHERE t.status != 'Done' AND t.assigned_to = ? ORDER BY t.due_date ASC LIMIT 10";
-        $stmt = $pdo->prepare($tasksQuery);
-        $stmt->execute([$user_id]);
-        $myTasks = $stmt->fetchAll();
-        
-        $shootsQuery = "SELECT p.*, c.client_name FROM projects p LEFT JOIN clients c ON p.client_id = c.id WHERE p.assigned_to = ? AND p.shoot_date >= CURDATE() ORDER BY p.shoot_date ASC LIMIT 5";
-        $stmt = $pdo->prepare($shootsQuery);
-        $stmt->execute([$user_id]);
-        $upcomingShoots = $stmt->fetchAll();
-    } catch (PDOException $e) {
-        $db_error = true;
-        $activeProjects = $pendingTasks = $monthPresence = 0;
-        $myTasks = $upcomingShoots = [];
+$agendaItems = [];
+$activityLog = [];
+$upcomingDeadlines = [];
+
+try {
+    // 1. Pending Tasks
+    $tasksSql = "SELECT COUNT(*) FROM tasks WHERE status != 'Done'";
+    if (!$isSuper) $tasksSql .= " AND assigned_to = $user_id";
+    $pendingTasks = $pdo->query($tasksSql)->fetchColumn() ?: 0;
+
+    // 2. Meetings Today
+    $meetingsSql = "SELECT COUNT(*) FROM meetings WHERE DATE(start_time) = CURDATE()";
+    // We don't have participants mapped yet, so we'll just show all meetings for now.
+    $meetingsToday = $pdo->query($meetingsSql)->fetchColumn() ?: 0;
+
+    // 3. Approvals Waiting
+    $approvalsSql = "SELECT COUNT(*) FROM approvals WHERE status = 'Pending'";
+    if (!$isSuper) $approvalsSql .= " AND approver_id = $user_id";
+    $approvalsWaiting = $pdo->query($approvalsSql)->fetchColumn() ?: 0;
+
+    // 4. Projects Needing Attention
+    $attentionSql = "SELECT COUNT(*) FROM projects WHERE status IN ('Briefing', 'Review')";
+    if (!$isSuper) $attentionSql .= " AND assigned_to = $user_id";
+    $attentionProjects = $pdo->query($attentionSql)->fetchColumn() ?: 0;
+
+
+    // --- 3 COLUMN DATA ---
+
+    // Column 1: Today's Agenda (Tasks due today, Meetings today)
+    $tasksTodaySql = "SELECT 'Task' as type, task_name as title, due_date as time_info FROM tasks WHERE due_date = CURDATE() AND status != 'Done'";
+    if (!$isSuper) $tasksTodaySql .= " AND assigned_to = $user_id";
+    
+    $meetingsTodaySql = "SELECT 'Meeting' as type, title, TIME_FORMAT(start_time, '%H:%i') as time_info FROM meetings WHERE DATE(start_time) = CURDATE()";
+    
+    // Combine them (Union requires same columns)
+    $agendaQuery = $pdo->query("$tasksTodaySql UNION $meetingsTodaySql ORDER BY time_info ASC LIMIT 10");
+    if ($agendaQuery) {
+        $agendaItems = $agendaQuery->fetchAll();
     }
+
+    // Column 2: Recent Activity
+    $activitySql = "SELECT a.*, u.username FROM activity_log a LEFT JOIN users u ON a.user_id = u.id ";
+    if (!$isSuper) {
+        // Since we don't have perfect entity matching, we show user's own activity for now
+        $activitySql .= " WHERE a.user_id = $user_id ";
+    }
+    $activitySql .= " ORDER BY a.created_at DESC LIMIT 8";
+    
+    $activityStmt = $pdo->query($activitySql);
+    if ($activityStmt) {
+        $activityLog = $activityStmt->fetchAll();
+    }
+
+    // Column 3: Upcoming Deadlines (Next 7 days)
+    $deadlinesSql = "SELECT project_name as title, delivery_date as deadline FROM projects WHERE delivery_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY) AND status != 'Delivered'";
+    if (!$isSuper) $deadlinesSql .= " AND assigned_to = $user_id";
+    $deadlinesSql .= " ORDER BY delivery_date ASC LIMIT 5";
+    
+    $deadlinesStmt = $pdo->query($deadlinesSql);
+    if ($deadlinesStmt) {
+        $upcomingDeadlines = $deadlinesStmt->fetchAll();
+    }
+
+} catch (PDOException $e) {
+    $db_error = true;
+    // Catch errors silently if tables don't exist yet
 }
 
 include 'header.php';
 ?>
 
-<div class="row mb-4">
-    <div class="col-12">
-        <h3 class="fw-bold">Dashboard</h3>
-        <p class="text-muted">Welcome back, <?= h(getCurrentUsername()) ?>!</p>
+<!-- Quick Actions -->
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <div>
+        <h3 class="fw-bold mb-1">What do I have today?</h3>
+        <p class="text-muted mb-0">Here's your summary, <?= h(getCurrentUsername()) ?>.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="tasks.php" class="btn btn-primary shadow-sm"><i class="bi bi-check2-square me-2"></i>New Task</a>
+        <?php if ($isSuper): ?>
+        <a href="projects.php" class="btn btn-dark shadow-sm"><i class="bi bi-briefcase me-2"></i>New Project</a>
+        <?php endif; ?>
     </div>
 </div>
 
-<?php if ($isSuper): ?>
-<!-- SUPERADMIN DASHBOARD -->
-<div class="row">
-    <div class="col-md-6 col-sm-6">
-        <div class="card widget-card">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-muted text-uppercase fw-bold mb-2">Active Projects</h6>
-                    <h3 class="mb-0 fw-bold"><?= $activeProjects ?></h3>
+<!-- Widgets Row -->
+<div class="row g-4 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="card widget-card h-100 border-0 shadow-sm">
+            <div class="card-body d-flex align-items-center">
+                <div class="widget-icon bg-soft-warning text-warning me-3">
+                    <i class="bi bi-list-task"></i>
                 </div>
-                <div class="widget-icon text-primary bg-soft-primary rounded p-3">
-                    <i class="bi bi-briefcase-fill"></i>
+                <div>
+                    <h3 class="mb-0 fw-bold"><?= $pendingTasks ?></h3>
+                    <p class="text-muted small mb-0 fw-semibold text-uppercase">Pending Tasks</p>
                 </div>
             </div>
         </div>
     </div>
-
-    <div class="col-md-6 col-sm-6">
-        <div class="card widget-card">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-muted text-uppercase fw-bold mb-2">Today's Attendance</h6>
-                    <h3 class="mb-0 fw-bold"><?= $todayAttendance ?> <span class="fs-6 text-muted fw-normal">Present</span></h3>
+    <div class="col-xl-3 col-md-6">
+        <div class="card widget-card h-100 border-0 shadow-sm">
+            <div class="card-body d-flex align-items-center">
+                <div class="widget-icon bg-soft-primary text-primary me-3">
+                    <i class="bi bi-calendar-event"></i>
                 </div>
-                <div class="widget-icon text-info bg-soft-info rounded p-3">
-                    <i class="bi bi-people-fill"></i>
+                <div>
+                    <h3 class="mb-0 fw-bold"><?= $meetingsToday ?></h3>
+                    <p class="text-muted small mb-0 fw-semibold text-uppercase">Meetings Today</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card widget-card h-100 border-0 shadow-sm">
+            <div class="card-body d-flex align-items-center">
+                <div class="widget-icon bg-soft-success text-success me-3">
+                    <i class="bi bi-check-circle"></i>
+                </div>
+                <div>
+                    <h3 class="mb-0 fw-bold"><?= $approvalsWaiting ?></h3>
+                    <p class="text-muted small mb-0 fw-semibold text-uppercase">Approvals Waiting</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card widget-card h-100 border-0 shadow-sm">
+            <div class="card-body d-flex align-items-center">
+                <div class="widget-icon bg-soft-danger text-danger me-3">
+                    <i class="bi bi-exclamation-triangle"></i>
+                </div>
+                <div>
+                    <h3 class="mb-0 fw-bold"><?= $attentionProjects ?></h3>
+                    <p class="text-muted small mb-0 fw-semibold text-uppercase">Projects Need Attention</p>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row mt-4">
-    <!-- Global Activity Log -->
-    <div class="col-lg-7 mb-4">
-        <div class="card h-100">
-            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-activity"></i> Global Activity Stream</span>
+<!-- Main Content Grid -->
+<div class="row g-4">
+    <!-- Column 1: Agenda -->
+    <div class="col-lg-4">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-header border-0 pb-0 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0">Today's Agenda</h5>
+                <i class="bi bi-calendar-date text-muted"></i>
             </div>
-            <div class="card-body p-0">
-                <div class="list-group list-group-flush" style="max-height: 500px; overflow-y: auto;">
-                    <?php if (empty($activityLog)): ?>
-                        <div class="list-group-item text-center text-muted py-4">No recent activity.</div>
-                    <?php else: ?>
-                        <?php foreach ($activityLog as $log): ?>
-                        <div class="list-group-item list-group-item-action py-3">
-                            <div class="d-flex w-100 justify-content-between align-items-center mb-1">
-                                <h6 class="mb-0 fw-bold text-primary"><?= h($log['action_type']) ?></h6>
-                                <small class="text-muted"><?= date('M d, H:i', strtotime($log['created_at'])) ?></small>
+            <div class="card-body">
+                <?php if (empty($agendaItems)): ?>
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-cup-hot fs-1 d-block mb-3"></i>
+                        Nothing on the agenda for today.
+                    </div>
+                <?php else: ?>
+                    <div class="d-flex flex-column gap-3">
+                        <?php foreach($agendaItems as $item): ?>
+                            <div class="d-flex align-items-start p-3 rounded bg-secondary bg-opacity-10">
+                                <?php if($item['type'] == 'Meeting'): ?>
+                                    <div class="text-primary me-3 mt-1"><i class="bi bi-camera-video-fill fs-5"></i></div>
+                                <?php else: ?>
+                                    <div class="text-warning me-3 mt-1"><i class="bi bi-check2-square fs-5"></i></div>
+                                <?php endif; ?>
+                                <div>
+                                    <div class="fw-bold text-body"><?= h($item['title']) ?></div>
+                                    <div class="small text-muted"><i class="bi bi-clock me-1"></i> <?= h($item['time_info']) ?></div>
+                                </div>
                             </div>
-                            <p class="mb-1 small">
-                                <strong><?= h($log['username'] ?? 'System') ?></strong> on <?= h($log['entity_type']) ?> 
-                                <?php if($log['entity_id']): ?>#<?= h($log['entity_id']) ?><?php endif; ?>
-                            </p>
-                            <?php if ($log['details']): ?>
-                                <small class="text-muted d-block bg-light p-2 rounded mt-2 border"><?= h($log['details']) ?></small>
-                            <?php endif; ?>
-                        </div>
                         <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Column 2: Recent Activity -->
+    <div class="col-lg-4">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-header border-0 pb-0">
+                <h5 class="fw-bold mb-0">Recent Activity</h5>
+            </div>
+            <div class="card-body">
+                <?php if (empty($activityLog)): ?>
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-activity fs-1 d-block mb-3"></i>
+                        No recent activity found.
+                    </div>
+                <?php else: ?>
+                    <div class="position-relative">
+                        <?php foreach($activityLog as $log): ?>
+                            <div class="d-flex mb-4 position-relative">
+                                <div class="me-3">
+                                    <div class="rounded-circle bg-soft-primary text-primary d-flex justify-content-center align-items-center" style="width: 32px; height: 32px; font-weight: bold; font-size: 0.8rem;">
+                                        <?= strtoupper(substr($log['username'] ?? '?', 0, 1)) ?>
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="small fw-bold text-body mb-1">
+                                        <?= h($log['action_type'] ?? 'Action') ?>
+                                    </div>
+                                    <div class="small text-muted mb-1">
+                                        <strong><?= h($log['username'] ?? 'System') ?></strong> on <?= h($log['entity_type']) ?>
+                                    </div>
+                                    <?php if ($log['details']): ?>
+                                        <div class="small p-2 bg-secondary bg-opacity-10 rounded text-body-secondary mt-1 border">
+                                            <?= h($log['details']) ?>
+                                        </div>
+                                    <?php endif; ?>
+                                    <div class="text-muted mt-2" style="font-size: 0.7rem;">
+                                        <i class="bi bi-clock me-1"></i> <?= date('M d, g:i A', strtotime($log['created_at'])) ?>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Column 3: Action Items -->
+    <div class="col-lg-4">
+        <div class="d-flex flex-column h-100 gap-4">
+            
+            <!-- Upcoming Deadlines -->
+            <div class="card border-0 shadow-sm flex-grow-1">
+                <div class="card-header border-0 pb-0 d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold mb-0">Upcoming Deadlines</h5>
+                    <span class="badge bg-soft-danger text-danger">Next 7 Days</span>
+                </div>
+                <div class="card-body">
+                    <?php if(empty($upcomingDeadlines)): ?>
+                        <div class="text-center text-muted py-3 small">
+                            No upcoming deadlines!
+                        </div>
+                    <?php else: ?>
+                        <ul class="list-group list-group-flush">
+                            <?php foreach($upcomingDeadlines as $dl): ?>
+                                <li class="list-group-item px-0 py-3 bg-transparent d-flex justify-content-between align-items-center border-bottom-0 border-top">
+                                    <div class="fw-semibold text-body text-truncate pe-2"><?= h($dl['title']) ?></div>
+                                    <div class="badge bg-soft-danger text-danger fw-bold rounded-pill">
+                                        <?= date('M d', strtotime($dl['deadline'])) ?>
+                                    </div>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
                     <?php endif; ?>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Upcoming Shoots Table -->
-    <div class="col-lg-5 mb-4">
-        <div class="card h-100">
-            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
-                <span>Upcoming Shoots (Next 14 Days)</span>
-                <a href="projects.php" class="btn btn-sm btn-outline-primary">View All</a>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead class="bg-light">
-                            <tr>
-                                <th class="ps-3">Project / Client</th>
-                                <th>Date</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (empty($upcomingShoots)): ?>
-                                <tr><td colspan="2" class="text-center text-muted py-4">No upcoming shoots scheduled.</td></tr>
-                            <?php else: ?>
-                                <?php foreach ($upcomingShoots as $shoot): ?>
-                                <tr>
-                                    <td class="ps-3">
-                                        <div class="fw-bold"><?= h($shoot['project_name']) ?></div>
-                                        <div class="small text-muted"><?= h($shoot['client_name']) ?></div>
-                                    </td>
-                                    <td>
-                                        <div class="text-primary fw-bold"><?= date('M d, Y', strtotime($shoot['shoot_date'])) ?></div>
-                                        <div class="small text-muted"><i class="bi bi-person"></i> <?= h($shoot['assigned_user'] ?? 'N/A') ?></div>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
+            <!-- Notifications (Mini) -->
+            <div class="card border-0 shadow-sm flex-grow-1">
+                <div class="card-header border-0 pb-0">
+                    <h5 class="fw-bold mb-0">New Notifications</h5>
+                </div>
+                <div class="card-body">
+                    <?php if (empty($notifications)): ?>
+                        <div class="text-center text-muted py-3 small">
+                            No new notifications.
+                        </div>
+                    <?php else: ?>
+                        <ul class="list-group list-group-flush">
+                            <?php 
+                                $miniNotifs = array_slice($notifications, 0, 3);
+                                foreach($miniNotifs as $n): 
+                            ?>
+                                <li class="list-group-item px-0 py-2 bg-transparent border-bottom-0 border-top">
+                                    <div class="d-flex align-items-start gap-2">
+                                        <i class="bi bi-dot text-primary fs-4 mt-n1"></i>
+                                        <div>
+                                            <div class="small text-body"><?= h($n['message']) ?></div>
+                                            <div class="text-muted" style="font-size: 0.7rem;"><?= h($n['created_at']) ?></div>
+                                        </div>
+                                    </div>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
                 </div>
             </div>
+
         </div>
     </div>
 </div>
-
-<?php else: ?>
-<!-- NORMAL USER DASHBOARD -->
-<div class="row">
-    <!-- Widgets -->
-    <div class="col-md-4 col-sm-6">
-        <div class="card widget-card">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-muted text-uppercase fw-bold mb-2">My Active Projects</h6>
-                    <h3 class="mb-0 fw-bold text-primary"><?= $activeProjects ?></h3>
-                </div>
-                <div class="widget-icon text-primary bg-soft-primary rounded p-3">
-                    <i class="bi bi-briefcase-fill"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-4 col-sm-6">
-        <div class="card widget-card">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-muted text-uppercase fw-bold mb-2">My Pending Tasks</h6>
-                    <h3 class="mb-0 fw-bold text-warning"><?= $pendingTasks ?></h3>
-                </div>
-                <div class="widget-icon text-warning bg-soft-warning rounded p-3">
-                    <i class="bi bi-list-task"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-4 col-sm-6">
-        <div class="card widget-card">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-muted text-uppercase fw-bold mb-2">My Monthly Presence</h6>
-                    <h3 class="mb-0 fw-bold text-success"><?= $monthPresence ?> <span class="fs-6 text-muted fw-normal">Days</span></h3>
-                </div>
-                <div class="widget-icon text-success bg-soft-success rounded p-3">
-                    <i class="bi bi-calendar-check-fill"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row mt-4">
-    <!-- My Tasks Table -->
-    <div class="col-lg-7 mb-4">
-        <div class="card h-100">
-            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
-                <span>My Tasks</span>
-                <a href="tasks.php" class="btn btn-sm btn-outline-primary">Go to Tasks</a>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead class="bg-light">
-                            <tr>
-                                <th class="ps-3">Task Name</th>
-                                <th>Project</th>
-                                <th>Due Date</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (empty($myTasks)): ?>
-                                <tr><td colspan="4" class="text-center text-muted py-4">You have no pending tasks! Great job.</td></tr>
-                            <?php else: ?>
-                                <?php foreach ($myTasks as $task): ?>
-                                <tr>
-                                    <td class="ps-3 fw-bold"><?= h($task['task_name']) ?></td>
-                                    <td><?= h($task['project_name'] ?? 'N/A') ?></td>
-                                    <td>
-                                        <?php 
-                                            $isOverdue = strtotime($task['due_date']) < strtotime('today');
-                                            $dateClass = $isOverdue ? 'text-danger fw-bold' : '';
-                                        ?>
-                                        <span class="<?= $dateClass ?>"><?= h($task['due_date'] ?: '-') ?></span>
-                                    </td>
-                                    <td>
-                                        <?php
-                                            $statusClass = 'bg-soft-secondary';
-                                            if ($task['status'] == 'In Progress') $statusClass = 'bg-soft-primary';
-                                            if ($task['status'] == 'Review') $statusClass = 'bg-soft-warning';
-                                        ?>
-                                        <span class="badge badge-status <?= $statusClass ?>"><?= h($task['status']) ?></span>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Upcoming Shoots Table -->
-    <div class="col-lg-5 mb-4">
-        <div class="card h-100">
-            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
-                <span>My Upcoming Shoots</span>
-                <a href="projects.php" class="btn btn-sm btn-outline-primary">Go to Projects</a>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead class="bg-light">
-                            <tr>
-                                <th class="ps-3">Project / Client</th>
-                                <th>Shoot Date</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (empty($upcomingShoots)): ?>
-                                <tr><td colspan="2" class="text-center text-muted py-4">No upcoming shoots assigned to you.</td></tr>
-                            <?php else: ?>
-                                <?php foreach ($upcomingShoots as $shoot): ?>
-                                <tr>
-                                    <td class="ps-3">
-                                        <div class="fw-bold"><?= h($shoot['project_name']) ?></div>
-                                        <div class="small text-muted"><?= h($shoot['client_name']) ?></div>
-                                    </td>
-                                    <td>
-                                        <div class="text-primary fw-bold"><?= date('M d, Y', strtotime($shoot['shoot_date'])) ?></div>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-<?php endif; ?>
 
 <?php include 'footer.php'; ?>

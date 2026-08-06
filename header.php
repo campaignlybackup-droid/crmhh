@@ -66,6 +66,12 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <a href="leads.php" class="sidebar-link <?= $current_page == 'leads.php' ? 'active' : '' ?>">
                 <i class="bi bi-funnel-fill"></i> Leads
             </a>
+            <a href="reports.php" class="sidebar-link <?= $current_page == 'reports.php' ? 'active' : '' ?>">
+                <i class="bi bi-bar-chart-line-fill"></i> Reports
+            </a>
+            <a href="workflows.php" class="sidebar-link <?= $current_page == 'workflows.php' ? 'active' : '' ?>">
+                <i class="bi bi-diagram-3-fill"></i> Workflows
+            </a>
             
             <div class="sidebar-nav-title">Company</div>
             <a href="content_calendar.php" class="sidebar-link <?= $current_page == 'content_calendar.php' ? 'active' : '' ?>">

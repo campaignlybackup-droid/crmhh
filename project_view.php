@@ -130,7 +130,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $updProj = $pdo->prepare("UPDATE projects SET status=? WHERE id=?");
             $updProj->execute([$next_stage_name, $project_id]);
             
-            $_SESSION['flash_success'] = "Stage Approved! Moved to $next_stage_name.";
+            // ==========================================
+            // WORKFLOW AUTOMATION ENGINE
+            // ==========================================
+            if ($project['workflow_template_id']) {
+                $qTasks = $pdo->prepare("SELECT * FROM workflow_tasks WHERE template_id = ? AND trigger_stage_name = ?");
+                $qTasks->execute([$project['workflow_template_id'], $next_stage_name]);
+                $auto_tasks = $qTasks->fetchAll();
+                
+                if (!empty($auto_tasks)) {
+                    $insTask = $pdo->prepare("INSERT INTO tasks (task_name, status, assigned_to, due_date, priority, project_id) VALUES (?, 'To Do', ?, ?, 'Medium', ?)");
+                    foreach ($auto_tasks as $at) {
+                        // Calculate estimated due date based on estimated hours (assuming 8 hr workday roughly, or just add days)
+                        // Simple approach: Add (estimated_hours / 8) days to current date, minimum 1 day.
+                        $days_to_add = max(1, ceil($at['estimated_hours'] / 8));
+                        $due_date = date('Y-m-d', strtotime("+$days_to_add days"));
+                        
+                        // If assignee is null in template, assign to project lead
+                        $task_assignee = $at['default_assignee_id'] ?: $project['assigned_to'];
+                        
+                        $insTask->execute([$at['task_name'], $task_assignee, $due_date, $project_id]);
+                        
+                        // Notify Assignee
+                        if ($task_assignee) {
+                            addNotification($pdo, $task_assignee, "Automated Task Assigned: " . $at['task_name'] . " (Project: " . $project['project_name'] . ")");
+                        }
+                    }
+                    $_SESSION['flash_success'] = "Stage Approved! " . count($auto_tasks) . " automated tasks generated for $next_stage_name.";
+                } else {
+                    $_SESSION['flash_success'] = "Stage Approved! Moved to $next_stage_name.";
+                }
+            } else {
+                $_SESSION['flash_success'] = "Stage Approved! Moved to $next_stage_name.";
+            }
+
             header("Location: project_view.php?id=$project_id&stage_id=$next_stage_id");
         } else {
             $_SESSION['flash_success'] = "Project Fully Completed!";

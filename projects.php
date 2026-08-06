@@ -18,8 +18,10 @@ $stmtC->execute($clientParams);
 $clients = $stmtC->fetchAll();
 
 $users = [];
+$templates = [];
 if ($isSuper) {
     $users = $pdo->query("SELECT id, username FROM users WHERE deleted_at IS NULL ORDER BY username ASC")->fetchAll();
+    $templates = $pdo->query("SELECT id, name FROM workflow_templates WHERE deleted_at IS NULL ORDER BY name ASC")->fetchAll();
 }
 
 $all_statuses = [
@@ -82,11 +84,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $drive_folder_url = $_POST['drive_folder_url'];
             $payment_status = $_POST['payment_status'] ?? 'Unpaid';
             $total_videos_planned = $_POST['total_videos_planned'] ?: 0;
+            $workflow_template_id = $_POST['workflow_template_id'] ?: null;
             
             $assigned_to = $isSuper ? ($_POST['assigned_to'] ?: null) : $user_id;
 
-            $stmt = $pdo->prepare("INSERT INTO projects (project_name, status, client_id, project_value, shoot_date, delivery_date, drive_folder_url, payment_status, assigned_to, total_videos_planned) VALUES (?, 'Onboarding', ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$project_name, $client_id, $project_value, $shoot_date, $delivery_date, $drive_folder_url, $payment_status, $assigned_to, $total_videos_planned]);
+            $stmt = $pdo->prepare("INSERT INTO projects (project_name, status, client_id, project_value, shoot_date, delivery_date, drive_folder_url, payment_status, assigned_to, total_videos_planned, workflow_template_id) VALUES (?, 'Onboarding', ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$project_name, $client_id, $project_value, $shoot_date, $delivery_date, $drive_folder_url, $payment_status, $assigned_to, $total_videos_planned, $workflow_template_id]);
             $new_id = $pdo->lastInsertId();
             
             // Seed the 12 workflow stages!
@@ -95,6 +98,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // First stage is 'In Progress', rest are 'Pending'
                 $stageStatus = ($index === 0) ? 'In Progress' : 'Pending';
                 $insertStage->execute([$new_id, $stageName, $stageStatus]);
+            }
+
+            // ==========================================
+            // TRIGGER WORKFLOW FOR FIRST STAGE
+            // ==========================================
+            if ($workflow_template_id) {
+                $qTasks = $pdo->prepare("SELECT * FROM workflow_tasks WHERE template_id = ? AND trigger_stage_name = 'Onboarding'");
+                $qTasks->execute([$workflow_template_id]);
+                $auto_tasks = $qTasks->fetchAll();
+                
+                if (!empty($auto_tasks)) {
+                    $insTask = $pdo->prepare("INSERT INTO tasks (task_name, status, assigned_to, due_date, priority, project_id) VALUES (?, 'To Do', ?, ?, 'Medium', ?)");
+                    foreach ($auto_tasks as $at) {
+                        $days_to_add = max(1, ceil($at['estimated_hours'] / 8));
+                        $due_date = date('Y-m-d', strtotime("+$days_to_add days"));
+                        $task_assignee = $at['default_assignee_id'] ?: $assigned_to;
+                        $insTask->execute([$at['task_name'], $task_assignee, $due_date, $new_id]);
+                        
+                        if ($task_assignee) {
+                            addNotification($pdo, $task_assignee, "Automated Task Assigned: " . $at['task_name'] . " (Project: " . $project_name . ")");
+                        }
+                    }
+                }
             }
 
             logActivity($pdo, 'Created Project', 'Project', $new_id, $project_name);
@@ -378,11 +404,18 @@ include 'header.php';
                     </div>
 
                     <?php if ($isSuper): ?>
-                    <div class="col-md-12">
+                    <div class="col-md-6">
                         <label class="form-label text-muted small fw-bold">ASSIGN TO (PROJECT LEAD)</label>
                         <select name="assigned_to" class="form-select">
                             <option value="">Unassigned</option>
                             <?php foreach($users as $u) echo "<option value=\"{$u['id']}\">".h($u['username'])."</option>"; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small fw-bold">WORKFLOW TEMPLATE</label>
+                        <select name="workflow_template_id" class="form-select">
+                            <option value="">None (Manual)</option>
+                            <?php foreach($templates as $t) echo "<option value=\"{$t['id']}\">".h($t['name'])."</option>"; ?>
                         </select>
                     </div>
                     <?php endif; ?>

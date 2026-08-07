@@ -108,7 +108,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <a href="daily_work.php" class="sidebar-link <?= $current_page == 'daily_work.php' ? 'active' : '' ?>">
                 <i class="bi bi-journal-check"></i> Daily Work
             </a>
-            <?php endif; ?>
+            
             
         </div>
     </aside>

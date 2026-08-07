@@ -78,6 +78,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <i class="bi bi-bar-chart-line-fill"></i> Reports
             </a>
             <?php endif; ?>
+            <a href="activity.php" class="sidebar-link <?= $current_page == 'activity.php' ? 'active' : '' ?>">
+                <i class="bi bi-activity"></i> Activity Log
+            </a>
             <a href="workflows.php" class="sidebar-link <?= $current_page == 'workflows.php' ? 'active' : '' ?>">
                 <i class="bi bi-diagram-3-fill"></i> Workflows
             </a>

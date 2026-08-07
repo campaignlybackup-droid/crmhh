@@ -260,6 +260,9 @@ include 'header.php';
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
+                <div class="mt-3 text-center">
+                    <a href="activity.php" class="btn btn-sm btn-outline-primary w-100">View All Activity</a>
+                </div>
             </div>
         </div>
     </div>

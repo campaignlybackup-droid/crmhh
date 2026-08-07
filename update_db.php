@@ -2,8 +2,9 @@
 require_once 'config.php';
 
 $queries = [
-    // 1. Remove monthly_rate from users
+    // 1. Remove monthly_rate from users and update role enum
     "ALTER TABLE users DROP COLUMN monthly_rate",
+    "ALTER TABLE users MODIFY COLUMN role ENUM('superadmin', 'manager', 'user') DEFAULT 'user'",
     
     // 2. Add assigned_to to leads
     "ALTER TABLE leads ADD COLUMN assigned_to INT, ADD FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL",

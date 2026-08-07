@@ -167,6 +167,7 @@ include 'header.php';
                         <label class="form-label text-muted small fw-bold">SYSTEM ROLE</label>
                         <select name="role" id="userRole" class="form-select">
                             <option value="user">User</option>
+                            <option value="manager">Manager</option>
                             <option value="superadmin">Superadmin</option>
                         </select>
                     </div>

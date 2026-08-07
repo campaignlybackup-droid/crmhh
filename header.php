@@ -93,10 +93,13 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <i class="bi bi-person-badge-fill"></i> HR & Leaves
             </a>
             
-            <?php if ($isSuper): ?>
+            <?php if ($isSuper || $isManager): ?>
             <a href="invoices.php" class="sidebar-link <?= $current_page == 'invoices.php' ? 'active' : '' ?>">
                 <i class="bi bi-receipt"></i> Invoices
             </a>
+            <?php endif; ?>
+            
+            <?php if ($isSuper): ?>
             <div class="sidebar-heading mt-4 text-uppercase fw-bold text-muted" style="font-size: 0.75rem; padding: 0 1rem;">System Settings</div>
             <a href="users.php" class="sidebar-link <?= $current_page == 'users.php' ? 'active' : '' ?>">
                 <i class="bi bi-person-gear"></i> Users

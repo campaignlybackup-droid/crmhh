@@ -109,12 +109,15 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentUserId = <?= (int)$current_user_id ?>;
     let canPin = <?= ($isManager || $isSuper) ? 'true' : 'false' ?>;
 
+    function escapeHTML(str) {
+        let div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
     // Format mentions in text
     function formatText(text) {
-        // Escape HTML
-        let div = document.createElement('div');
-        div.textContent = text;
-        let html = div.innerHTML;
+        let html = escapeHTML(text);
         
         // Replace @username
         return html.replace(/@([a-zA-Z0-9_]+)/g, '<span class="mention">@$1</span>');
@@ -129,7 +132,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function createMessageHTML(msg, isSelf) {
         let html = `
             <div class="chat-msg ${isSelf ? 'chat-msg-self text-end' : 'text-start'}" data-id="${msg.id}">
-                ${!isSelf ? `<div class="small fw-bold mb-1 text-muted ms-2">${msg.username}</div>` : ''}
+                ${!isSelf ? `<div class="small fw-bold mb-1 text-muted ms-2">${escapeHTML(msg.username)}</div>` : ''}
                 <div class="chat-bubble ${isSelf ? 'chat-bubble-self' : 'chat-bubble-other'} d-inline-block text-start">
                     ${formatText(msg.message)}
                 </div>
@@ -150,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return `
             <div class="d-flex justify-content-between align-items-center bg-white p-2 rounded mb-1 border" data-pinned-id="${msg.id}">
                 <div class="text-truncate small">
-                    <strong>${msg.username}:</strong> ${formatText(msg.message)}
+                    <strong>${escapeHTML(msg.username)}:</strong> ${formatText(msg.message)}
                 </div>
                 ${canPin ? `
                     <button class="btn btn-sm btn-link text-danger p-0 ms-2 unpin-btn" data-id="${msg.id}" title="Unpin">

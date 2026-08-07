@@ -290,7 +290,7 @@ include 'header.php';
                     </thead>
                     <tbody>
                         <?php if(empty($tasks)): ?>
-                            <tr><td colspan="7" class="text-center py-4 text-muted">No tasks found.</td></tr>
+                            <tr><td colspan="8" class="text-center py-4 text-muted">No tasks found.</td></tr>
                         <?php else: ?>
                             <?php foreach($tasks as $task): ?>
                             <tr>

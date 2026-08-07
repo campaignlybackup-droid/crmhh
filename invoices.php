@@ -1,14 +1,16 @@
 <?php
 require_once 'functions.php';
-requireSuperAdmin();
+requireManager();
 $user_id = getCurrentUserId();
+$isSuper = isSuperAdmin();
+$visibleIds = getVisibleUserIds($pdo, $user_id);
+$visibleIdsStr = implode(',', $visibleIds);
 
 // Fetch clients for dropdowns based on assignment (superadmin sees all, user sees their assigned clients)
 $clientsQuery = "SELECT id, client_name FROM clients";
 $clientParams = [];
 if (!$isSuper) {
-    $clientsQuery .= " WHERE assigned_to = ?";
-    $clientParams[] = $user_id;
+    $clientsQuery .= " WHERE assigned_to IN ($visibleIdsStr)";
 }
 $clientsQuery .= " ORDER BY client_name ASC";
 $stmtC = $pdo->prepare($clientsQuery);
@@ -32,10 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $params = $selected_ids;
 
                 if (!$isSuper) {
-                    $checkStmt = $pdo->prepare("SELECT id FROM invoices WHERE id IN ($placeholders) AND assigned_to = ?");
-                    $checkParams = $selected_ids;
-                    $checkParams[] = $user_id;
-                    $checkStmt->execute($checkParams);
+                    $checkStmt = $pdo->prepare("SELECT id FROM invoices WHERE id IN ($placeholders) AND assigned_to IN ($visibleIdsStr)");
+                    $checkStmt->execute($selected_ids);
                     $selected_ids = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
                     $placeholders = implode(',', array_fill(0, count($selected_ids), '?'));
                     $params = $selected_ids;
@@ -108,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$id]);
                 $oldInvoice = $stmt->fetch();
 
-                if ($isSuper || ($oldInvoice && $oldInvoice['assigned_to'] == $user_id)) {
+                if ($isSuper || ($oldInvoice && in_array($oldInvoice['assigned_to'], $visibleIds))) {
                     $payment_date = ($status === 'Paid') ? date('Y-m-d') : null;
                     $stmt = $pdo->prepare("UPDATE invoices SET invoice_number=?, client_id=?, amount=?, status=?, issue_date=?, due_date=?, drive_link=?, assigned_to=?, payment_date=? WHERE id=?");
                     $stmt->execute([$invoice_number, $client_id, $amount, $status, $issue_date, $due_date, $drive_link, $assigned_to, $payment_date, $id]);
@@ -131,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$id]);
             $invoice = $stmt->fetch();
             
-            if ($isSuper || ($invoice && $invoice['assigned_to'] == $user_id)) {
+            if ($isSuper || ($invoice && in_array($invoice['assigned_to'], $visibleIds))) {
                 $stmt = $pdo->prepare("DELETE FROM invoices WHERE id = ?");
                 $stmt->execute([$id]);
                 logActivity($pdo, 'Deleted Invoice', 'Invoice', $id, $invoice['invoice_number']);
@@ -156,8 +156,7 @@ $query = "SELECT i.*, c.client_name, u.username as assigned_user FROM invoices i
 $params = [];
 
 if (!$isSuper) {
-    $query .= " AND i.assigned_to = ? ";
-    $params[] = $user_id;
+    $query .= " AND i.assigned_to IN ($visibleIdsStr) ";
 } else if ($filter_assignee) {
     $query .= " AND i.assigned_to = ? ";
     $params[] = $filter_assignee;

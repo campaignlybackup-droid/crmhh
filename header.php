@@ -93,7 +93,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <i class="bi bi-person-badge-fill"></i> HR & Leaves
             </a>
             
-            <?php if ($isSuper || $isManager): ?>
+            <?php if ($isSuper): ?>
             <a href="invoices.php" class="sidebar-link <?= $current_page == 'invoices.php' ? 'active' : '' ?>">
                 <i class="bi bi-receipt"></i> Invoices
             </a>

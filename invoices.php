@@ -1,8 +1,8 @@
 <?php
 require_once 'functions.php';
-requireManager();
+requireSuperAdmin();
 $user_id = getCurrentUserId();
-$isSuper = isSuperAdmin();
+$isSuper = true;
 $visibleIds = getVisibleUserIds($pdo, $user_id);
 $visibleIdsStr = implode(',', $visibleIds);
 

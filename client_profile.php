@@ -99,10 +99,17 @@ include 'header.php';
                     <span class="fw-bold"><?= h($client['primary_contact'] ?: 'N/A') ?></span>
                 </div>
                 
+                <?php if ($isSuper): ?>
                 <div class="mb-3">
                     <span class="d-block text-muted small">Total Billed</span>
                     <span class="fw-bold text-success fs-5">AED <?= number_format($client['total_billed'], 2) ?></span>
                 </div>
+
+                <div class="mb-3">
+                    <span class="d-block text-muted small">Monthly Payment Date</span>
+                    <span class="fw-bold text-primary"><?= h($client['monthly_payment_date'] ?: 'N/A') ?></span>
+                </div>
+                <?php endif; ?>
                 
                 <div class="mb-3">
                     <span class="d-block text-muted small">Onboarding Date</span>
@@ -248,6 +255,7 @@ include 'header.php';
 </div>
 
 <div class="row mb-4 g-4">
+    <?php if ($isSuper): ?>
     <div class="col-md-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
@@ -340,6 +348,7 @@ include 'header.php';
             </div>
         </div>
     </div>
+    <?php endif; ?>
 </div>
 
 <?php include 'footer.php'; ?>

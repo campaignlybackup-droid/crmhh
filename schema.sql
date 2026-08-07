@@ -12,6 +12,7 @@ CREATE TABLE clients (
     status ENUM('Active', 'Completed', 'On Hold', 'Churned') DEFAULT 'Active',
     primary_contact VARCHAR(255),
     total_billed DECIMAL(10, 2) DEFAULT 0.00,
+    monthly_payment_date VARCHAR(50) DEFAULT NULL,
     drive_folder_url VARCHAR(255),
     onboarding_date DATE,
     assigned_to INT,

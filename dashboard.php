@@ -112,21 +112,6 @@ include 'header.php';
     </div>
 </div>
 
-<?php if ($isSuper): ?>
-<div class="alert alert-success shadow-sm border-0 d-flex justify-content-between align-items-center mb-4">
-    <div class="d-flex align-items-center gap-3">
-        <div class="bg-success text-white rounded-circle d-flex justify-content-center align-items-center" style="width: 40px; height: 40px;">
-            <i class="bi bi-graph-up-arrow fs-5"></i>
-        </div>
-        <div>
-            <h6 class="mb-0 fw-bold">Company Revenue</h6>
-            <div class="fs-4 fw-bold text-success">$<?= number_format($totalRevenueDashboard, 2) ?></div>
-        </div>
-    </div>
-    <a href="reports.php" class="btn btn-success fw-bold px-4 rounded-pill shadow-sm">View Analytics</a>
-</div>
-<?php endif; ?>
-
 <!-- Widgets Row -->
 <div class="row g-4 mb-4">
     <div class="col-xl-3 col-md-6">

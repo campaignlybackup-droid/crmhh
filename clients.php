@@ -21,9 +21,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $client_name = $_POST['client_name'];
             $status = $_POST['status'];
             $primary_contact = $_POST['primary_contact'];
-            $total_billed = $_POST['total_billed'] ?: 0.00;
             $drive_folder_url = $_POST['drive_folder_url'];
             $onboarding_date = $_POST['onboarding_date'] ?: null;
+            
+            if ($isSuper) {
+                $total_billed = $_POST['total_billed'] ?: 0.00;
+                $monthly_payment_date = $_POST['monthly_payment_date'] ?: null;
+            }
             
             if ($isSuper) {
                 $assigned_to = $_POST['assigned_to'] ?: null;
@@ -50,8 +54,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($action === 'add') {
-                $stmt = $pdo->prepare("INSERT INTO clients (client_name, status, primary_contact, total_billed, drive_folder_url, onboarding_date, contract_file, assigned_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$client_name, $status, $primary_contact, $total_billed, $drive_folder_url, $onboarding_date, $contract_file, $assigned_to]);
+                if (!$isSuper) {
+                    $total_billed = 0.00;
+                    $monthly_payment_date = null;
+                }
+                $stmt = $pdo->prepare("INSERT INTO clients (client_name, status, primary_contact, total_billed, monthly_payment_date, drive_folder_url, onboarding_date, contract_file, assigned_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$client_name, $status, $primary_contact, $total_billed, $monthly_payment_date, $drive_folder_url, $onboarding_date, $contract_file, $assigned_to]);
                 
                 if ($isSuper && $assigned_to && $assigned_to != $user_id) {
                     addNotification($pdo, $assigned_to, "You have been assigned a new client: $client_name");
@@ -64,12 +72,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $oldClient = $stmt->fetch();
 
                 if ($isSuper || ($oldClient && in_array($oldClient['assigned_to'], $visibleIds))) {
+                    if (!$isSuper) {
+                        // Preserve existing payment info for non-superadmins
+                        $stmt = $pdo->prepare("SELECT total_billed, monthly_payment_date FROM clients WHERE id = ?");
+                        $stmt->execute([$id]);
+                        $existingClient = $stmt->fetch();
+                        $total_billed = $existingClient['total_billed'];
+                        $monthly_payment_date = $existingClient['monthly_payment_date'];
+                    }
+
                     if ($contract_file) {
-                        $stmt = $pdo->prepare("UPDATE clients SET client_name=?, status=?, primary_contact=?, total_billed=?, drive_folder_url=?, onboarding_date=?, contract_file=?, assigned_to=? WHERE id=?");
-                        $stmt->execute([$client_name, $status, $primary_contact, $total_billed, $drive_folder_url, $onboarding_date, $contract_file, $assigned_to, $id]);
+                        $stmt = $pdo->prepare("UPDATE clients SET client_name=?, status=?, primary_contact=?, total_billed=?, monthly_payment_date=?, drive_folder_url=?, onboarding_date=?, contract_file=?, assigned_to=? WHERE id=?");
+                        $stmt->execute([$client_name, $status, $primary_contact, $total_billed, $monthly_payment_date, $drive_folder_url, $onboarding_date, $contract_file, $assigned_to, $id]);
                     } else {
-                        $stmt = $pdo->prepare("UPDATE clients SET client_name=?, status=?, primary_contact=?, total_billed=?, drive_folder_url=?, onboarding_date=?, assigned_to=? WHERE id=?");
-                        $stmt->execute([$client_name, $status, $primary_contact, $total_billed, $drive_folder_url, $onboarding_date, $assigned_to, $id]);
+                        $stmt = $pdo->prepare("UPDATE clients SET client_name=?, status=?, primary_contact=?, total_billed=?, monthly_payment_date=?, drive_folder_url=?, onboarding_date=?, assigned_to=? WHERE id=?");
+                        $stmt->execute([$client_name, $status, $primary_contact, $total_billed, $monthly_payment_date, $drive_folder_url, $onboarding_date, $assigned_to, $id]);
                     }
                     
                     if ($isSuper && $assigned_to && $assigned_to != $oldClient['assigned_to']) {
@@ -183,13 +200,16 @@ include 'header.php';
                         <th>Contact</th>
                         <th>Status</th>
                         <th>Assignee</th>
+                        <?php if ($isSuper): ?>
+                        <th>Payment Info</th>
+                        <?php endif; ?>
                         <th>Links / Files</th>
                         <th class="text-end pe-3">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if(empty($clients)): ?>
-                        <tr><td colspan="6" class="text-center py-4 text-muted">No clients found.</td></tr>
+                        <tr><td colspan="<?= $isSuper ? '7' : '6' ?>" class="text-center py-4 text-muted">No clients found.</td></tr>
                     <?php else: ?>
                         <?php foreach($clients as $client): ?>
                         <tr>
@@ -215,6 +235,14 @@ include 'header.php';
                                     <div class="small text-muted"><i class="bi bi-person-badge"></i> <?= h($client['assigned_user'] ?? 'Unassigned') ?></div>
                                 <?php endif; ?>
                             </td>
+                            <?php if ($isSuper): ?>
+                            <td>
+                                <div class="fw-bold text-success">AED <?= number_format($client['total_billed'], 2) ?></div>
+                                <?php if($client['monthly_payment_date']): ?>
+                                <div class="small text-muted"><i class="bi bi-calendar"></i> <?= h($client['monthly_payment_date']) ?></div>
+                                <?php endif; ?>
+                            </td>
+                            <?php endif; ?>
                             <td class="small">
                                 <?php if($client['drive_folder_url']): ?>
                                     <a href="<?= h($client['drive_folder_url']) ?>" target="_blank" class="btn btn-sm btn-light mb-1"><i class="bi bi-folder text-warning"></i> Drive</a>
@@ -273,6 +301,16 @@ include 'header.php';
                         <?php foreach($users as $u) echo "<option value=\"{$u['id']}\">".h($u['username'])."</option>"; ?>
                     </select>
                 </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label text-muted small fw-bold">TOTAL BILLED ($)</label>
+                        <input type="number" step="0.01" name="total_billed" id="clientBilled" class="form-control" value="0.00">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label text-muted small fw-bold">MONTHLY PAYMENT DATE</label>
+                        <input type="text" name="monthly_payment_date" id="clientPaymentDate" class="form-control" placeholder="e.g. 5th of every month">
+                    </div>
+                </div>
                 <?php endif; ?>
                 
                 <div class="mb-3">
@@ -312,7 +350,11 @@ function resetForm() {
     document.getElementById('clientModalTitle').innerText = 'Add Client';
     document.getElementById('clientName').value = '';
     document.getElementById('clientStatus').value = 'Active';
-    <?php if ($isSuper): ?>document.getElementById('clientAssigned').value = '';<?php endif; ?>
+    <?php if ($isSuper): ?>
+    document.getElementById('clientAssigned').value = '';
+    document.getElementById('clientBilled').value = '0.00';
+    document.getElementById('clientPaymentDate').value = '';
+    <?php endif; ?>
     document.getElementById('clientContact').value = '';
     document.getElementById('clientDrive').value = '';
     document.getElementById('clientDate').value = '';
@@ -324,7 +366,11 @@ function editClient(client) {
     document.getElementById('clientModalTitle').innerText = 'Edit Client';
     document.getElementById('clientName').value = client.client_name;
     document.getElementById('clientStatus').value = client.status;
-    <?php if ($isSuper): ?>document.getElementById('clientAssigned').value = client.assigned_to || '';<?php endif; ?>
+    <?php if ($isSuper): ?>
+    document.getElementById('clientAssigned').value = client.assigned_to || '';
+    document.getElementById('clientBilled').value = client.total_billed || '0.00';
+    document.getElementById('clientPaymentDate').value = client.monthly_payment_date || '';
+    <?php endif; ?>
     document.getElementById('clientContact').value = client.primary_contact;
     document.getElementById('clientDrive').value = client.drive_folder_url;
     document.getElementById('clientDate').value = client.onboarding_date;

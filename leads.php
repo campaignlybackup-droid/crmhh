@@ -3,18 +3,19 @@ require_once 'functions.php';
 requireManager();
 
 $isSuper = isSuperAdmin();
+$isManager = isManager(); // Required for accessing Leads
 $user_id = getCurrentUserId();
+$visibleIds = getVisibleUserIds($pdo, $user_id);
+$visibleIdsStr = implode(',', $visibleIds);
 
 // Fetch projects and users for dropdowns
-$projectsQuery = "SELECT id, project_name FROM projects";
-$paramsProj = [];
+$projectsQuery = "SELECT id, project_name FROM projects WHERE deleted_at IS NULL";
 if (!$isSuper) {
-    $projectsQuery .= " WHERE assigned_to = ?";
-    $paramsProj[] = $user_id;
+    $projectsQuery .= " AND assigned_to IN ($visibleIdsStr)";
 }
 $projectsQuery .= " ORDER BY project_name ASC";
 $stmtProj = $pdo->prepare($projectsQuery);
-$stmtProj->execute($paramsProj);
+$stmtProj->execute();
 $projects = $stmtProj->fetchAll();
 
 $users = [];
@@ -35,9 +36,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $params = $selected_ids;
 
                 if (!$isSuper) {
-                    $checkStmt = $pdo->prepare("SELECT id FROM leads WHERE id IN ($placeholders) AND assigned_to = ?");
+                    $checkStmt = $pdo->prepare("SELECT id FROM leads WHERE id IN ($placeholders) AND assigned_to IN ($visibleIdsStr)");
                     $checkParams = $selected_ids;
-                    $checkParams[] = $user_id;
                     $checkStmt->execute($checkParams);
                     $selected_ids = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
                     $placeholders = implode(',', array_fill(0, count($selected_ids), '?'));
@@ -115,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $oldStmt->execute([$id]);
                 $oldLead = $oldStmt->fetch();
 
-                if ($isSuper || ($oldLead && $oldLead['assigned_to'] == $user_id)) {
+                if ($isSuper || ($oldLead && in_array($oldLead['assigned_to'], $visibleIds))) {
                     $stmt = $pdo->prepare("UPDATE leads SET name=?, status=?, source=?, industry=?, contact_name=?, phone=?, email=?, instagram=?, deal_value=?, next_action=?, next_action_date=?, notes=?, project_id=?, assigned_to=? WHERE id=?");
                     $stmt->execute([$name, $status, $source, $industry, $contact_name, $phone, $email, $instagram, $deal_value, $next_action, $next_action_date, $notes, $project_id, $assigned_to, $id]);
                     
@@ -145,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$id]);
             $lead = $stmt->fetch();
             
-            if ($isSuper || ($lead && $lead['assigned_to'] == $user_id)) {
+            if ($isSuper || ($lead && in_array($lead['assigned_to'], $visibleIds))) {
                 $stmt = $pdo->prepare("UPDATE leads SET status = ? WHERE id = ?");
                 $stmt->execute([$status, $id]);
                 logLeadHistory($pdo, $id, 'Updated', "Status quick-changed to $status");
@@ -159,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$id]);
             $lead = $stmt->fetch();
             
-            if ($isSuper || ($lead && $lead['assigned_to'] == $user_id)) {
+            if ($isSuper || ($lead && in_array($lead['assigned_to'], $visibleIds))) {
                 $stmt = $pdo->prepare("DELETE FROM leads WHERE id = ?");
                 $stmt->execute([$id]);
                 $_SESSION['flash_success'] = "Lead deleted.";
@@ -227,8 +227,7 @@ $query = "SELECT l.*, p.project_name, u.username as assigned_user FROM leads l L
 $params = [];
 
 if (!$isSuper) {
-    $query .= " AND l.assigned_to = ? ";
-    $params[] = $user_id;
+    $query .= " AND l.assigned_to IN ($visibleIdsStr) ";
 } else if ($filter_assignee) {
     $query .= " AND l.assigned_to = ? ";
     $params[] = $filter_assignee;

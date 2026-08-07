@@ -18,12 +18,14 @@ $project = $stmt->fetch();
 
 // Check access
 $has_access = false;
-$isManager = isManager();
-if ($isSuper || $isManager || $project['assigned_to'] == $user_id) {
+$visibleIds = getVisibleUserIds($pdo, $user_id);
+$visibleIdsStr = implode(',', $visibleIds);
+
+if ($isSuper || in_array($project['assigned_to'], $visibleIds)) {
     $has_access = true;
 } else {
-    $tCheck = $pdo->prepare("SELECT id FROM tasks WHERE project_id = ? AND assigned_to = ? LIMIT 1");
-    $tCheck->execute([$project_id, $user_id]);
+    $tCheck = $pdo->prepare("SELECT id FROM tasks WHERE project_id = ? AND assigned_to IN ($visibleIdsStr) LIMIT 1");
+    $tCheck->execute([$project_id]);
     if ($tCheck->fetch()) {
         $has_access = true;
     }

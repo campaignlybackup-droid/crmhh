@@ -61,7 +61,31 @@ function getCurrentUserId() {
 }
 
 function getCurrentUsername() {
-    return $_SESSION['username'] ?? '';
+    return $_SESSION['username'] ?? 'User';
+}
+
+function getVisibleUserIds($pdo, $user_id) {
+    if (isSuperAdmin()) {
+        return []; // Empty array means 'all' (though we usually handle this before calling)
+    }
+
+    $subordinates = [$user_id]; // Always include self
+
+    $fetchSubordinates = function($manager_id) use ($pdo, &$fetchSubordinates, &$subordinates) {
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE reporting_manager_id = ? AND id != ?");
+        $stmt->execute([$manager_id, $manager_id]); // prevent infinite loop if they report to themselves
+        $direct_reports = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        foreach ($direct_reports as $report_id) {
+            if (!in_array($report_id, $subordinates)) {
+                $subordinates[] = $report_id;
+                $fetchSubordinates($report_id);
+            }
+        }
+    };
+
+    $fetchSubordinates($user_id);
+    return $subordinates;
 }
 
 // Notification Helpers

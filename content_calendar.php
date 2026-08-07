@@ -3,6 +3,9 @@ require_once 'functions.php';
 requireLogin();
 
 $isSuper = isSuperAdmin();
+$user_id = getCurrentUserId();
+$visibleIds = getVisibleUserIds($pdo, $user_id);
+$visibleIdsStr = implode(',', $visibleIds);
 
 $clients = $pdo->query("SELECT id, client_name FROM clients ORDER BY client_name ASC")->fetchAll();
 $users = $pdo->query("SELECT id, username FROM users ORDER BY username ASC")->fetchAll();
@@ -50,6 +53,10 @@ $filter_platform = $_GET['platform'] ?? '';
 
 $query = "SELECT cc.*, c.client_name, u.username as assigned_user FROM content_calendar cc LEFT JOIN clients c ON cc.client_id = c.id LEFT JOIN users u ON cc.assigned_to = u.id WHERE 1=1 ";
 $params = [];
+
+if (!$isSuper) {
+    $query .= " AND cc.assigned_to IN ($visibleIdsStr) ";
+}
 
 if ($search) {
     $query .= " AND cc.post_title LIKE ? ";

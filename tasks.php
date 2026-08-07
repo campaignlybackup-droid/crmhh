@@ -4,6 +4,8 @@ requireLogin();
 
 $isSuper = isSuperAdmin();
 $user_id = getCurrentUserId();
+$visibleIds = getVisibleUserIds($pdo, $user_id);
+$visibleIdsStr = implode(',', $visibleIds);
 
 $projects = $pdo->query("SELECT id, project_name FROM projects ORDER BY project_name ASC")->fetchAll();
 $users = $pdo->query("SELECT id, username FROM users ORDER BY username ASC")->fetchAll();
@@ -20,9 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $params = $selected_ids;
 
                 if (!$isSuper) {
-                    $checkStmt = $pdo->prepare("SELECT id FROM tasks WHERE id IN ($placeholders) AND assigned_to = ?");
+                    $checkStmt = $pdo->prepare("SELECT id FROM tasks WHERE id IN ($placeholders) AND assigned_to IN ($visibleIdsStr)");
                     $checkParams = $selected_ids;
-                    $checkParams[] = $user_id;
                     $checkStmt->execute($checkParams);
                     $selected_ids = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
                     $placeholders = implode(',', array_fill(0, count($selected_ids), '?'));
@@ -96,8 +97,7 @@ $query = "SELECT t.*, p.project_name, u.username as assigned_user FROM tasks t L
 $params = [];
 
 if (!$isSuper) {
-    $query .= " AND t.assigned_to = ? ";
-    $params[] = $user_id;
+    $query .= " AND t.assigned_to IN ($visibleIdsStr) ";
 } else if ($filter_assignee) {
     $query .= " AND t.assigned_to = ? ";
     $params[] = $filter_assignee;

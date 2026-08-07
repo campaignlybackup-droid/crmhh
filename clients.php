@@ -4,6 +4,8 @@ requireManager();
 
 $isSuper = isSuperAdmin();
 $user_id = getCurrentUserId();
+$visibleIds = getVisibleUserIds($pdo, $user_id);
+$visibleIdsStr = implode(',', $visibleIds);
 
 $users = [];
 if ($isSuper) {
@@ -61,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$id]);
                 $oldClient = $stmt->fetch();
 
-                if ($isSuper || ($oldClient && $oldClient['assigned_to'] == $user_id)) {
+                if ($isSuper || ($oldClient && in_array($oldClient['assigned_to'], $visibleIds))) {
                     if ($contract_file) {
                         $stmt = $pdo->prepare("UPDATE clients SET client_name=?, status=?, primary_contact=?, total_billed=?, drive_folder_url=?, onboarding_date=?, contract_file=?, assigned_to=? WHERE id=?");
                         $stmt->execute([$client_name, $status, $primary_contact, $total_billed, $drive_folder_url, $onboarding_date, $contract_file, $assigned_to, $id]);
@@ -87,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$id]);
             $client = $stmt->fetch();
             
-            if ($isSuper || ($client && $client['assigned_to'] == $user_id)) {
+            if ($isSuper || ($client && in_array($client['assigned_to'], $visibleIds))) {
                 $stmt = $pdo->prepare("DELETE FROM clients WHERE id = ?");
                 $stmt->execute([$id]);
                 $_SESSION['flash_success'] = "Client deleted.";
@@ -109,13 +111,11 @@ $query = "SELECT c.*, u.username as assigned_user FROM clients c LEFT JOIN users
 $params = [];
 
 if (!$isSuper) {
-    $query .= " AND c.assigned_to = ? ";
-    $params[] = $user_id;
+    $query .= " AND c.assigned_to IN ($visibleIdsStr) ";
 } else if ($filter_assignee) {
     $query .= " AND c.assigned_to = ? ";
     $params[] = $filter_assignee;
 }
-
 if ($search) {
     $query .= " AND (c.client_name LIKE ? OR c.primary_contact LIKE ?) ";
     $params[] = "%$search%";

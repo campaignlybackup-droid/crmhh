@@ -18,8 +18,11 @@ $currentUserId = getCurrentUserId();
 
 $events = [];
 
+$visibleIds = getVisibleUserIds($pdo, $currentUserId);
+$visibleIdsStr = implode(',', $visibleIds);
+
 // Base condition for roles
-$userCondition = $isSuper ? "" : " AND assigned_to = " . (int)$currentUserId;
+$userCondition = $isSuper ? "" : " AND assigned_to IN ($visibleIdsStr)";
 if ($isSuper && $filterUserId) {
     $userCondition = " AND assigned_to = " . (int)$filterUserId;
 }
@@ -99,7 +102,7 @@ try {
         // Employee logic for meetings - currently we don't have participants table, so we assume meetings belong to projects
         // If employee is assigned to the project, they see it.
         if (!$isSuper) {
-            $sql .= " AND project_id IN (SELECT id FROM projects WHERE assigned_to = " . (int)$currentUserId . ")";
+            $sql .= " AND project_id IN (SELECT id FROM projects WHERE assigned_to IN ($visibleIdsStr))";
         }
 
         $stmt = $pdo->prepare($sql);

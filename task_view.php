@@ -16,7 +16,8 @@ $stmt = $pdo->prepare("SELECT t.*, p.project_name, u.username as assigned_user F
 $stmt->execute([$task_id]);
 $task = $stmt->fetch();
 
-if (!$task || (!$isSuper && $task['assigned_to'] != $user_id)) {
+$visibleIds = getVisibleUserIds($pdo, $user_id);
+if (!$task || (!$isSuper && !in_array($task['assigned_to'], $visibleIds))) {
     $_SESSION['flash_error'] = "Task not found or unauthorized.";
     header("Location: tasks.php");
     exit;

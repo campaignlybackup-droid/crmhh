@@ -20,10 +20,13 @@ $activityLog = [];
 $upcomingDeadlines = [];
 $totalRevenueDashboard = 0;
 
+$visibleIds = getVisibleUserIds($pdo, $user_id);
+$visibleIdsStr = implode(',', $visibleIds);
+
 try {
     // 1. Pending Tasks
     $tasksSql = "SELECT COUNT(*) FROM tasks WHERE status != 'Done'";
-    if (!$isSuper) $tasksSql .= " AND assigned_to = $user_id";
+    if (!$isSuper) $tasksSql .= " AND assigned_to IN ($visibleIdsStr)";
     $pendingTasks = $pdo->query($tasksSql)->fetchColumn() ?: 0;
 
     // 2. Meetings Today
@@ -33,12 +36,12 @@ try {
 
     // 3. Approvals Waiting
     $approvalsSql = "SELECT COUNT(*) FROM approvals WHERE status = 'Pending'";
-    if (!$isSuper) $approvalsSql .= " AND approver_id = $user_id";
+    if (!$isSuper) $approvalsSql .= " AND approver_id IN ($visibleIdsStr)";
     $approvalsWaiting = $pdo->query($approvalsSql)->fetchColumn() ?: 0;
 
     // 4. Projects Needing Attention
     $attentionSql = "SELECT COUNT(*) FROM projects WHERE status IN ('Briefing', 'Review')";
-    if (!$isSuper) $attentionSql .= " AND assigned_to = $user_id";
+    if (!$isSuper) $attentionSql .= " AND assigned_to IN ($visibleIdsStr)";
     $attentionProjects = $pdo->query($attentionSql)->fetchColumn() ?: 0;
 
 
@@ -46,7 +49,7 @@ try {
 
     // Column 1: Today's Agenda (Tasks due today, Meetings today)
     $tasksTodaySql = "SELECT 'Task' as type, task_name as title, due_date as time_info FROM tasks WHERE due_date = CURDATE() AND status != 'Done'";
-    if (!$isSuper) $tasksTodaySql .= " AND assigned_to = $user_id";
+    if (!$isSuper) $tasksTodaySql .= " AND assigned_to IN ($visibleIdsStr)";
     
     $meetingsTodaySql = "SELECT 'Meeting' as type, title, TIME_FORMAT(start_time, '%H:%i') as time_info FROM meetings WHERE DATE(start_time) = CURDATE()";
     
@@ -60,7 +63,7 @@ try {
     $activitySql = "SELECT a.*, u.username FROM activity_log a LEFT JOIN users u ON a.user_id = u.id ";
     if (!$isSuper) {
         // Since we don't have perfect entity matching, we show user's own activity for now
-        $activitySql .= " WHERE a.user_id = $user_id ";
+        $activitySql .= " WHERE a.user_id IN ($visibleIdsStr) ";
     }
     $activitySql .= " ORDER BY a.created_at DESC LIMIT 8";
     
@@ -71,7 +74,7 @@ try {
 
     // Column 3: Upcoming Deadlines (Next 7 days)
     $deadlinesSql = "SELECT project_name as title, delivery_date as deadline FROM projects WHERE delivery_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY) AND status != 'Delivered'";
-    if (!$isSuper) $deadlinesSql .= " AND assigned_to = $user_id";
+    if (!$isSuper) $deadlinesSql .= " AND assigned_to IN ($visibleIdsStr)";
     $deadlinesSql .= " ORDER BY delivery_date ASC LIMIT 5";
     
     $deadlinesStmt = $pdo->query($deadlinesSql);

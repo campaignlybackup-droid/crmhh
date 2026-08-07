@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $designation = $_POST['designation'] ?: null;
             $department = $_POST['department'] ?: null;
             $salary = $_POST['salary'] ?: 0;
+            $reporting_manager_id = !empty($_POST['reporting_manager_id']) ? $_POST['reporting_manager_id'] : null;
             $status = $_POST['status'];
 
             if ($action === 'add') {
@@ -25,8 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $hash = password_hash($password, PASSWORD_DEFAULT);
                     try {
-                        $stmt = $pdo->prepare("INSERT INTO users (username, password_hash, role, phone, start_date, designation, department, salary, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                        $stmt->execute([$username, $hash, $role, $phone, $start_date, $designation, $department, $salary, $status]);
+                        $stmt = $pdo->prepare("INSERT INTO users (username, password_hash, role, phone, start_date, designation, department, salary, reporting_manager_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                        $stmt->execute([$username, $hash, $role, $phone, $start_date, $designation, $department, $salary, $reporting_manager_id, $status]);
                         $_SESSION['flash_success'] = "Team member added successfully.";
                     } catch(PDOException $e) {
                         $_SESSION['flash_error'] = "Username might already exist.";
@@ -35,11 +36,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else if ($action === 'edit' && $id) {
                 if (!empty($password)) {
                     $hash = password_hash($password, PASSWORD_DEFAULT);
-                    $stmt = $pdo->prepare("UPDATE users SET username=?, role=?, password_hash=?, phone=?, start_date=?, designation=?, department=?, salary=?, status=? WHERE id=?");
-                    $stmt->execute([$username, $role, $hash, $phone, $start_date, $designation, $department, $salary, $status, $id]);
+                    $stmt = $pdo->prepare("UPDATE users SET username=?, role=?, password_hash=?, phone=?, start_date=?, designation=?, department=?, salary=?, reporting_manager_id=?, status=? WHERE id=?");
+                    $stmt->execute([$username, $role, $hash, $phone, $start_date, $designation, $department, $salary, $reporting_manager_id, $status, $id]);
                 } else {
-                    $stmt = $pdo->prepare("UPDATE users SET username=?, role=?, phone=?, start_date=?, designation=?, department=?, salary=?, status=? WHERE id=?");
-                    $stmt->execute([$username, $role, $phone, $start_date, $designation, $department, $salary, $status, $id]);
+                    $stmt = $pdo->prepare("UPDATE users SET username=?, role=?, phone=?, start_date=?, designation=?, department=?, salary=?, reporting_manager_id=?, status=? WHERE id=?");
+                    $stmt->execute([$username, $role, $phone, $start_date, $designation, $department, $salary, $reporting_manager_id, $status, $id]);
                 }
                 $_SESSION['flash_success'] = "Team member updated successfully.";
             }
@@ -199,6 +200,16 @@ include 'header.php';
                         <input type="date" name="start_date" id="userStart" class="form-control">
                     </div>
 
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small fw-bold">REPORTS TO (MANAGER)</label>
+                        <select name="reporting_manager_id" id="userManager" class="form-select">
+                            <option value="">-- None (Top Level) --</option>
+                            <?php foreach($users as $u): ?>
+                                <option value="<?= $u['id'] ?>"><?= h($u['username']) ?> (<?= h($u['role']) ?>)</option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
                     <div class="col-12">
                         <hr>
                         <label class="form-label text-muted small fw-bold">LOGIN PASSWORD <span id="passReq" class="text-danger">*</span></label>
@@ -227,6 +238,7 @@ function resetForm() {
     document.getElementById('userDesignation').value = '';
     document.getElementById('userDepartment').value = '';
     document.getElementById('userStart').value = '';
+    document.getElementById('userManager').value = '';
     document.getElementById('userPass').value = '';
     document.getElementById('userPass').required = true;
     document.getElementById('passReq').style.display = 'inline';
@@ -243,6 +255,7 @@ function editUser(user) {
     document.getElementById('userDesignation').value = user.designation || '';
     document.getElementById('userDepartment').value = user.department || '';
     document.getElementById('userStart').value = user.start_date;
+    document.getElementById('userManager').value = user.reporting_manager_id || '';
     document.getElementById('userPass').value = '';
     document.getElementById('userPass').required = false;
     document.getElementById('passReq').style.display = 'none';

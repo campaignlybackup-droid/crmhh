@@ -81,8 +81,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <a href="activity.php" class="sidebar-link <?= $current_page == 'activity.php' ? 'active' : '' ?>">
                 <i class="bi bi-activity"></i> Activity Log
             </a>
-            <a href="workflows.php" class="sidebar-link <?= $current_page == 'workflows.php' ? 'active' : '' ?>">
-                <i class="bi bi-diagram-3-fill"></i> Workflows
+            <a href="chat.php" class="sidebar-link <?= $current_page == 'chat.php' ? 'active' : '' ?>">
+                <i class="bi bi-chat-dots-fill"></i> Team Chat
             </a>
             
             <div class="sidebar-nav-title">Company</div>
@@ -101,9 +101,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <a href="users.php" class="sidebar-link <?= $current_page == 'users.php' ? 'active' : '' ?>">
                 <i class="bi bi-person-gear"></i> Users
             </a>
-            <a href="workflows.php" class="sidebar-link <?= $current_page == 'workflows.php' ? 'active' : '' ?>">
-                <i class="bi bi-diagram-3-fill"></i> Workflows
-            </a>
+
             <?php endif; ?>
             <a href="tasks.php" class="sidebar-link <?= $current_page == 'tasks.php' ? 'active' : '' ?>">
                 <i class="bi bi-check2-square"></i> My Tasks

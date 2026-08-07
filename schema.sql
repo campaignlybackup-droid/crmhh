@@ -123,6 +123,16 @@ CREATE TABLE content_calendar (
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
 );
 
+CREATE TABLE chat_messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    message TEXT NOT NULL,
+    is_pinned BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Insert a default superadmin account (password: admin123)
 -- Password hash generated for 'admin123' using PHP's password_hash function
 INSERT INTO users (username, password_hash, role) VALUES ('admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'superadmin');

@@ -48,10 +48,10 @@ try {
     // --- 3 COLUMN DATA ---
 
     // Column 1: Today's Agenda (Tasks due today, Meetings today)
-    $tasksTodaySql = "SELECT 'Task' as type, task_name as title, due_date as time_info FROM tasks WHERE due_date = CURDATE() AND status != 'Done'";
+    $tasksTodaySql = "SELECT id, 'Task' as type, task_name as title, due_date as time_info FROM tasks WHERE due_date = CURDATE() AND status != 'Done'";
     if (!$isSuper) $tasksTodaySql .= " AND assigned_to IN ($visibleIdsStr)";
     
-    $meetingsTodaySql = "SELECT 'Meeting' as type, title, TIME_FORMAT(start_time, '%H:%i') as time_info FROM meetings WHERE DATE(start_time) = CURDATE()";
+    $meetingsTodaySql = "SELECT id, 'Meeting' as type, title, TIME_FORMAT(start_time, '%H:%i') as time_info FROM meetings WHERE DATE(start_time) = CURDATE()";
     
     // Combine them (Union requires same columns)
     $agendaQuery = $pdo->query("$tasksTodaySql UNION $meetingsTodaySql ORDER BY time_info ASC LIMIT 10");
@@ -73,7 +73,7 @@ try {
     }
 
     // Column 3: Upcoming Deadlines (Next 7 days)
-    $deadlinesSql = "SELECT project_name as title, delivery_date as deadline FROM projects WHERE delivery_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY) AND status != 'Delivered'";
+    $deadlinesSql = "SELECT id, project_name as title, delivery_date as deadline FROM projects WHERE delivery_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY) AND status != 'Delivered'";
     if (!$isSuper) $deadlinesSql .= " AND assigned_to IN ($visibleIdsStr)";
     $deadlinesSql .= " ORDER BY delivery_date ASC LIMIT 5";
     
@@ -208,7 +208,11 @@ include 'header.php';
                                     <div class="text-warning me-3 mt-1"><i class="bi bi-check2-square fs-5"></i></div>
                                 <?php endif; ?>
                                 <div>
-                                    <div class="fw-bold text-body"><?= h($item['title']) ?></div>
+                                    <?php if($item['type'] == 'Meeting'): ?>
+                                        <div class="fw-bold text-body"><?= h($item['title']) ?></div>
+                                    <?php else: ?>
+                                        <a href="task_view.php?id=<?= $item['id'] ?>" class="fw-bold text-body text-decoration-none hover-primary"><?= h($item['title']) ?></a>
+                                    <?php endif; ?>
                                     <div class="small text-muted"><i class="bi bi-clock me-1"></i> <?= h($item['time_info']) ?></div>
                                 </div>
                             </div>
@@ -286,7 +290,7 @@ include 'header.php';
                         <ul class="list-group list-group-flush">
                             <?php foreach($upcomingDeadlines as $dl): ?>
                                 <li class="list-group-item px-0 py-3 bg-transparent d-flex justify-content-between align-items-center border-bottom-0 border-top">
-                                    <div class="fw-semibold text-body text-truncate pe-2"><?= h($dl['title']) ?></div>
+                                    <a href="project_view.php?id=<?= $dl['id'] ?>" class="fw-semibold text-body text-truncate pe-2 text-decoration-none hover-primary"><?= h($dl['title']) ?></a>
                                     <div class="badge bg-soft-danger text-danger fw-bold rounded-pill">
                                         <?= date('M d', strtotime($dl['deadline'])) ?>
                                     </div>

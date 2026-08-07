@@ -15,6 +15,7 @@ $attentionProjects = 0;
 $agendaItems = [];
 $activityLog = [];
 $upcomingDeadlines = [];
+$totalRevenueDashboard = 0;
 
 try {
     // 1. Pending Tasks
@@ -76,7 +77,6 @@ try {
     }
 
     // Financial Snippet
-    $totalRevenueDashboard = 0;
     if ($isSuper) {
         $invQuery = $pdo->query("SELECT SUM(amount) FROM invoices WHERE status = 'Paid'");
         if ($invQuery) {
@@ -84,7 +84,7 @@ try {
         }
     }
 
-} catch (PDOException $e) {
+} catch (\Throwable $e) {
     $db_error = true;
     // Catch errors silently if tables don't exist yet
 }

@@ -83,7 +83,7 @@ function getUnreadNotifications($pdo, $user_id) {
         $stmt = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? AND is_read = FALSE ORDER BY created_at DESC");
         $stmt->execute([$user_id]);
         return $stmt->fetchAll();
-    } catch (PDOException $e) {
+    } catch (\Throwable $e) {
         return [];
     }
 }

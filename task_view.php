@@ -12,7 +12,7 @@ if (!$task_id) {
 }
 
 // Fetch Task
-$stmt = $pdo->prepare("SELECT t.*, p.project_name, u.username as assigned_user FROM tasks t LEFT JOIN projects p ON t.project_id = p.id LEFT JOIN users u ON t.assigned_to = u.id WHERE t.id = ?");
+$stmt = $pdo->prepare("SELECT t.*, p.project_name, u.username as assigned_user, cu.username as created_by_user FROM tasks t LEFT JOIN projects p ON t.project_id = p.id LEFT JOIN users u ON t.assigned_to = u.id LEFT JOIN users cu ON t.created_by = cu.id WHERE t.id = ?");
 $stmt->execute([$task_id]);
 $task = $stmt->fetch();
 
@@ -139,7 +139,8 @@ include 'header.php';
         <h2 class="fw-bold mb-0 mt-1"><?= h($task['task_name']) ?></h2>
         <div class="text-muted small mt-1">
             <i class="bi bi-folder me-1"></i> <?= h($task['project_name'] ?? 'No Project') ?> &nbsp;|&nbsp; 
-            <i class="bi bi-person-badge me-1"></i> Assignee: <?= h($task['assigned_user'] ?? 'Unassigned') ?>
+            <i class="bi bi-person-badge me-1"></i> Assignee: <?= h($task['assigned_user'] ?? 'Unassigned') ?> &nbsp;|&nbsp;
+            <i class="bi bi-person-plus me-1"></i> Created By: <?= h($task['created_by_user'] ?? 'Unknown') ?>
         </div>
     </div>
 </div>

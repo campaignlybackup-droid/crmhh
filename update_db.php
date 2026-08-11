@@ -98,7 +98,11 @@ $queries = [
     )",
 
     // 13. Add monthly_payment_date to clients
-    "ALTER TABLE clients ADD COLUMN monthly_payment_date VARCHAR(50) DEFAULT NULL"
+    "ALTER TABLE clients ADD COLUMN monthly_payment_date VARCHAR(50) DEFAULT NULL",
+
+    // 14. Add created_by to tasks and projects
+    "ALTER TABLE tasks ADD COLUMN created_by INT, ADD FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL",
+    "ALTER TABLE projects ADD COLUMN created_by INT, ADD FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL"
 ];
 
 $successCount = 0;

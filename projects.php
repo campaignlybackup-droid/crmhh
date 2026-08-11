@@ -21,8 +21,12 @@ $clients = $stmtC->fetchAll();
 
 $users = [];
 $templates = [];
-if ($isSuper) {
-    $users = $pdo->query("SELECT id, username FROM users WHERE deleted_at IS NULL ORDER BY username ASC")->fetchAll();
+if ($isSuper || $isManager) {
+    if ($isSuper) {
+        $users = $pdo->query("SELECT id, username FROM users WHERE deleted_at IS NULL ORDER BY username ASC")->fetchAll();
+    } else {
+        $users = $pdo->query("SELECT id, username FROM users WHERE deleted_at IS NULL AND id IN ($visibleIdsStr) ORDER BY username ASC")->fetchAll();
+    }
     $templates = $pdo->query("SELECT id, name FROM workflow_templates WHERE deleted_at IS NULL ORDER BY name ASC")->fetchAll();
 }
 
@@ -87,10 +91,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $total_videos_planned = $_POST['total_videos_planned'] ?: 0;
             $workflow_template_id = $_POST['workflow_template_id'] ?: null;
             
-            $assigned_to = $isSuper ? ($_POST['assigned_to'] ?: null) : $user_id;
+            $assigned_to = ($isSuper || $isManager) ? ($_POST['assigned_to'] ?: $user_id) : $user_id;
 
-            $stmt = $pdo->prepare("INSERT INTO projects (project_name, status, client_id, project_value, shoot_date, delivery_date, drive_folder_url, payment_status, assigned_to, total_videos_planned, workflow_template_id) VALUES (?, 'Onboarding', ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$project_name, $client_id, $project_value, $shoot_date, $delivery_date, $drive_folder_url, $payment_status, $assigned_to, $total_videos_planned, $workflow_template_id]);
+            $stmt = $pdo->prepare("INSERT INTO projects (project_name, status, client_id, project_value, shoot_date, delivery_date, drive_folder_url, payment_status, assigned_to, total_videos_planned, workflow_template_id, created_by) VALUES (?, 'Onboarding', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$project_name, $client_id, $project_value, $shoot_date, $delivery_date, $drive_folder_url, $payment_status, $assigned_to, $total_videos_planned, $workflow_template_id, $user_id]);
             $new_id = $pdo->lastInsertId();
             
             // Seed the 12 workflow stages!
@@ -403,7 +407,7 @@ include 'header.php';
                         </select>
                     </div>
 
-                    <?php if ($isSuper): ?>
+                    <?php if ($isSuper || $isManager): ?>
                     <div class="col-md-6">
                         <label class="form-label text-muted small fw-bold">ASSIGN TO (PROJECT LEAD)</label>
                         <select name="assigned_to" class="form-select">

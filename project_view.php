@@ -12,7 +12,7 @@ if (!$project_id) {
 }
 
 // Fetch project
-$stmt = $pdo->prepare("SELECT p.*, c.client_name, u.username as assigned_user FROM projects p LEFT JOIN clients c ON p.client_id = c.id LEFT JOIN users u ON p.assigned_to = u.id WHERE p.id = ? AND p.deleted_at IS NULL");
+$stmt = $pdo->prepare("SELECT p.*, c.client_name, u.username as assigned_user, cu.username as created_by_user FROM projects p LEFT JOIN clients c ON p.client_id = c.id LEFT JOIN users u ON p.assigned_to = u.id LEFT JOIN users cu ON p.created_by = cu.id WHERE p.id = ? AND p.deleted_at IS NULL");
 $stmt->execute([$project_id]);
 $project = $stmt->fetch();
 
@@ -316,7 +316,8 @@ include 'header.php';
         <h2 class="fw-bold mb-0 mt-1"><?= h($project['project_name']) ?></h2>
         <div class="text-muted small mt-1">
             <i class="bi bi-building me-1"></i> <?= h($project['client_name'] ?? 'No Client') ?> &nbsp;|&nbsp; 
-            <i class="bi bi-person-badge me-1"></i> Lead: <?= h($project['assigned_user'] ?? 'Unassigned') ?>
+            <i class="bi bi-person-badge me-1"></i> Lead: <?= h($project['assigned_user'] ?? 'Unassigned') ?> &nbsp;|&nbsp;
+            <i class="bi bi-person-plus me-1"></i> Created By: <?= h($project['created_by_user'] ?? 'Unknown') ?>
         </div>
     </div>
     <div>

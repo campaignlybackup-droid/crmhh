@@ -8,7 +8,11 @@ $visibleIds = getVisibleUserIds($pdo, $user_id);
 $visibleIdsStr = implode(',', $visibleIds);
 
 $projects = $pdo->query("SELECT id, project_name FROM projects ORDER BY project_name ASC")->fetchAll();
-$users = $pdo->query("SELECT id, username FROM users ORDER BY username ASC")->fetchAll();
+if ($isSuper) {
+    $users = $pdo->query("SELECT id, username FROM users ORDER BY username ASC")->fetchAll();
+} else {
+    $users = $pdo->query("SELECT id, username FROM users WHERE id IN ($visibleIdsStr) ORDER BY username ASC")->fetchAll();
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
@@ -54,16 +58,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             header("Location: tasks.php");
             exit;
-        } else if ($action === 'add' && $isSuper) {
+        } else if ($action === 'add') {
             $task_name = $_POST['task_name'];
             $status = $_POST['status'];
-            $assigned_to = $_POST['assigned_to'] ?: null;
+            $assigned_to = ($isSuper || isManager()) ? ($_POST['assigned_to'] ?: $user_id) : $user_id;
             $due_date = $_POST['due_date'] ?: null;
             $priority = $_POST['priority'];
             $project_id = $_POST['project_id'] ?: null;
 
-            $stmt = $pdo->prepare("INSERT INTO tasks (task_name, status, assigned_to, due_date, priority, project_id) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$task_name, $status, $assigned_to, $due_date, $priority, $project_id]);
+            $stmt = $pdo->prepare("INSERT INTO tasks (task_name, status, assigned_to, due_date, priority, project_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$task_name, $status, $assigned_to, $due_date, $priority, $project_id, $user_id]);
             $new_id = $pdo->lastInsertId();
             logActivity($pdo, 'Created Task', 'Task', $new_id, $task_name);
             
@@ -374,7 +378,6 @@ include 'header.php';
                     </select>
                 </div>
 
-                <?php if ($isSuper): ?>
                 <div class="mb-3">
                     <label class="form-label text-muted small fw-bold">PROJECT</label>
                     <select name="project_id" id="taskProject" class="form-select">
@@ -399,6 +402,7 @@ include 'header.php';
                     </div>
                 </div>
 
+                <?php if ($isSuper || isManager()): ?>
                 <div class="mb-3">
                     <label class="form-label text-muted small fw-bold">ASSIGN TO</label>
                     <select name="assigned_to" id="taskAssigned" class="form-select">
@@ -420,7 +424,6 @@ include 'header.php';
 
 <script>
 function resetForm() {
-    <?php if ($isSuper): ?>
     document.getElementById('taskAction').value = 'add';
     document.getElementById('taskId').value = '';
     document.getElementById('taskModalTitle').innerText = 'Add Task';
@@ -429,10 +432,23 @@ function resetForm() {
     document.getElementById('taskProject').value = '';
     document.getElementById('taskPriority').value = 'Medium';
     document.getElementById('taskDue').value = '';
-    document.getElementById('taskAssigned').value = '';
-    <?php endif; ?>
+    <?php if ($isSuper || isManager()): ?>document.getElementById('taskAssigned').value = '';<?php endif; ?>
 }
 
+function editTask(task) {
+    document.getElementById('taskAction').value = 'edit';
+    document.getElementById('taskId').value = task.id;
+    document.getElementById('taskModalTitle').innerText = 'Edit Task';
+    document.getElementById('taskName').value = task.task_name;
+    document.getElementById('taskStatus').value = task.status;
+    document.getElementById('taskProject').value = task.project_id || '';
+    document.getElementById('taskPriority').value = task.priority;
+    document.getElementById('taskDue').value = task.due_date;
+    <?php if ($isSuper || isManager()): ?>document.getElementById('taskAssigned').value = task.assigned_to || '';<?php endif; ?>
+    
+    var modal = new bootstrap.Modal(document.getElementById('taskModal'));
+    modal.show();
+}
 
 // Bulk Actions Logic
 document.addEventListener('DOMContentLoaded', function() {

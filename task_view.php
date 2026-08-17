@@ -17,7 +17,7 @@ $stmt->execute([$task_id]);
 $task = $stmt->fetch();
 
 $visibleIds = getVisibleUserIds($pdo, $user_id);
-if (!$task || (!$isSuper && !in_array($task['assigned_to'], $visibleIds))) {
+if (!$task || (!$isSuper && !in_array($task['assigned_to'], $visibleIds) && $task['created_by'] != $user_id)) {
     $_SESSION['flash_error'] = "Task not found or unauthorized.";
     header("Location: tasks.php");
     exit;
@@ -29,10 +29,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if ($action === 'update_task') {
         $status = $_POST['status'];
+        $can_full_edit = ($isSuper || isManager() || $task['created_by'] == $user_id);
         
-        if ($isSuper) {
+        if ($can_full_edit) {
             $task_name = $_POST['task_name'];
-            $assigned_to = $_POST['assigned_to'] ?: null;
+            $assigned_to = ($isSuper || isManager()) ? ($_POST['assigned_to'] ?: null) : $task['assigned_to'];
             $due_date = $_POST['due_date'] ?: null;
             $priority = $_POST['priority'];
             $project_id = $_POST['project_id'] ?: null;

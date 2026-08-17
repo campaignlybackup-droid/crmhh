@@ -102,7 +102,15 @@ $queries = [
 
     // 14. Add created_by to tasks and projects
     "ALTER TABLE tasks ADD COLUMN created_by INT, ADD FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL",
-    "ALTER TABLE projects ADD COLUMN created_by INT, ADD FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL"
+    "ALTER TABLE projects ADD COLUMN created_by INT, ADD FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL",
+
+    // 15. Add deleted_at soft delete column to tables if not present
+    "ALTER TABLE users ADD COLUMN deleted_at DATETIME DEFAULT NULL",
+    "ALTER TABLE clients ADD COLUMN deleted_at DATETIME DEFAULT NULL",
+    "ALTER TABLE projects ADD COLUMN deleted_at DATETIME DEFAULT NULL",
+    "ALTER TABLE leads ADD COLUMN deleted_at DATETIME DEFAULT NULL",
+    "ALTER TABLE tasks ADD COLUMN deleted_at DATETIME DEFAULT NULL",
+    "ALTER TABLE workflow_templates ADD COLUMN deleted_at DATETIME DEFAULT NULL"
 ];
 
 $successCount = 0;

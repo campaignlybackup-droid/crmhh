@@ -8,15 +8,10 @@ $user_id = getCurrentUserId();
 $visibleIds = getVisibleUserIds($pdo, $user_id);
 $visibleIdsStr = implode(',', $visibleIds);
 
-// Fetch clients for dropdowns based on assignment (superadmin sees all, user sees their assigned clients)
-$clientsQuery = "SELECT id, client_name FROM clients WHERE deleted_at IS NULL";
-$clientParams = [];
-if (!$isSuper) {
-    $clientsQuery .= " AND assigned_to IN ($visibleIdsStr)";
-}
-$clientsQuery .= " ORDER BY client_name ASC";
+// Fetch clients for dropdowns (all active clients)
+$clientsQuery = "SELECT id, client_name FROM clients WHERE deleted_at IS NULL ORDER BY client_name ASC";
 $stmtC = $pdo->prepare($clientsQuery);
-$stmtC->execute($clientParams);
+$stmtC->execute();
 $clients = $stmtC->fetchAll();
 
 $users = [];
@@ -137,6 +132,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_success'] = "Project added successfully.";
             header("Location: projects.php");
             exit;
+        } else if ($action === 'edit') {
+            $id = $_POST['id'] ?? null;
+            if ($id) {
+                $project_name = $_POST['project_name'];
+                $client_id = $_POST['client_id'] ?: null;
+                $project_value = $_POST['project_value'] ?? 0.00;
+                $shoot_date = $_POST['shoot_date'] ?: null;
+                $delivery_date = $_POST['delivery_date'] ?: null;
+                $drive_folder_url = $_POST['drive_folder_url'];
+                
+                if ($isSuper || $isManager) {
+                    $assigned_to = $_POST['assigned_to'] ?: null;
+                    $stmt = $pdo->prepare("UPDATE projects SET project_name=?, client_id=?, project_value=?, shoot_date=?, delivery_date=?, drive_folder_url=?, assigned_to=? WHERE id=?");
+                    $stmt->execute([$project_name, $client_id, $project_value, $shoot_date, $delivery_date, $drive_folder_url, $assigned_to, $id]);
+                } else {
+                    $stmt = $pdo->prepare("UPDATE projects SET project_name=?, client_id=?, project_value=?, shoot_date=?, delivery_date=?, drive_folder_url=? WHERE id=? AND (assigned_to=? OR created_by=?)");
+                    $stmt->execute([$project_name, $client_id, $project_value, $shoot_date, $delivery_date, $drive_folder_url, $id, $user_id, $user_id]);
+                }
+                logActivity($pdo, 'Updated Project', 'Project', $id, $project_name);
+                $_SESSION['flash_success'] = "Project updated successfully.";
+            }
+            header("Location: projects.php");
+            exit;
         } elseif ($action === 'delete') {
             $id = $_POST['id'];
             $stmt = $pdo->prepare("SELECT assigned_to, project_name FROM projects WHERE id = ?");
@@ -169,7 +187,7 @@ $query = "SELECT p.*, c.client_name, u.username as assigned_user FROM projects p
 $params = [];
 
 if (!$isSuper) {
-    $query .= " AND (p.assigned_to IN ($visibleIdsStr) OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to IN ($visibleIdsStr)))";
+    $query .= " AND (p.assigned_to IN ($visibleIdsStr) OR p.created_by = $user_id OR p.id IN (SELECT project_id FROM tasks WHERE assigned_to IN ($visibleIdsStr)))";
 } else if ($filter_assignee) {
     $query .= " AND p.assigned_to = ? ";
     $params[] = $filter_assignee;
@@ -213,7 +231,7 @@ include 'header.php';
             <a href="?view=table&search=<?= urlencode($search) ?>&status=<?= urlencode($filter_status) ?>" class="btn <?= $view === 'table' ? 'btn-secondary' : 'btn-outline-secondary' ?>"><i class="bi bi-list-task"></i> Table</a>
             <a href="?view=board&search=<?= urlencode($search) ?>&status=<?= urlencode($filter_status) ?>" class="btn <?= $view === 'board' ? 'btn-secondary' : 'btn-outline-secondary' ?>"><i class="bi bi-kanban"></i> Timeline</a>
         </div>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#projectModal">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#projectModal" onclick="resetProjectForm()">
             <i class="bi bi-plus-lg"></i> Add Project
         </button>
     </div>
@@ -362,11 +380,12 @@ include 'header.php';
                                     <div class="text-muted small"><i class="bi bi-person-badge"></i> <?= h($project['assigned_user'] ?? 'Unassigned') ?></div>
                                 </td>
                                 <td class="text-end pe-3">
-                                    <a href="project_view.php?id=<?= $project['id'] ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+                                    <a href="project_view.php?id=<?= $project['id'] ?>" class="btn btn-sm btn-outline-primary" title="View"><i class="bi bi-eye"></i></a>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick='editProject(<?= json_encode($project) ?>)' title="Edit"><i class="bi bi-pencil"></i></button>
                                     <form method="POST" class="d-inline" onsubmit="return confirm('Delete this project?');">
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="id" value="<?= $project['id'] ?>">
-                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                        <button class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
                                     </form>
                                 </td>
                             </tr>
@@ -380,26 +399,27 @@ include 'header.php';
     </form>
 <?php endif; ?>
 
-<!-- Add Project Modal -->
+<!-- Add/Edit Project Modal -->
 <div class="modal fade" id="projectModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <form method="POST" class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title fw-bold">Add Project</h5>
+                <h5 class="modal-title fw-bold" id="projectModalTitle">Add Project</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <input type="hidden" name="action" value="add">
+                <input type="hidden" name="action" id="projectAction" value="add">
+                <input type="hidden" name="id" id="projectId" value="">
                 
                 <div class="row g-3">
                     <div class="col-md-8">
                         <label class="form-label text-muted small fw-bold">PROJECT NAME *</label>
-                        <input type="text" name="project_name" class="form-control" required>
+                        <input type="text" name="project_name" id="projectName" class="form-control" required>
                     </div>
                     
                     <div class="col-md-4">
                         <label class="form-label text-muted small fw-bold">CLIENT</label>
-                        <select name="client_id" class="form-select">
+                        <select name="client_id" id="projectClient" class="form-select">
                             <option value="">Select Client...</option>
                             <?php foreach($clients as $c): ?>
                                 <option value="<?= $c['id'] ?>"><?= h($c['client_name']) ?></option>
@@ -410,14 +430,14 @@ include 'header.php';
                     <?php if ($isSuper || $isManager): ?>
                     <div class="col-md-6">
                         <label class="form-label text-muted small fw-bold">ASSIGN TO (PROJECT LEAD)</label>
-                        <select name="assigned_to" class="form-select">
+                        <select name="assigned_to" id="projectAssigned" class="form-select">
                             <option value="">Unassigned</option>
                             <?php foreach($users as $u) echo "<option value=\"{$u['id']}\">".h($u['username'])."</option>"; ?>
                         </select>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-6" id="workflowTemplateWrapper">
                         <label class="form-label text-muted small fw-bold">WORKFLOW TEMPLATE</label>
-                        <select name="workflow_template_id" class="form-select">
+                        <select name="workflow_template_id" id="projectWorkflow" class="form-select">
                             <option value="">None (Manual)</option>
                             <?php foreach($templates as $t) echo "<option value=\"{$t['id']}\">".h($t['name'])."</option>"; ?>
                         </select>
@@ -426,17 +446,17 @@ include 'header.php';
 
                     <div class="col-md-6">
                         <label class="form-label text-muted small fw-bold">SHOOT DATES (e.g., Oct 12, Oct 15)</label>
-                        <input type="text" name="shoot_date" class="form-control" placeholder="Multiple dates allowed">
+                        <input type="text" name="shoot_date" id="projectShoot" class="form-control" placeholder="Multiple dates allowed">
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label text-muted small fw-bold">DELIVERY DATE</label>
-                        <input type="date" name="delivery_date" class="form-control">
+                        <input type="date" name="delivery_date" id="projectDelivery" class="form-control">
                     </div>
                     
                     <div class="col-md-12">
                         <label class="form-label text-muted small fw-bold">DRIVE FOLDER URL</label>
-                        <input type="url" name="drive_folder_url" class="form-control">
+                        <input type="url" name="drive_folder_url" id="projectDrive" class="form-control">
                     </div>
                 </div>
             </div>
@@ -487,6 +507,41 @@ function toggleBulkOptions() {
     document.getElementById('bulkStatusSelect').style.display = (action === 'status') ? 'inline-block' : 'none';
     const assignSelect = document.getElementById('bulkAssigneeSelect');
     if (assignSelect) assignSelect.style.display = (action === 'assign') ? 'inline-block' : 'none';
+}
+
+function resetProjectForm() {
+    document.getElementById('projectAction').value = 'add';
+    document.getElementById('projectId').value = '';
+    document.getElementById('projectModalTitle').innerText = 'Add Project';
+    document.getElementById('projectName').value = '';
+    document.getElementById('projectClient').value = '';
+    const assignedEl = document.getElementById('projectAssigned');
+    if (assignedEl) assignedEl.value = '';
+    const workflowEl = document.getElementById('projectWorkflow');
+    if (workflowEl) workflowEl.value = '';
+    const wfWrapper = document.getElementById('workflowTemplateWrapper');
+    if (wfWrapper) wfWrapper.style.display = 'block';
+    document.getElementById('projectShoot').value = '';
+    document.getElementById('projectDelivery').value = '';
+    document.getElementById('projectDrive').value = '';
+}
+
+function editProject(project) {
+    document.getElementById('projectAction').value = 'edit';
+    document.getElementById('projectId').value = project.id;
+    document.getElementById('projectModalTitle').innerText = 'Edit Project';
+    document.getElementById('projectName').value = project.project_name || '';
+    document.getElementById('projectClient').value = project.client_id || '';
+    const assignedEl = document.getElementById('projectAssigned');
+    if (assignedEl) assignedEl.value = project.assigned_to || '';
+    const wfWrapper = document.getElementById('workflowTemplateWrapper');
+    if (wfWrapper) wfWrapper.style.display = 'none';
+    document.getElementById('projectShoot').value = project.shoot_date || '';
+    document.getElementById('projectDelivery').value = project.delivery_date || '';
+    document.getElementById('projectDrive').value = project.drive_folder_url || '';
+    
+    var modal = new bootstrap.Modal(document.getElementById('projectModal'));
+    modal.show();
 }
 </script>
 

@@ -1,6 +1,6 @@
 <?php
 require_once 'functions.php';
-requireManager();
+requireLogin();
 
 $isSuper = isSuperAdmin();
 $user_id = getCurrentUserId();
@@ -128,7 +128,7 @@ $query = "SELECT c.*, u.username as assigned_user FROM clients c LEFT JOIN users
 $params = [];
 
 if (!$isSuper) {
-    $query .= " AND c.assigned_to IN ($visibleIdsStr) ";
+    $query .= " AND (c.assigned_to IN ($visibleIdsStr) OR c.assigned_to IS NULL OR c.id IN (SELECT client_id FROM projects WHERE assigned_to IN ($visibleIdsStr) OR created_by = $user_id)) ";
 } else if ($filter_assignee) {
     $query .= " AND c.assigned_to = ? ";
     $params[] = $filter_assignee;

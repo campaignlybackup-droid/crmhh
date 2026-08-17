@@ -77,6 +77,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_success'] = "Task created successfully.";
             header("Location: tasks.php");
             exit;
+        } else if ($action === 'edit') {
+            $id = $_POST['id'] ?? null;
+            if ($id) {
+                $task_name = $_POST['task_name'];
+                $status = $_POST['status'];
+                $due_date = $_POST['due_date'] ?: null;
+                $priority = $_POST['priority'];
+                $project_id = $_POST['project_id'] ?: null;
+
+                if ($isSuper || isManager()) {
+                    $assigned_to = $_POST['assigned_to'] ?: null;
+                    $stmt = $pdo->prepare("UPDATE tasks SET task_name=?, status=?, assigned_to=?, due_date=?, priority=?, project_id=? WHERE id=?");
+                    $stmt->execute([$task_name, $status, $assigned_to, $due_date, $priority, $project_id, $id]);
+                } else {
+                    $stmt = $pdo->prepare("UPDATE tasks SET task_name=?, status=?, due_date=?, priority=?, project_id=? WHERE id=? AND (assigned_to = ? OR created_by = ?)");
+                    $stmt->execute([$task_name, $status, $due_date, $priority, $project_id, $id, $user_id, $user_id]);
+                }
+                logActivity($pdo, 'Updated Task', 'Task', $id, $task_name);
+                $_SESSION['flash_success'] = "Task updated successfully.";
+            }
+            header("Location: tasks.php");
+            exit;
         } elseif ($action === 'delete' && $isSuper) {
             $id = $_POST['id'];
             $stmt = $pdo->prepare("DELETE FROM tasks WHERE id = ?");
@@ -101,7 +123,7 @@ $query = "SELECT t.*, p.project_name, u.username as assigned_user FROM tasks t L
 $params = [];
 
 if (!$isSuper) {
-    $query .= " AND t.assigned_to IN ($visibleIdsStr) ";
+    $query .= " AND (t.assigned_to IN ($visibleIdsStr) OR t.created_by = $user_id) ";
 } else if ($filter_assignee) {
     $query .= " AND t.assigned_to = ? ";
     $params[] = $filter_assignee;
@@ -368,7 +390,7 @@ include 'header.php';
                 
                 <div class="mb-3">
                     <label class="form-label text-muted small fw-bold">TASK NAME *</label>
-                    <input type="text" name="task_name" id="taskName" class="form-control" required <?= !$isSuper ? 'readonly' : '' ?>>
+                    <input type="text" name="task_name" id="taskName" class="form-control" required>
                 </div>
 
                 <div class="mb-3">

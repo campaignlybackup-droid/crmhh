@@ -24,7 +24,19 @@ if (!$client) {
 }
 
 // Security Check
-if (!$isSuper && $client['assigned_to'] != $user_id) {
+$visibleIds = getVisibleUserIds($pdo, $user_id);
+$visibleIdsStr = implode(',', $visibleIds);
+
+$isLinked = false;
+if (!$isSuper) {
+    $pCheck = $pdo->prepare("SELECT 1 FROM projects WHERE client_id = ? AND (assigned_to IN ($visibleIdsStr) OR created_by = ?) LIMIT 1");
+    $pCheck->execute([$client_id, $user_id]);
+    if ($pCheck->fetchColumn()) {
+        $isLinked = true;
+    }
+}
+
+if (!$isSuper && !$isLinked && $client['assigned_to'] !== null && !in_array($client['assigned_to'], $visibleIds)) {
     $_SESSION['flash_error'] = "Unauthorized access to client profile.";
     header("Location: clients.php");
     exit;

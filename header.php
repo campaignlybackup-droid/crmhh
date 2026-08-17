@@ -53,6 +53,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <a href="dashboard.php" class="sidebar-link <?= $current_page == 'dashboard.php' ? 'active' : '' ?>">
                 <i class="bi bi-grid-1x2-fill"></i> Dashboard
             </a>
+            <a href="team_dashboard.php" class="sidebar-link <?= $current_page == 'team_dashboard.php' ? 'active' : '' ?>">
+                <i class="bi bi-person-lines-fill"></i> Team Performance
+            </a>
             <a href="calendar.php" class="sidebar-link <?= $current_page == 'calendar.php' ? 'active' : '' ?>">
                 <i class="bi bi-calendar-event-fill"></i> Calendar
             </a>

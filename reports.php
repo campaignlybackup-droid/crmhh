@@ -55,18 +55,20 @@ $wonLeads = $pdo->query("SELECT COUNT(*) FROM leads WHERE status = 'Won'")->fetc
 $conversionRate = ($totalLeads > 0) ? round(($wonLeads / $totalLeads) * 100, 1) : 0;
 
 // ============================================
-// 3. TEAM PERFORMANCE (Tasks)
+// 3. TEAM PERFORMANCE (Tasks & Converted Leads)
 // ============================================
 $teamQuery = "
     SELECT 
+        u.id,
         u.username, 
-        COUNT(t.id) as total_tasks, 
-        SUM(IF(t.status = 'Done', 1, 0)) as completed_tasks
+        (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = u.id) as total_tasks,
+        (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = u.id AND t.status = 'Done') as completed_tasks,
+        (SELECT COUNT(*) FROM leads l WHERE l.assigned_to = u.id AND l.status = 'Won' AND l.deleted_at IS NULL) as won_leads,
+        (SELECT COALESCE(SUM(deal_value), 0) FROM leads l WHERE l.assigned_to = u.id AND l.status = 'Won' AND l.deleted_at IS NULL) as won_value,
+        (SELECT COUNT(*) FROM clients c WHERE c.assigned_to = u.id AND c.deleted_at IS NULL) as assigned_clients
     FROM users u 
-    JOIN tasks t ON u.id = t.assigned_to 
     WHERE u.deleted_at IS NULL
-    GROUP BY u.id 
-    ORDER BY completed_tasks DESC
+    ORDER BY won_value DESC, completed_tasks DESC
 ";
 $teamPerformance = $pdo->query($teamQuery)->fetchAll(PDO::FETCH_ASSOC);
 
@@ -152,8 +154,9 @@ include 'header.php';
     <!-- Team Performance Leaderboard -->
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-light border-0">
-                <h6 class="fw-bold mb-0">Team Performance</h6>
+            <div class="card-header bg-light border-0 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0">Team Leaderboard</h6>
+                <a href="team_dashboard.php" class="text-decoration-none small">Full View <i class="bi bi-arrow-right"></i></a>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -161,12 +164,13 @@ include 'header.php';
                         <thead class="bg-light">
                             <tr>
                                 <th class="ps-3">Employee</th>
-                                <th class="text-center">Completion Rate</th>
+                                <th class="text-center">Leads Converted</th>
+                                <th class="text-end pe-3">Tasks Done</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if(empty($teamPerformance)): ?>
-                                <tr><td colspan="2" class="text-center py-4 text-muted">No task data available.</td></tr>
+                                <tr><td colspan="3" class="text-center py-4 text-muted">No team performance data.</td></tr>
                             <?php else: ?>
                                 <?php foreach($teamPerformance as $member): 
                                     $pct = ($member['total_tasks'] > 0) ? round(($member['completed_tasks'] / $member['total_tasks']) * 100) : 0;
@@ -174,15 +178,17 @@ include 'header.php';
                                 ?>
                                 <tr>
                                     <td class="ps-3 fw-bold">
-                                        <?= h($member['username']) ?>
-                                        <div class="small text-muted fw-normal"><?= $member['completed_tasks'] ?> / <?= $member['total_tasks'] ?> Tasks</div>
+                                        <a href="team_dashboard.php?user_id=<?= $member['id'] ?>" class="text-decoration-none text-dark"><?= h($member['username']) ?></a>
+                                        <div class="small text-muted fw-normal"><?= $member['assigned_clients'] ?> Clients</div>
                                     </td>
                                     <td class="text-center">
-                                        <div class="d-flex align-items-center justify-content-center gap-2">
-                                            <div class="progress w-75" style="height: 8px;">
-                                                <div class="progress-bar <?= $bg ?>" style="width: <?= $pct ?>%"></div>
-                                            </div>
-                                            <span class="small fw-bold"><?= $pct ?>%</span>
+                                        <span class="badge bg-soft-success text-success fw-bold"><?= $member['won_leads'] ?> Won</span>
+                                        <div class="small text-muted" style="font-size:0.75rem;">AED <?= number_format($member['won_value']) ?></div>
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        <span class="fw-bold text-dark"><?= $member['completed_tasks'] ?>/<?= $member['total_tasks'] ?></span>
+                                        <div class="progress mt-1 ms-auto" style="height: 5px; width: 60px;">
+                                            <div class="progress-bar <?= $bg ?>" style="width: <?= $pct ?>%"></div>
                                         </div>
                                     </td>
                                 </tr>

@@ -128,12 +128,13 @@ include 'header.php';
                             <div><?= h($user['start_date'] ?? 'N/A') ?></div>
                         </td>
                         <td class="text-end pe-3">
-                            <button class="btn btn-sm btn-outline-primary" onclick='editUser(<?= json_encode($user) ?>)'><i class="bi bi-pencil"></i></button>
+                            <a href="team_dashboard.php?user_id=<?= $user['id'] ?>" class="btn btn-sm btn-outline-info me-1" title="View Performance Dashboard"><i class="bi bi-bar-chart-line"></i></a>
+                            <button class="btn btn-sm btn-outline-primary" onclick='editUser(<?= json_encode($user) ?>)' title="Edit User"><i class="bi bi-pencil"></i></button>
                             <?php if ($user['id'] != getCurrentUserId()): ?>
                             <form method="POST" class="d-inline" onsubmit="return confirm('Delete this user?');">
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="id" value="<?= $user['id'] ?>">
-                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" title="Delete User"><i class="bi bi-trash"></i></button>
                             </form>
                             <?php endif; ?>
                         </td>

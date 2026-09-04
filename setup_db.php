@@ -19,11 +19,12 @@ function executeSqlFile($pdo, $filename) {
     $sql = file_get_contents($filename);
     
     try {
-        // We use execute instead of exec for multiple statements in some PDO setups, 
-        // but for raw SQL dumps, sometimes we need to split it, or just use exec.
-        // PDO::exec usually works for multiple queries if PDO::MYSQL_ATTR_MULTI_STATEMENTS is true.
-        $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, 0);
-        $pdo->exec($sql);
+        $statements = array_filter(array_map('trim', explode(';', $sql)));
+        foreach ($statements as $statement) {
+            if (!empty($statement)) {
+                $pdo->exec($statement);
+            }
+        }
         echo "<p style='color:green;'>Success: Executed $filename</p>";
         return true;
     } catch (PDOException $e) {

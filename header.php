@@ -1,15 +1,23 @@
 <?php
+require_once __DIR__ . '/includes/auth.php';
+
 // Initialize notifications if logged in
 $unread_count = 0;
 $notifications = [];
 if (isLoggedIn()) {
     $user_id = getCurrentUserId();
-    $notifications = getUnreadNotifications($pdo, $user_id);
+    // Assuming getUnreadNotifications exists in a notifications helper, but we might just inline it or create the function here:
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? AND is_read = FALSE ORDER BY created_at DESC");
+        $stmt->execute([$user_id]);
+        $notifications = $stmt->fetchAll();
+    } catch (\Throwable $e) { $notifications = []; }
     $unread_count = count($notifications);
 }
 $username = getCurrentUsername();
-$isSuper = isSuperAdmin();
-$isManager = isManager();
+$isFounder = isFounder($pdo);
+$isManager = isManagerRole($pdo);
+$userRoles = isLoggedIn() ? getUserRoles($pdo, getCurrentUserId()) : [];
 $current_page = basename($_SERVER['PHP_SELF']);
 ?>
 <!DOCTYPE html>
@@ -76,7 +84,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
             </a>
             <?php endif; ?>
             
-            <?php if ($isSuper): ?>
+            <?php if ($isFounder): ?>
             <a href="reports.php" class="sidebar-link <?= $current_page == 'reports.php' ? 'active' : '' ?>">
                 <i class="bi bi-bar-chart-line-fill"></i> Reports
             </a>
@@ -96,18 +104,20 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <i class="bi bi-person-badge-fill"></i> HR & Leaves
             </a>
             
-            <?php if ($isSuper): ?>
+            <?php if ($isFounder): ?>
             <a href="invoices.php" class="sidebar-link <?= $current_page == 'invoices.php' ? 'active' : '' ?>">
                 <i class="bi bi-receipt"></i> Invoices
             </a>
             <?php endif; ?>
             
-            <?php if ($isSuper): ?>
+            <?php if ($isFounder): ?>
             <div class="sidebar-heading mt-4 text-uppercase fw-bold text-muted" style="font-size: 0.75rem; padding: 0 1rem;">System Settings</div>
             <a href="users.php" class="sidebar-link <?= $current_page == 'users.php' ? 'active' : '' ?>">
                 <i class="bi bi-person-gear"></i> Users
             </a>
-
+            <a href="export_all_data.php" class="sidebar-link <?= $current_page == 'export_all_data.php' ? 'active' : '' ?>">
+                <i class="bi bi-box-arrow-up-right"></i> Data Export & Backup
+            </a>
             <?php endif; ?>
             <a href="tasks.php" class="sidebar-link <?= $current_page == 'tasks.php' ? 'active' : '' ?>">
                 <i class="bi bi-check2-square"></i> My Tasks
@@ -189,7 +199,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <ul class="dropdown-menu dropdown-menu-end mt-2">
                         <li class="px-3 py-2 border-bottom mb-1">
                             <div class="fw-bold"><?= h(getCurrentUsername()) ?></div>
-                            <div class="small text-muted text-capitalize"><?= h($_SESSION['role'] ?? 'user') ?></div>
+                            <div class="small text-muted text-capitalize"><?= h(implode(', ', $userRoles)) ?></div>
                         </li>
                         <li><a class="dropdown-item" href="profile.php"><i class="bi bi-person me-2"></i>My Profile</a></li>
                         <li><hr class="dropdown-divider"></li>

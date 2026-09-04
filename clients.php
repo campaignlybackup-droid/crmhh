@@ -1,383 +1,79 @@
 <?php
-require_once 'functions.php';
+require_once __DIR__ . '/includes/auth.php';
 requireLogin();
 
-$isSuper = isSuperAdmin();
 $user_id = getCurrentUserId();
+$isFounder = isFounder($pdo);
+$isManager = isManagerRole($pdo);
 $visibleIds = getVisibleUserIds($pdo, $user_id);
-$visibleIdsStr = implode(',', $visibleIds);
-
-$users = [];
-if ($isSuper) {
-    $users = $pdo->query("SELECT id, username FROM users ORDER BY username ASC")->fetchAll();
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
-        $action = $_POST['action'];
-
-        if ($action === 'add' || $action === 'edit') {
-            $id = $_POST['id'] ?? null;
-            $client_name = $_POST['client_name'];
-            $status = $_POST['status'];
-            $primary_contact = $_POST['primary_contact'];
-            $drive_folder_url = $_POST['drive_folder_url'];
-            $onboarding_date = $_POST['onboarding_date'] ?: null;
-            
-            if ($isSuper) {
-                $total_billed = $_POST['total_billed'] ?: 0.00;
-                $monthly_payment_date = $_POST['monthly_payment_date'] ?: null;
-            }
-            
-            if ($isSuper) {
-                $assigned_to = $_POST['assigned_to'] ?: null;
-            } else {
-                if ($action === 'add') {
-                    $assigned_to = $user_id;
-                } else {
-                    $stmt = $pdo->prepare("SELECT assigned_to FROM clients WHERE id = ?");
-                    $stmt->execute([$id]);
-                    $assigned_to = $stmt->fetchColumn();
-                }
-            }
-
-            // Handle File Upload for Contract
-            $contract_file = null;
-            if (isset($_FILES['contract']) && $_FILES['contract']['error'] == UPLOAD_ERR_OK) {
-                $upload_dir = ensureUploadDirExists('contracts/');
-                $file_name = time() . '_' . basename($_FILES['contract']['name']);
-                $target_path = $upload_dir . $file_name;
-                if (move_uploaded_file($_FILES['contract']['tmp_name'], $target_path)) {
-                    // Store the relative path in the database
-                    $contract_file = 'contracts/' . $file_name;
-                }
-            }
-
-            if ($action === 'add') {
-                if (!$isSuper) {
-                    $total_billed = 0.00;
-                    $monthly_payment_date = null;
-                }
-                $stmt = $pdo->prepare("INSERT INTO clients (client_name, status, primary_contact, total_billed, monthly_payment_date, drive_folder_url, onboarding_date, contract_file, assigned_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$client_name, $status, $primary_contact, $total_billed, $monthly_payment_date, $drive_folder_url, $onboarding_date, $contract_file, $assigned_to]);
-                
-                if ($isSuper && $assigned_to && $assigned_to != $user_id) {
-                    addNotification($pdo, $assigned_to, "You have been assigned a new client: $client_name");
-                }
-                
-                $_SESSION['flash_success'] = "Client added successfully.";
-            } else if ($action === 'edit' && $id) {
-                $stmt = $pdo->prepare("SELECT assigned_to FROM clients WHERE id = ?");
-                $stmt->execute([$id]);
-                $oldClient = $stmt->fetch();
-
-                if ($isSuper || ($oldClient && in_array($oldClient['assigned_to'], $visibleIds))) {
-                    if (!$isSuper) {
-                        // Preserve existing payment info for non-superadmins
-                        $stmt = $pdo->prepare("SELECT total_billed, monthly_payment_date FROM clients WHERE id = ?");
-                        $stmt->execute([$id]);
-                        $existingClient = $stmt->fetch();
-                        $total_billed = $existingClient['total_billed'];
-                        $monthly_payment_date = $existingClient['monthly_payment_date'];
-                    }
-
-                    if ($contract_file) {
-                        $stmt = $pdo->prepare("UPDATE clients SET client_name=?, status=?, primary_contact=?, total_billed=?, monthly_payment_date=?, drive_folder_url=?, onboarding_date=?, contract_file=?, assigned_to=? WHERE id=?");
-                        $stmt->execute([$client_name, $status, $primary_contact, $total_billed, $monthly_payment_date, $drive_folder_url, $onboarding_date, $contract_file, $assigned_to, $id]);
-                    } else {
-                        $stmt = $pdo->prepare("UPDATE clients SET client_name=?, status=?, primary_contact=?, total_billed=?, monthly_payment_date=?, drive_folder_url=?, onboarding_date=?, assigned_to=? WHERE id=?");
-                        $stmt->execute([$client_name, $status, $primary_contact, $total_billed, $monthly_payment_date, $drive_folder_url, $onboarding_date, $assigned_to, $id]);
-                    }
-                    
-                    if ($isSuper && $assigned_to && $assigned_to != $oldClient['assigned_to']) {
-                        addNotification($pdo, $assigned_to, "You have been assigned to client: $client_name");
-                    }
-
-                    $_SESSION['flash_success'] = "Client updated successfully.";
-                } else {
-                    $_SESSION['flash_error'] = "Unauthorized.";
-                }
-            }
-            header("Location: clients.php");
-            exit;
-        } elseif ($action === 'delete') {
-            $id = $_POST['id'];
-            $stmt = $pdo->prepare("SELECT assigned_to FROM clients WHERE id = ?");
-            $stmt->execute([$id]);
-            $client = $stmt->fetch();
-            
-            if ($isSuper || ($client && in_array($client['assigned_to'], $visibleIds))) {
-                $stmt = $pdo->prepare("DELETE FROM clients WHERE id = ?");
-                $stmt->execute([$id]);
-                $_SESSION['flash_success'] = "Client deleted.";
-            } else {
-                $_SESSION['flash_error'] = "Unauthorized.";
-            }
-            header("Location: clients.php");
-            exit;
-        }
-    }
-}
+$visibleIdsStr = empty($visibleIds) ? '' : implode(',', $visibleIds);
 
 // Fetch Clients
-$search = $_GET['search'] ?? '';
-$filter_status = $_GET['status'] ?? '';
-$filter_assignee = $_GET['assigned_to'] ?? '';
+// A Founder sees all clients.
+// A Manager sees clients assigned to them or their team members.
+// Normal user sees clients assigned to them.
+$clientsSql = "
+    SELECT c.*, 
+           (SELECT COUNT(*) FROM tasks t WHERE t.project_id IN (SELECT id FROM projects p WHERE p.client_id = c.id) AND t.status != 'Done') as pending_tasks,
+           u.username as assigned_user
+    FROM clients c
+    LEFT JOIN users u ON c.assigned_to = u.id
+";
 
-$query = "SELECT c.*, u.username as assigned_user FROM clients c LEFT JOIN users u ON c.assigned_to = u.id WHERE 1=1 ";
-$params = [];
+if (!$isFounder) {
+    // If not founder, we need to show clients that have projects/tasks assigned to them
+    // For simplicity, we show clients directly assigned to them or their team.
+    $clientsSql .= " WHERE c.assigned_to IN ($visibleIdsStr) 
+                     OR c.id IN (SELECT client_id FROM projects WHERE assigned_to IN ($visibleIdsStr))
+                     OR c.id IN (SELECT p.client_id FROM projects p JOIN tasks t ON p.id = t.project_id JOIN task_assignments ta ON t.id = ta.task_id WHERE ta.user_id IN ($visibleIdsStr))";
+}
 
-if (!$isSuper) {
-    $query .= " AND (c.assigned_to IN ($visibleIdsStr) OR c.assigned_to IS NULL OR c.id IN (SELECT client_id FROM projects WHERE assigned_to IN ($visibleIdsStr) OR created_by = $user_id)) ";
-} else if ($filter_assignee) {
-    $query .= " AND c.assigned_to = ? ";
-    $params[] = $filter_assignee;
-}
-if ($search) {
-    $query .= " AND (c.client_name LIKE ? OR c.primary_contact LIKE ?) ";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
-}
-if ($filter_status) {
-    $query .= " AND c.status = ? ";
-    $params[] = $filter_status;
-}
-$query .= " ORDER BY c.created_at DESC";
-
-$stmt = $pdo->prepare($query);
-$stmt->execute($params);
-$clients = $stmt->fetchAll();
+$clientsSql .= " GROUP BY c.id ORDER BY c.client_name ASC";
+$stmt = $pdo->query($clientsSql);
+$clients = $stmt ? $stmt->fetchAll() : [];
 
 include 'header.php';
 ?>
 
-<div class="row mb-4 align-items-center">
-    <div class="col-md-6">
-        <h3 class="fw-bold mb-0">Clients</h3>
-    </div>
-    <div class="col-md-6 text-md-end mt-3 mt-md-0">
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#clientModal" onclick="resetForm()">
-            <i class="bi bi-plus-lg"></i> Add Client
-        </button>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="fw-bold mb-0">Clients</h3>
+    <?php if ($isManager): ?>
+    <button type="button" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-2"></i> New Client
+    </button>
+    <?php endif; ?>
 </div>
 
-<div class="card mb-4">
-    <div class="card-body bg-light rounded d-flex flex-wrap gap-2">
-        <form method="GET" class="d-flex w-100 gap-2">
-            <input type="text" name="search" class="form-control" placeholder="Search clients..." value="<?= h($search) ?>">
-            <select name="status" class="form-select" style="max-width: 200px;">
-                <option value="">All Statuses</option>
-                <?php 
-                $statuses = ['Active', 'Completed', 'On Hold', 'Churned'];
-                foreach($statuses as $s) {
-                    $selected = ($filter_status === $s) ? 'selected' : '';
-                    echo "<option value=\"$s\" $selected>$s</option>";
-                }
-                ?>
-            </select>
-            <?php if ($isSuper): ?>
-            <select name="assigned_to" class="form-select" style="max-width: 150px;">
-                <option value="">All Assignees</option>
-                <?php foreach($users as $u): ?>
-                    <option value="<?= $u['id'] ?>" <?= $filter_assignee == $u['id'] ? 'selected' : '' ?>><?= h($u['username']) ?></option>
-                <?php endforeach; ?>
-            </select>
-            <?php endif; ?>
-            <button type="submit" class="btn btn-primary">Filter</button>
-            <a href="clients.php" class="btn btn-outline-secondary">Reset</a>
-        </form>
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0 align-middle">
-                <thead class="bg-light">
-                    <tr>
-                        <th class="ps-3">Client Name</th>
-                        <th>Contact</th>
-                        <th>Status</th>
-                        <th>Assignee</th>
-                        <?php if ($isSuper): ?>
-                        <th>Payment Info</th>
-                        <?php endif; ?>
-                        <th>Links / Files</th>
-                        <th class="text-end pe-3">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if(empty($clients)): ?>
-                        <tr><td colspan="<?= $isSuper ? '7' : '6' ?>" class="text-center py-4 text-muted">No clients found.</td></tr>
-                    <?php else: ?>
-                        <?php foreach($clients as $client): ?>
-                        <tr>
-                            <td class="ps-3 fw-bold">
-                                <a href="client_profile.php?id=<?= $client['id'] ?>" class="text-decoration-none">
-                                    <?= h($client['client_name']) ?> <i class="bi bi-box-arrow-up-right small ms-1 text-muted"></i>
-                                </a>
-                            </td>
-                            <td><?= h($client['primary_contact']) ?></td>
-                            <td>
-                                <?php
-                                    $sc = 'bg-soft-secondary';
-                                    if ($client['status'] == 'Active') $sc = 'bg-soft-success';
-                                    if ($client['status'] == 'Churned') $sc = 'bg-soft-danger';
-                                    if ($client['status'] == 'On Hold') $sc = 'bg-soft-warning';
-                                ?>
-                                <span class="badge badge-status <?= $sc ?>"><?= h($client['status']) ?></span>
-                            </td>
-                            <td>
-                                <?php if ($isSuper): ?>
-                                    <div class="small text-muted"><i class="bi bi-person-badge"></i> <?= h($client['assigned_user'] ?? 'Unassigned') ?></div>
-                                <?php else: ?>
-                                    <div class="small text-muted"><i class="bi bi-person-badge"></i> <?= h($client['assigned_user'] ?? 'Unassigned') ?></div>
-                                <?php endif; ?>
-                            </td>
-                            <?php if ($isSuper): ?>
-                            <td>
-                                <div class="fw-bold text-success">AED <?= number_format($client['total_billed'], 2) ?></div>
-                                <?php if($client['monthly_payment_date']): ?>
-                                <div class="small text-muted"><i class="bi bi-calendar"></i> <?= h($client['monthly_payment_date']) ?></div>
-                                <?php endif; ?>
-                            </td>
-                            <?php endif; ?>
-                            <td class="small">
-                                <?php if($client['drive_folder_url']): ?>
-                                    <a href="<?= h($client['drive_folder_url']) ?>" target="_blank" class="btn btn-sm btn-light mb-1"><i class="bi bi-folder text-warning"></i> Drive</a>
-                                <?php endif; ?>
-                                <?php if($client['contract_file']): ?>
-                                    <a href="download.php?file=<?= urlencode($client['contract_file']) ?>" target="_blank" class="btn btn-sm btn-light mb-1"><i class="bi bi-file-earmark-text text-primary"></i> Contract</a>
-                                <?php endif; ?>
-                            </td>
-                            <td class="text-end pe-3">
-                                <a href="client_profile.php?id=<?= $client['id'] ?>" class="btn btn-sm btn-outline-secondary" title="View Profile"><i class="bi bi-eye"></i></a>
-                                <button class="btn btn-sm btn-outline-primary" onclick='editClient(<?= json_encode($client) ?>)' title="Edit"><i class="bi bi-pencil"></i></button>
-                                <form method="POST" class="d-inline" onsubmit="return confirm('Delete this client?');">
-                                    <input type="hidden" name="action" value="delete">
-                                    <input type="hidden" name="id" value="<?= $client['id'] ?>">
-                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                </form>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+<div class="row g-4">
+    <?php if (empty($clients)): ?>
+        <div class="col-12 text-center py-5 text-muted">
+            <i class="bi bi-people fs-1 d-block mb-3"></i>
+            No clients found.
         </div>
-    </div>
-</div>
-
-<!-- Add/Edit Client Modal -->
-<div class="modal fade" id="clientModal" tabindex="-1">
-    <div class="modal-dialog">
-        <form method="POST" enctype="multipart/form-data" class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold" id="clientModalTitle">Add Client</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" name="action" id="clientAction" value="add">
-                <input type="hidden" name="id" id="clientId" value="">
-                
-                <div class="mb-3">
-                    <label class="form-label text-muted small fw-bold">CLIENT NAME *</label>
-                    <input type="text" name="client_name" id="clientName" class="form-control" required>
-                </div>
-                
-                <div class="mb-3">
-                    <label class="form-label text-muted small fw-bold">STATUS</label>
-                    <select name="status" id="clientStatus" class="form-select">
-                        <?php foreach($statuses as $s) echo "<option value=\"$s\">$s</option>"; ?>
-                    </select>
-                </div>
-
-                <?php if ($isSuper): ?>
-                <div class="mb-3">
-                    <label class="form-label text-muted small fw-bold">ASSIGN TO</label>
-                    <select name="assigned_to" id="clientAssigned" class="form-select">
-                        <option value="">Unassigned</option>
-                        <?php foreach($users as $u) echo "<option value=\"{$u['id']}\">".h($u['username'])."</option>"; ?>
-                    </select>
-                </div>
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label text-muted small fw-bold">TOTAL BILLED ($)</label>
-                        <input type="number" step="0.01" name="total_billed" id="clientBilled" class="form-control" value="0.00">
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label text-muted small fw-bold">MONTHLY PAYMENT DATE</label>
-                        <input type="text" name="monthly_payment_date" id="clientPaymentDate" class="form-control" placeholder="e.g. 5th of every month">
+    <?php else: ?>
+        <?php foreach ($clients as $client): ?>
+            <div class="col-xl-3 col-lg-4 col-md-6">
+                <div class="card h-100 border-0 shadow-sm client-card hover-lift">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <h5 class="fw-bold mb-0 text-truncate" title="<?= h($client['client_name']) ?>"><?= h($client['client_name']) ?></h5>
+                            <span class="badge bg-soft-primary text-primary rounded-pill"><?= h($client['status']) ?></span>
+                        </div>
+                        <div class="mb-3 text-muted small">
+                            <i class="bi bi-person me-2"></i><?= h($client['primary_contact'] ?: 'No contact') ?><br>
+                            <i class="bi bi-briefcase me-2"></i><?= $client['pending_tasks'] ?> pending tasks
+                        </div>
+                        <a href="client_profile.php?id=<?= $client['id'] ?>" class="btn btn-sm btn-outline-primary w-100 fw-bold">View Client</a>
                     </div>
                 </div>
-                <?php endif; ?>
-                
-                <div class="mb-3">
-                    <label class="form-label text-muted small fw-bold">PRIMARY CONTACT</label>
-                    <input type="text" name="primary_contact" id="clientContact" class="form-control">
-                </div>
-                
-                
-                <div class="mb-3">
-                    <label class="form-label text-muted small fw-bold">DRIVE FOLDER URL</label>
-                    <input type="url" name="drive_folder_url" id="clientDrive" class="form-control">
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label text-muted small fw-bold">ONBOARDING DATE</label>
-                    <input type="date" name="onboarding_date" id="clientDate" class="form-control">
-                </div>
-
-                <div class="mb-3 border-top pt-3">
-                    <label class="form-label text-muted small fw-bold">CONTRACT FILE</label>
-                    <input type="file" name="contract" class="form-control">
-                    <div class="form-text">Upload a PDF/Doc for the client contract. Uploading a new one overwrites the old.</div>
-                </div>
             </div>
-            <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-primary">Save Client</button>
-            </div>
-        </form>
-    </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
 </div>
 
-<script>
-function resetForm() {
-    document.getElementById('clientAction').value = 'add';
-    document.getElementById('clientId').value = '';
-    document.getElementById('clientModalTitle').innerText = 'Add Client';
-    document.getElementById('clientName').value = '';
-    document.getElementById('clientStatus').value = 'Active';
-    <?php if ($isSuper): ?>
-    document.getElementById('clientAssigned').value = '';
-    document.getElementById('clientBilled').value = '0.00';
-    document.getElementById('clientPaymentDate').value = '';
-    <?php endif; ?>
-    document.getElementById('clientContact').value = '';
-    document.getElementById('clientDrive').value = '';
-    document.getElementById('clientDate').value = '';
-}
-
-function editClient(client) {
-    document.getElementById('clientAction').value = 'edit';
-    document.getElementById('clientId').value = client.id;
-    document.getElementById('clientModalTitle').innerText = 'Edit Client';
-    document.getElementById('clientName').value = client.client_name;
-    document.getElementById('clientStatus').value = client.status;
-    <?php if ($isSuper): ?>
-    document.getElementById('clientAssigned').value = client.assigned_to || '';
-    document.getElementById('clientBilled').value = client.total_billed || '0.00';
-    document.getElementById('clientPaymentDate').value = client.monthly_payment_date || '';
-    <?php endif; ?>
-    document.getElementById('clientContact').value = client.primary_contact;
-    document.getElementById('clientDrive').value = client.drive_folder_url;
-    document.getElementById('clientDate').value = client.onboarding_date;
-    
-    var modal = new bootstrap.Modal(document.getElementById('clientModal'));
-    modal.show();
-}
-</script>
+<style>
+.client-card { transition: transform 0.2s; }
+.client-card:hover { transform: translateY(-5px); }
+</style>
 
 <?php include 'footer.php'; ?>

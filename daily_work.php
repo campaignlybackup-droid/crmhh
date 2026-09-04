@@ -1,122 +1,125 @@
 <?php
-require_once 'functions.php';
+require_once __DIR__ . '/includes/auth.php';
 requireLogin();
 
 $user_id = getCurrentUserId();
+$isFounder = isFounder($pdo);
+$isManager = isManagerRole($pdo);
+$visibleIds = getVisibleUserIds($pdo, $user_id);
+$visibleIdsStr = empty($visibleIds) ? '' : implode(',', $visibleIds);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
-        $action = $_POST['action'];
+// Handle Submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_report'])) {
+    $report_date = $_POST['report_date'] ?? date('Y-m-d');
+    $completed = trim($_POST['completed_tasks'] ?? '');
+    $pending = trim($_POST['pending_tasks'] ?? '');
+    $blockers = trim($_POST['blockers'] ?? '');
+    $notes = trim($_POST['notes'] ?? '');
 
-        if ($action === 'add' || $action === 'edit') {
-            $id = $_POST['id'] ?? null;
-            $work_date = $_POST['work_date'];
-            $description = $_POST['description'];
-
-            if ($action === 'add') {
-                $stmt = $pdo->prepare("INSERT INTO daily_work (user_id, work_date, description) VALUES (?, ?, ?)");
-                $stmt->execute([$user_id, $work_date, $description]);
-                $_SESSION['flash_success'] = "Daily work logged successfully.";
-            } else if ($action === 'edit' && $id) {
-                // Ensure the log belongs to this user
-                $stmt = $pdo->prepare("UPDATE daily_work SET work_date=?, description=? WHERE id=? AND user_id=?");
-                $stmt->execute([$work_date, $description, $id, $user_id]);
-                $_SESSION['flash_success'] = "Daily work updated successfully.";
-            }
-            header("Location: daily_work.php");
-            exit;
-        } elseif ($action === 'delete') {
-            $id = $_POST['id'];
-            $stmt = $pdo->prepare("DELETE FROM daily_work WHERE id = ? AND user_id = ?");
-            $stmt->execute([$id, $user_id]);
-            $_SESSION['flash_success'] = "Work log deleted.";
-            header("Location: daily_work.php");
-            exit;
-        }
+    // Check if report exists for today
+    $stmt = $pdo->prepare("SELECT id FROM daily_reports WHERE user_id = ? AND report_date = ?");
+    $stmt->execute([$user_id, $report_date]);
+    
+    if ($stmt->fetch()) {
+        $upd = $pdo->prepare("UPDATE daily_reports SET completed_tasks=?, pending_tasks=?, blockers=?, notes=? WHERE user_id=? AND report_date=?");
+        $upd->execute([$completed, $pending, $blockers, $notes, $user_id, $report_date]);
+        $_SESSION['flash_success'] = "Daily report updated successfully!";
+    } else {
+        $ins = $pdo->prepare("INSERT INTO daily_reports (user_id, report_date, completed_tasks, pending_tasks, blockers, notes) VALUES (?, ?, ?, ?, ?, ?)");
+        $ins->execute([$user_id, $report_date, $completed, $pending, $blockers, $notes]);
+        $_SESSION['flash_success'] = "Daily report submitted successfully!";
     }
+    
+    logActivity($pdo, "Submitted Daily Report for $report_date", 'Report', $user_id);
+    header("Location: daily_work.php");
+    exit;
 }
 
-$start_date = $_GET['start_date'] ?? '';
-$end_date = $_GET['end_date'] ?? '';
-
-$query = "SELECT * FROM daily_work WHERE user_id = ?";
-$params = [$user_id];
-
-if ($start_date) {
-    $query .= " AND work_date >= ?";
-    $params[] = $start_date;
+// Fetch Reports
+$reportsSql = "SELECT r.*, u.username FROM daily_reports r JOIN users u ON r.user_id = u.id";
+if (!$isFounder) {
+    // Managers see their team's, users see only theirs
+    $reportsSql .= " WHERE r.user_id IN ($visibleIdsStr)";
 }
-if ($end_date) {
-    $query .= " AND work_date <= ?";
-    $params[] = $end_date;
-}
+$reportsSql .= " ORDER BY r.report_date DESC, r.created_at DESC LIMIT 30";
+$stmt = $pdo->query($reportsSql);
+$reports = $stmt ? $stmt->fetchAll() : [];
 
-$query .= " ORDER BY work_date DESC, created_at DESC";
-$stmt = $pdo->prepare($query);
-$stmt->execute($params);
-$work_logs = $stmt->fetchAll();
+// Check if current user submitted today
+$todayReport = array_filter($reports, fn($r) => $r['user_id'] == $user_id && $r['report_date'] == date('Y-m-d'));
+$todayReport = reset($todayReport);
 
 include 'header.php';
 ?>
 
-<div class="row mb-4 align-items-center">
-    <div class="col-md-6">
-        <h3 class="fw-bold mb-0">My Daily Work</h3>
-        <p class="text-muted mb-0">Log your daily presence and tasks completed.</p>
-    </div>
-    <div class="col-md-6 text-md-end mt-3 mt-md-0">
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#workModal" onclick="resetWorkForm()">
-            <i class="bi bi-plus-lg"></i> Log Work
-        </button>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="fw-bold mb-0">Daily Reports</h3>
+    <button class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#reportModal">
+        <i class="bi bi-journal-plus me-2"></i><?= $todayReport ? 'Edit Today\'s Report' : 'Submit Report' ?>
+    </button>
 </div>
 
-<div class="card mb-4">
-    <div class="card-body bg-light rounded">
-        <form method="GET" class="row g-2 align-items-end">
-            <div class="col-md-4">
-                <label class="form-label small fw-bold text-muted">START DATE</label>
-                <input type="date" name="start_date" class="form-control" value="<?= h($start_date) ?>">
-            </div>
-            <div class="col-md-4">
-                <label class="form-label small fw-bold text-muted">END DATE</label>
-                <input type="date" name="end_date" class="form-control" value="<?= h($end_date) ?>">
-            </div>
-            <div class="col-md-4">
-                <button type="submit" class="btn btn-primary w-100">Filter</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div class="card">
+<div class="card border-0 shadow-sm">
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover mb-0 align-middle">
-                <thead class="bg-light">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
                     <tr>
-                        <th class="ps-3">Date</th>
-                        <th>Work Description</th>
-                        <th class="text-end pe-3">Actions</th>
+                        <th class="ps-4">Date</th>
+                        <th>User</th>
+                        <th>Completed Tasks</th>
+                        <th>Blockers</th>
+                        <th class="pe-4 text-end">Action</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if(empty($work_logs)): ?>
-                        <tr><td colspan="3" class="text-center py-4 text-muted">No work logged yet.</td></tr>
+                    <?php if (empty($reports)): ?>
+                        <tr><td colspan="5" class="text-center text-muted py-4">No daily reports found.</td></tr>
                     <?php else: ?>
-                        <?php foreach($work_logs as $log): ?>
-                        <tr>
-                            <td class="ps-3 fw-bold" style="width: 150px;"><?= h(date('M d, Y', strtotime($log['work_date']))) ?></td>
-                            <td><?= nl2br(h($log['description'])) ?></td>
-                            <td class="text-end pe-3" style="width: 120px;">
-                                <button class="btn btn-sm btn-outline-primary" onclick='editWork(<?= json_encode($log) ?>)'><i class="bi bi-pencil"></i></button>
-                                <form method="POST" class="d-inline" onsubmit="return confirm('Delete this work log?');">
-                                    <input type="hidden" name="action" value="delete">
-                                    <input type="hidden" name="id" value="<?= $log['id'] ?>">
-                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                </form>
-                            </td>
-                        </tr>
+                        <?php foreach ($reports as $rep): ?>
+                            <tr>
+                                <td class="ps-4 fw-bold"><?= date('M d, Y', strtotime($rep['report_date'])) ?></td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="rounded-circle bg-soft-primary text-primary d-flex justify-content-center align-items-center" style="width: 25px; height: 25px; font-weight: bold; font-size: 0.7rem;">
+                                            <?= strtoupper(substr($rep['username'], 0, 1)) ?>
+                                        </div>
+                                        <?= h($rep['username']) ?>
+                                    </div>
+                                </td>
+                                <td><div class="text-truncate" style="max-width: 200px;"><?= h($rep['completed_tasks'] ?: 'None') ?></div></td>
+                                <td><div class="text-truncate text-danger" style="max-width: 150px;"><?= h($rep['blockers'] ?: 'None') ?></div></td>
+                                <td class="pe-4 text-end">
+                                    <button type="button" class="btn btn-sm btn-light border" data-bs-toggle="modal" data-bs-target="#viewModal<?= $rep['id'] ?>">View</button>
+                                </td>
+                            </tr>
+                            
+                            <!-- View Modal -->
+                            <div class="modal fade" id="viewModal<?= $rep['id'] ?>" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content border-0 shadow">
+                                        <div class="modal-header border-0 bg-light pb-2">
+                                            <h5 class="modal-title fw-bold">Report: <?= h($rep['username']) ?></h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body pt-3">
+                                            <div class="small text-muted mb-3"><i class="bi bi-calendar me-2"></i><?= date('F d, Y', strtotime($rep['report_date'])) ?></div>
+                                            
+                                            <h6 class="fw-bold text-success mb-1">Completed Tasks</h6>
+                                            <p class="small bg-soft-success p-2 rounded"><?= nl2br(h($rep['completed_tasks'] ?: '-')) ?></p>
+                                            
+                                            <h6 class="fw-bold text-warning mb-1">Pending Tasks</h6>
+                                            <p class="small bg-soft-warning p-2 rounded"><?= nl2br(h($rep['pending_tasks'] ?: '-')) ?></p>
+                                            
+                                            <h6 class="fw-bold text-danger mb-1">Blockers/Issues</h6>
+                                            <p class="small bg-soft-danger p-2 rounded"><?= nl2br(h($rep['blockers'] ?: '-')) ?></p>
+                                            
+                                            <h6 class="fw-bold text-primary mb-1">Notes</h6>
+                                            <p class="small bg-soft-primary p-2 rounded"><?= nl2br(h($rep['notes'] ?: '-')) ?></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         <?php endforeach; ?>
                     <?php endif; ?>
                 </tbody>
@@ -125,55 +128,42 @@ include 'header.php';
     </div>
 </div>
 
-<!-- Add/Edit Work Modal -->
-<div class="modal fade" id="workModal" tabindex="-1">
+<!-- Submit/Edit Modal -->
+<div class="modal fade" id="reportModal" tabindex="-1">
     <div class="modal-dialog">
-        <form method="POST" class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold" id="workModalTitle">Log Daily Work</h5>
+        <form class="modal-content border-0 shadow" method="POST">
+            <div class="modal-header border-0 bg-light pb-2">
+                <h5 class="modal-title fw-bold"><?= $todayReport ? 'Edit Today\'s Report' : 'Submit Daily Report' ?></h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
-                <input type="hidden" name="action" id="workAction" value="add">
-                <input type="hidden" name="id" id="workId" value="">
-                
+            <div class="modal-body pt-3">
+                <input type="hidden" name="submit_report" value="1">
                 <div class="mb-3">
-                    <label class="form-label text-muted small fw-bold">WORK DATE *</label>
-                    <input type="date" name="work_date" id="workDate" class="form-control" value="<?= date('Y-m-d') ?>" required>
+                    <label class="form-label small fw-bold">Report Date</label>
+                    <input type="date" class="form-control" name="report_date" value="<?= date('Y-m-d') ?>" required <?= $todayReport ? 'readonly' : '' ?>>
                 </div>
-                
                 <div class="mb-3">
-                    <label class="form-label text-muted small fw-bold">DESCRIPTION *</label>
-                    <textarea name="description" id="workDescription" class="form-control" rows="4" required placeholder="What did you work on today?"></textarea>
+                    <label class="form-label small fw-bold text-success">Completed Tasks</label>
+                    <textarea class="form-control" name="completed_tasks" rows="2" required><?= $todayReport ? h($todayReport['completed_tasks']) : '' ?></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-warning">Pending Tasks</label>
+                    <textarea class="form-control" name="pending_tasks" rows="2"><?= $todayReport ? h($todayReport['pending_tasks']) : '' ?></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-danger">Problems / Blockers</label>
+                    <textarea class="form-control" name="blockers" rows="2"><?= $todayReport ? h($todayReport['blockers']) : '' ?></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-primary">General Notes</label>
+                    <textarea class="form-control" name="notes" rows="2"><?= $todayReport ? h($todayReport['notes']) : '' ?></textarea>
                 </div>
             </div>
-            <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-primary">Save Work Log</button>
+            <div class="modal-footer border-0">
+                <button type="submit" class="btn btn-primary fw-bold w-100">Save Report</button>
             </div>
         </form>
     </div>
 </div>
-
-<script>
-function resetWorkForm() {
-    document.getElementById('workAction').value = 'add';
-    document.getElementById('workId').value = '';
-    document.getElementById('workModalTitle').innerText = 'Log Daily Work';
-    document.getElementById('workDate').value = '<?= date('Y-m-d') ?>';
-    document.getElementById('workDescription').value = '';
-}
-
-function editWork(log) {
-    document.getElementById('workAction').value = 'edit';
-    document.getElementById('workId').value = log.id;
-    document.getElementById('workModalTitle').innerText = 'Edit Daily Work';
-    document.getElementById('workDate').value = log.work_date;
-    document.getElementById('workDescription').value = log.description;
-    
-    var modal = new bootstrap.Modal(document.getElementById('workModal'));
-    modal.show();
-}
-</script>
 
 <?php include 'footer.php'; ?>

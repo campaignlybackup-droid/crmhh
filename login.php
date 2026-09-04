@@ -1,5 +1,5 @@
 <?php
-require_once 'functions.php';
+require_once 'includes/auth.php';
 
 if (isLoggedIn()) {
     header("Location: dashboard.php");

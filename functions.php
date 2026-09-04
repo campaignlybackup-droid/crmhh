@@ -13,34 +13,29 @@ function ensureUploadDirExists($subdir = '') {
     return $path;
 }
 
+require_once __DIR__ . '/includes/auth.php';
+
 // Authentication Helpers
-function isLoggedIn() {
-    return isset($_SESSION['user_id']);
-}
+// (isLoggedIn, requireLogin, getCurrentUserId, getCurrentUsername, getVisibleUserIds are now in auth.php)
 
 function isSuperAdmin() {
-    return isset($_SESSION['role']) && $_SESSION['role'] === 'superadmin';
+    global $pdo;
+    return isFounder($pdo);
 }
 
 function isManager() {
-    return isset($_SESSION['role']) && in_array($_SESSION['role'], ['superadmin', 'manager']);
+    global $pdo;
+    return isManagerRole($pdo);
 }
 
 function isEmployee() {
-    // Everyone who is logged in is at least an employee
     return isset($_SESSION['user_id']); 
-}
-
-function requireLogin() {
-    if (!isLoggedIn()) {
-        header("Location: login.php");
-        exit;
-    }
 }
 
 function requireSuperAdmin() {
     requireLogin();
-    if (!isSuperAdmin()) {
+    global $pdo;
+    if (!isFounder($pdo)) {
         $_SESSION['flash_error'] = "Unauthorized access. Super Admin only.";
         header("Location: dashboard.php");
         exit;
@@ -49,43 +44,12 @@ function requireSuperAdmin() {
 
 function requireManager() {
     requireLogin();
-    if (!isManager()) {
+    global $pdo;
+    if (!isManagerRole($pdo)) {
         $_SESSION['flash_error'] = "Unauthorized access. Manager only.";
         header("Location: dashboard.php");
         exit;
     }
-}
-
-function getCurrentUserId() {
-    return $_SESSION['user_id'] ?? null;
-}
-
-function getCurrentUsername() {
-    return $_SESSION['username'] ?? 'User';
-}
-
-function getVisibleUserIds($pdo, $user_id) {
-    if (isSuperAdmin()) {
-        return []; // Empty array means 'all' (though we usually handle this before calling)
-    }
-
-    $subordinates = [$user_id]; // Always include self
-
-    $fetchSubordinates = function($manager_id) use ($pdo, &$fetchSubordinates, &$subordinates) {
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE reporting_manager_id = ? AND id != ?");
-        $stmt->execute([$manager_id, $manager_id]); // prevent infinite loop if they report to themselves
-        $direct_reports = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        
-        foreach ($direct_reports as $report_id) {
-            if (!in_array($report_id, $subordinates)) {
-                $subordinates[] = $report_id;
-                $fetchSubordinates($report_id);
-            }
-        }
-    };
-
-    $fetchSubordinates($user_id);
-    return $subordinates;
 }
 
 // Notification Helpers
@@ -128,18 +92,5 @@ function logLeadHistory($pdo, $lead_id, $action, $details = '') {
 }
 
 // Global Activity Logger
-function logActivity($pdo, $action, $entity_type = null, $entity_id = null, $details = '') {
-    $user_id = getCurrentUserId();
-    try {
-        $stmt = $pdo->prepare("INSERT INTO activity_log (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)");
-        $stmt->execute([$user_id, $action, $entity_type, $entity_id, $details]);
-    } catch (Exception $e) {
-        // Silently fail if table doesn't exist yet to prevent breaking before update_db is run
-    }
-}
-
-// Security Helper
-function h($string) {
-    return htmlspecialchars($string ?? '', ENT_QUOTES, 'UTF-8');
-}
+// (logActivity and h() are now in auth.php)
 ?>

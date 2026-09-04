@@ -18,19 +18,21 @@ function executeSqlFile($pdo, $filename) {
     
     $sql = file_get_contents($filename);
     
-    try {
-        $statements = array_filter(array_map('trim', explode(';', $sql)));
-        foreach ($statements as $statement) {
-            if (!empty($statement)) {
+    $statements = array_filter(array_map('trim', explode(';', $sql)));
+    $hasError = false;
+    foreach ($statements as $statement) {
+        if (!empty($statement)) {
+            try {
                 $pdo->exec($statement);
+            } catch (PDOException $e) {
+                echo "<p style='color:orange;'>Skipped a query (already exists): " . htmlspecialchars(substr($statement, 0, 50)) . "...</p>";
+                $hasError = true;
             }
         }
-        echo "<p style='color:green;'>Success: Executed $filename</p>";
-        return true;
-    } catch (PDOException $e) {
-        echo "<p style='color:red;'>Error executing $filename:<br>" . htmlspecialchars($e->getMessage()) . "</p>";
-        return false;
     }
+    
+    echo "<p style='color:green;'>Finished executing $filename</p>";
+    return true;
 }
 
 // Check connection

@@ -45,7 +45,19 @@
         ?>
         <div class="card" style="background:var(--bg);border-style:dashed">
             <div class="flex-between">
-                <strong><?= e($svc['service_name']) ?></strong>
+                <div>
+                    <strong><?= e($svc['service_name']) ?></strong>
+                    <?php if (!empty($svc['scope_details'])): ?>
+                        <div style="font-size:0.85rem;margin-top:4px;color:var(--text-muted)">
+                            <?php $scopes = json_decode($svc['scope_details'], true); ?>
+                            <?php if (is_array($scopes)): ?>
+                                <?php foreach ($scopes as $sk => $sv): ?>
+                                    <span style="background:var(--bg-hover);padding:2px 6px;border-radius:4px;margin-right:4px;"><strong><?= e($sk) ?>:</strong> <?= e($sv) ?></span>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
                 <span class="small text-muted"><?= $completed ?> / <?= $required ?> <?= e($svc['unit_label']) ?></span>
             </div>
             <div class="progress" style="margin:8px 0"><div class="progress-bar" style="width:<?= $pct ?>%"></div></div>
@@ -170,9 +182,38 @@
                 <div class="form-group"><label>Start Date</label><input type="date" name="start_date"></div>
                 <div class="form-group"><label>End Date</label><input type="date" name="end_date"></div>
             </div>
+            <div class="form-row">
+                <div class="form-group"><label>Assign Immediately To</label>
+                    <select name="assignee_id"><option value="">— Don't Assign Yet —</option><?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['name']) ?></option><?php endforeach; ?></select>
+                </div>
+            </div>
+            <hr>
+            <div class="form-group">
+                <label>Scope of Work Details (e.g. Reels, Stories, Pages)</label>
+                <div id="scope-builder">
+                    <div class="form-row" style="margin-bottom:8px">
+                        <div class="form-group" style="flex:1;margin:0"><input type="text" name="scope_keys[]" placeholder="Metric (e.g. Reels)" class="form-control"></div>
+                        <div class="form-group" style="flex:1;margin:0 8px"><input type="text" name="scope_values[]" placeholder="Value (e.g. 15)" class="form-control"></div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm mt-2" onclick="addScopeRow()">+ Add Detail</button>
+            </div>
             <div class="form-group"><label>Notes</label><textarea name="notes"></textarea></div>
             <button class="btn btn-primary">Add Service</button>
         </form>
+        <script>
+        function addScopeRow() {
+            const div = document.createElement('div');
+            div.className = 'form-row';
+            div.style.marginBottom = '8px';
+            div.innerHTML = `
+                <div class="form-group" style="flex:1;margin:0"><input type="text" name="scope_keys[]" placeholder="Metric (e.g. Reels)" class="form-control"></div>
+                <div class="form-group" style="flex:1;margin:0 8px"><input type="text" name="scope_values[]" placeholder="Value (e.g. 15)" class="form-control"></div>
+                <button type="button" class="btn btn-sm btn-danger" style="margin:0" onclick="this.parentElement.remove()">&times;</button>
+            `;
+            document.getElementById('scope-builder').appendChild(div);
+        }
+        </script>
     </div>
 </div>
 <?php endif; ?>

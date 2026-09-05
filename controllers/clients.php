@@ -93,7 +93,20 @@ switch ($action) {
         if (!Permission::canAccessClient($clientId)) Permission::deny();
         Permission::require('clients.manage_services');
         csrf_check_or_die();
-        ClientModel::addService($clientId, (int)$_POST['service_id'], (int)$_POST['quantity_required'], $_POST['manager_id'] ?: null, $_POST['start_date'] ?: null, $_POST['end_date'] ?: null, $_POST['notes'] ?: null);
+        $scopeDetails = null;
+        if (!empty($_POST['scope_keys']) && !empty($_POST['scope_values'])) {
+            $scopeArr = [];
+            foreach ($_POST['scope_keys'] as $i => $k) {
+                if (trim($k) !== '') {
+                    $scopeArr[trim($k)] = trim($_POST['scope_values'][$i] ?? '');
+                }
+            }
+            if (!empty($scopeArr)) {
+                $scopeDetails = json_encode($scopeArr);
+            }
+        }
+
+        ClientModel::addService($clientId, (int)$_POST['service_id'], (int)$_POST['quantity_required'], $_POST['manager_id'] ?: null, $_POST['start_date'] ?: null, $_POST['end_date'] ?: null, $_POST['notes'] ?: null, $scopeDetails, $_POST['assignee_id'] ?: null);
         Flash::success('Service added to client.');
         redirect(url('clients', ['action' => 'view', 'id' => $clientId]));
         break;

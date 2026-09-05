@@ -43,8 +43,10 @@ if (!Permission::has('leads.view_all') && !Permission::has('tasks.view_all')) {
 $myTeams = UserModel::teamsFor($userId);
 $roles = Auth::roles();
 
+$myAssignedServices = ClientModel::myAssignedServices($userId);
+
 render_page('dashboard/index', compact(
     'leadCounts', 'taskCounts', 'overdueTasks', 'renewals', 'activeClientsCount',
     'pendingLeaveApprovals', 'myLeave', 'todaysReport', 'managedTeams', 'teamWorkload',
-    'recentActivity', 'myTeams', 'roles', 'clientsVisible'
+    'recentActivity', 'myTeams', 'roles', 'clientsVisible', 'myAssignedServices'
 ), 'Dashboard');

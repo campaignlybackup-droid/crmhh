@@ -111,12 +111,12 @@ class ClientModel
         AuditLog::record('delete', 'client', $id);
     }
 
-    public static function addService(int $clientId, int $serviceId, int $quantityRequired, ?int $managerId, ?string $startDate, ?string $endDate, ?string $notes): int
+    public static function addService(int $clientId, int $serviceId, int $quantityRequired, ?int $managerId, ?string $startDate, ?string $endDate, ?string $notes, ?string $scopeDetails = null, ?int $assigneeId = null): int
     {
         Database::run(
-            'INSERT INTO client_services (client_id, service_id, quantity_required, manager_id, start_date, end_date, notes, created_by, created_at)
-             VALUES (?,?,?,?,?,?,?,?,NOW())',
-            [$clientId, $serviceId, $quantityRequired, $managerId ?: null, $startDate ?: null, $endDate ?: null, $notes ?: null, Auth::id()]
+            'INSERT INTO client_services (client_id, service_id, quantity_required, manager_id, start_date, end_date, scope_details, notes, created_by, created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,NOW())',
+            [$clientId, $serviceId, $quantityRequired, $managerId ?: null, $startDate ?: null, $endDate ?: null, $scopeDetails, $notes ?: null, Auth::id()]
         );
         $id = (int)Database::lastInsertId();
         $serviceName = Database::scalar('SELECT name FROM services WHERE id = ?', [$serviceId]);
@@ -125,6 +125,11 @@ class ClientModel
             Notifier::send($managerId, 'client_service_assigned', 'New client work assigned', "$serviceName work for this client has been assigned to you.", 'client', $clientId);
         }
         AuditLog::record('add_service', 'client', $clientId, null, $serviceName);
+
+        if ($assigneeId) {
+            self::assignEmployeeToService($id, $assigneeId, $quantityRequired);
+        }
+
         return $id;
     }
 
@@ -192,6 +197,20 @@ class ClientModel
              AND renewal_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL $days DAY) AND ({$vis['sql']})
              ORDER BY renewal_date ASC LIMIT 10",
             $vis['params']
+        );
+    }
+
+    public static function myAssignedServices(int $userId): array
+    {
+        return Database::all(
+            "SELECT cs.*, s.name AS service_name, s.unit_label, csa.quantity_assigned, csa.quantity_completed AS my_completed, csa.id AS assignment_id, c.name AS client_name, c.client_code
+             FROM client_services cs
+             JOIN services s ON s.id = cs.service_id
+             JOIN client_service_assignments csa ON csa.client_service_id = cs.id
+             JOIN clients c ON c.id = cs.client_id
+             WHERE csa.user_id = ? AND cs.status = 'active' AND cs.deleted_at IS NULL AND c.deleted_at IS NULL
+             ORDER BY c.name ASC, s.name ASC",
+            [$userId]
         );
     }
 }

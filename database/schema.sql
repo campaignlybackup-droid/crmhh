@@ -197,6 +197,7 @@ CREATE TABLE client_services (
     manager_id INT UNSIGNED DEFAULT NULL,
     start_date DATE DEFAULT NULL,
     end_date DATE DEFAULT NULL,
+    scope_details JSON DEFAULT NULL,
     notes TEXT DEFAULT NULL,
     status ENUM('active','completed','paused') NOT NULL DEFAULT 'active',
     created_by INT UNSIGNED DEFAULT NULL,

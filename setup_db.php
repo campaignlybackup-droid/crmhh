@@ -42,11 +42,8 @@ if (!$pdo) {
 
 echo "<p>Connected to database successfully.</p>";
 
-echo "<h3>Running schema.sql...</h3>";
-executeSqlFile($pdo, 'schema.sql');
-
-echo "<h3>Running migration_v2.sql...</h3>";
-executeSqlFile($pdo, 'migration_v2.sql');
+echo "<h3>Running full_database_install.sql...</h3>";
+executeSqlFile($pdo, 'full_database_install.sql');
 
 echo "<hr>";
 echo "<h3 style='color:green;'>Setup Complete!</h3>";

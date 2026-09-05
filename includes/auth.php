@@ -25,18 +25,15 @@ function getCurrentUsername() {
 }
 
 function getUserRoles($pdo, $user_id) {
-    // Simplify: Just use the `role` column in the `users` table
-    if ($user_id == ($_SESSION['user_id'] ?? 0)) {
-        $role = $_SESSION['role'] ?? 'user';
-    } else {
-        $stmt = $pdo->prepare("SELECT role FROM users WHERE id = ?");
-        $stmt->execute([$user_id]);
-        $role = $stmt->fetchColumn();
-    }
-    
-    if ($role === 'superadmin') return ['Founder'];
-    if ($role === 'manager') return ['Manager'];
-    return ['Editor'];
+    // Enterprise RBAC: Fetch from roles and user_roles tables
+    $stmt = $pdo->prepare("
+        SELECT r.name 
+        FROM roles r 
+        JOIN user_roles ur ON r.id = ur.role_id 
+        WHERE ur.user_id = ?
+    ");
+    $stmt->execute([$user_id]);
+    return $stmt->fetchAll(PDO::FETCH_COLUMN);
 }
 
 function hasRole($pdo, $user_id, $role_name) {
@@ -61,19 +58,60 @@ function getVisibleUserIds($pdo, $user_id) {
         return []; // Empty array means 'all' globally visible
     }
     
-    // If manager, they can see users who report to them
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE reporting_manager_id = ? AND deleted_at IS NULL");
-    $stmt->execute([$user_id]);
-    $subordinates = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    
+    // VISIBILITY EQUATION = ROLE + HIERARCHY
+    // If manager, get subordinates based on reporting_manager_id AND team_members
     $visible = [$user_id]; // Always see self
-    foreach ($subordinates as $member_id) {
+    
+    // 1. Direct subordinates (Hierarchy)
+    $stmt1 = $pdo->prepare("SELECT id FROM users WHERE reporting_manager_id = ? AND deleted_at IS NULL");
+    $stmt1->execute([$user_id]);
+    $subordinates = $stmt1->fetchAll(PDO::FETCH_COLUMN);
+    
+    // 2. Team members (Team)
+    $stmt2 = $pdo->prepare("
+        SELECT tm.user_id 
+        FROM team_members tm
+        JOIN teams t ON tm.team_id = t.id
+        WHERE t.manager_id = ?
+    ");
+    $stmt2->execute([$user_id]);
+    $team_members = $stmt2->fetchAll(PDO::FETCH_COLUMN);
+    
+    $combined = array_merge($subordinates, $team_members);
+    foreach ($combined as $member_id) {
         if (!in_array($member_id, $visible)) {
             $visible[] = $member_id;
         }
     }
     
     return $visible;
+}
+
+function canAccessEntity($pdo, $user_id, $entity_type, $entity_id) {
+    if (isFounder($pdo, $user_id)) return true;
+    
+    $visibleIds = getVisibleUserIds($pdo, $user_id);
+    if (empty($visibleIds)) return true; // Founder fallback
+    
+    $visibleIdsStr = implode(',', $visibleIds);
+    
+    if ($entity_type === 'Lead') {
+        $stmt = $pdo->prepare("SELECT id FROM leads WHERE id = ? AND assigned_to IN ($visibleIdsStr) AND deleted_at IS NULL");
+        $stmt->execute([$entity_id]);
+        return (bool)$stmt->fetchColumn();
+    }
+    
+    if ($entity_type === 'Task') {
+        $stmt = $pdo->prepare("SELECT id FROM tasks WHERE id = ? AND assigned_to IN ($visibleIdsStr) AND deleted_at IS NULL");
+        $stmt->execute([$entity_id]);
+        return (bool)$stmt->fetchColumn();
+    }
+    
+    if ($entity_type === 'Client') {
+        return true; // Simplified for Phase 1
+    }
+    
+    return false;
 }
 
 function logActivity($pdo, $action, $entity_type, $entity_id, $old_val = null, $new_val = null) {

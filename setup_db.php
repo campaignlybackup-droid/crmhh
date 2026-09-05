@@ -42,8 +42,8 @@ if (!$pdo) {
 
 echo "<p>Connected to database successfully.</p>";
 
-echo "<h3>Running full_database_install.sql...</h3>";
-executeSqlFile($pdo, 'full_database_install.sql');
+echo "<h3>Running enterprise_install.sql...</h3>";
+executeSqlFile($pdo, 'enterprise_install.sql');
 
 echo "<hr>";
 echo "<h3 style='color:green;'>Setup Complete!</h3>";

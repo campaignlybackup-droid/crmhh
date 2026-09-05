@@ -41,7 +41,9 @@ switch ($action) {
 
     case 'create': {
         Permission::require('clients.create');
-        render_page('clients/form', ['client' => null], 'New Client');
+        $allServices = ServiceModel::all();
+        $managers = UserModel::activeSelectList();
+        render_page('clients/form', ['client' => null, 'allServices' => $allServices, 'managers' => $managers], 'New Client');
         break;
     }
 
@@ -51,6 +53,23 @@ switch ($action) {
         $v = Validator::make($_POST)->required('name', 'Client name')->email('email', 'Email');
         if ($v->fails()) { Flash::error($v->firstError()); redirect(url('clients', ['action' => 'create'])); }
         $id = ClientModel::create($_POST);
+        
+        if (!empty($_POST['initial_service_id'])) {
+            $scopeDetails = null;
+            if (!empty($_POST['scope_keys']) && !empty($_POST['scope_values'])) {
+                $scopeArr = [];
+                foreach ($_POST['scope_keys'] as $i => $k) {
+                    if (trim($k) !== '') {
+                        $scopeArr[trim($k)] = trim($_POST['scope_values'][$i] ?? '');
+                    }
+                }
+                if (!empty($scopeArr)) {
+                    $scopeDetails = json_encode($scopeArr);
+                }
+            }
+            ClientModel::addService($id, (int)$_POST['initial_service_id'], 0, $_POST['initial_manager_id'] ?: null, $_POST['start_date'] ?: null, $_POST['renewal_date'] ?: null, null, $scopeDetails, $_POST['initial_assignee_id'] ?: null);
+        }
+        
         Flash::success('Client created.');
         redirect(url('clients', ['action' => 'view', 'id' => $id]));
         break;

@@ -1,301 +1,268 @@
 <?php
-require_once 'functions.php';
+require_once __DIR__ . '/includes/auth.php';
 requireLogin();
 
-$isSuper = isSuperAdmin();
 $user_id = getCurrentUserId();
+$isFounder = isFounder($pdo, $user_id);
 $visibleIds = getVisibleUserIds($pdo, $user_id);
-$visibleIdsStr = implode(',', $visibleIds);
+$visibleIdsStr = empty($visibleIds) ? '' : implode(',', $visibleIds);
 
-$clients = $pdo->query("SELECT id, client_name FROM clients ORDER BY client_name ASC")->fetchAll();
-$users = $pdo->query("SELECT id, username FROM users ORDER BY username ASC")->fetchAll();
+// Determine Year and Month
+$year = isset($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
+$month = isset($_GET['month']) ? (int)$_GET['month'] : (int)date('n');
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
-        $action = $_POST['action'];
+// Navigation logic
+$prevMonth = $month - 1;
+$prevYear = $year;
+if ($prevMonth == 0) { $prevMonth = 12; $prevYear--; }
+$nextMonth = $month + 1;
+$nextYear = $year;
+if ($nextMonth == 13) { $nextMonth = 1; $nextYear++; }
 
-        if ($action === 'add' || $action === 'edit') {
-            $id = $_POST['id'] ?? null;
-            $post_title = $_POST['post_title'];
-            $platform = $_POST['platform'];
-            $status = $_POST['status'];
-            $post_date = $_POST['post_date'] ?: null;
-            $assigned_to = $_POST['assigned_to'] ?: null;
-            $caption = $_POST['caption'];
-            $drive_link = $_POST['drive_link'];
-            $client_id = $_POST['client_id'] ?: null;
+// Fetch Tasks for the selected month
+$startDate = sprintf('%04d-%02d-01', $year, $month);
+$endDate = date('Y-m-t', strtotime($startDate));
 
-            if ($action === 'add') {
-                $stmt = $pdo->prepare("INSERT INTO content_calendar (post_title, platform, status, post_date, assigned_to, caption, drive_link, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$post_title, $platform, $status, $post_date, $assigned_to, $caption, $drive_link, $client_id]);
-                $_SESSION['flash_success'] = "Content added to calendar.";
-            } else if ($action === 'edit' && $id) {
-                $stmt = $pdo->prepare("UPDATE content_calendar SET post_title=?, platform=?, status=?, post_date=?, assigned_to=?, caption=?, drive_link=?, client_id=? WHERE id=?");
-                $stmt->execute([$post_title, $platform, $status, $post_date, $assigned_to, $caption, $drive_link, $client_id, $id]);
-                $_SESSION['flash_success'] = "Content updated.";
-            }
-            header("Location: content_calendar.php");
-            exit;
-        } elseif ($action === 'delete') {
-            $id = $_POST['id'];
-            $stmt = $pdo->prepare("DELETE FROM content_calendar WHERE id = ?");
-            $stmt->execute([$id]);
-            $_SESSION['flash_success'] = "Content deleted.";
-            header("Location: content_calendar.php");
-            exit;
-        }
-    }
+$tasksSql = "
+    SELECT t.*, c.company_name, u.username as assigned_user
+    FROM tasks t
+    LEFT JOIN clients c ON t.client_id = c.id
+    LEFT JOIN users u ON t.assigned_to = u.id
+    WHERE t.deleted_at IS NULL
+    AND t.due_date >= ? AND t.due_date <= ?
+";
+$params = [$startDate, $endDate];
+
+if (!$isFounder) {
+    $tasksSql .= " AND t.assigned_to IN ($visibleIdsStr)";
 }
+$tasksSql .= " ORDER BY t.due_date ASC, t.priority DESC";
 
-$search = $_GET['search'] ?? '';
-$filter_status = $_GET['status'] ?? '';
-$filter_platform = $_GET['platform'] ?? '';
-
-$query = "SELECT cc.*, c.client_name, u.username as assigned_user FROM content_calendar cc LEFT JOIN clients c ON cc.client_id = c.id LEFT JOIN users u ON cc.assigned_to = u.id WHERE 1=1 ";
-$params = [];
-
-if (!$isSuper) {
-    $query .= " AND cc.assigned_to IN ($visibleIdsStr) ";
-}
-
-if ($search) {
-    $query .= " AND cc.post_title LIKE ? ";
-    $params[] = "%$search%";
-}
-if ($filter_status) {
-    $query .= " AND cc.status = ? ";
-    $params[] = $filter_status;
-}
-if ($filter_platform) {
-    $query .= " AND cc.platform = ? ";
-    $params[] = $filter_platform;
-}
-$query .= " ORDER BY cc.post_date DESC, cc.created_at DESC";
-
-$stmt = $pdo->prepare($query);
+$stmt = $pdo->prepare($tasksSql);
 $stmt->execute($params);
-$posts = $stmt->fetchAll();
+$rawTasks = $stmt->fetchAll();
 
-include 'header.php';
+// Group tasks by day
+$calendarTasks = [];
+foreach ($rawTasks as $task) {
+    $day = (int)date('j', strtotime($task['due_date']));
+    $calendarTasks[$day][] = $task;
+}
+
+// Calendar Generation Variables
+$daysInMonth = date('t', strtotime($startDate));
+$firstDayOfWeek = date('w', strtotime($startDate)); // 0 = Sunday, 6 = Saturday
+$monthName = date('F Y', strtotime($startDate));
+
 ?>
-
-<div class="row mb-4 align-items-center">
-    <div class="col-md-6">
-        <h3 class="fw-bold mb-0">Content Calendar</h3>
-    </div>
-    <div class="col-md-6 text-md-end mt-3 mt-md-0">
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#contentModal" onclick="resetForm()">
-            <i class="bi bi-plus-lg"></i> Add Post
-        </button>
-    </div>
-</div>
-
-<div class="card mb-4">
-    <div class="card-body bg-light rounded d-flex flex-wrap gap-2">
-        <form method="GET" class="d-flex w-100 gap-2">
-            <input type="text" name="search" class="form-control" placeholder="Search posts..." value="<?= h($search) ?>">
-            <select name="status" class="form-select" style="max-width: 150px;">
-                <option value="">All Statuses</option>
-                <?php foreach(['Draft', 'Scheduled', 'Posted'] as $s): ?>
-                    <option value="<?= $s ?>" <?= $filter_status === $s ? 'selected' : '' ?>><?= $s ?></option>
-                <?php endforeach; ?>
-            </select>
-            <select name="platform" class="form-select" style="max-width: 150px;">
-                <option value="">All Platforms</option>
-                <?php foreach(['IG', 'TikTok', 'LinkedIn'] as $p): ?>
-                    <option value="<?= $p ?>" <?= $filter_platform === $p ? 'selected' : '' ?>><?= $p ?></option>
-                <?php endforeach; ?>
-            </select>
-            <button type="submit" class="btn btn-primary">Filter</button>
-            <a href="content_calendar.php" class="btn btn-outline-secondary">Reset</a>
-        </form>
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="bg-light">
-                    <tr>
-                        <th class="ps-3">Post Title</th>
-                        <th>Client</th>
-                        <th>Platform / Status</th>
-                        <th>Post Date</th>
-                        <th>Assigned To</th>
-                        <th class="text-end pe-3">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if(empty($posts)): ?>
-                        <tr><td colspan="6" class="text-center py-4 text-muted">No content found.</td></tr>
-                    <?php else: ?>
-                        <?php foreach($posts as $post): ?>
-                        <tr>
-                            <td class="ps-3 fw-bold">
-                                <?= h($post['post_title']) ?>
-                                <?php if($post['drive_link']): ?>
-                                    <a href="<?= h($post['drive_link']) ?>" target="_blank" class="text-decoration-none ms-2" title="Drive Link"><i class="bi bi-folder-fill text-warning"></i></a>
-                                <?php endif; ?>
-                                <?php if($post['caption']): ?>
-                                    <div class="small text-muted text-truncate mt-1" style="max-width: 250px;" title="<?= h($post['caption']) ?>">
-                                        <?= h($post['caption']) ?>
-                                    </div>
-                                <?php endif; ?>
-                            </td>
-                            <td><?= h($post['client_name'] ?? 'Internal') ?></td>
-                            <td>
-                                <div>
-                                    <?php
-                                        $icon = 'bi-instagram';
-                                        if ($post['platform'] == 'TikTok') $icon = 'bi-tiktok';
-                                        if ($post['platform'] == 'LinkedIn') $icon = 'bi-linkedin';
-                                    ?>
-                                    <i class="bi <?= $icon ?> me-1"></i> <?= h($post['platform']) ?>
-                                </div>
-                                <div class="mt-1">
-                                    <?php
-                                        $sc = 'bg-soft-secondary';
-                                        if ($post['status'] == 'Scheduled') $sc = 'bg-soft-warning';
-                                        if ($post['status'] == 'Posted') $sc = 'bg-soft-success';
-                                    ?>
-                                    <span class="badge <?= $sc ?>"><?= h($post['status']) ?></span>
-                                </div>
-                            </td>
-                            <td>
-                                <span class="<?= strtotime($post['post_date']) < strtotime('today') && $post['status'] != 'Posted' ? 'text-danger fw-bold' : '' ?>">
-                                    <?= h($post['post_date'] ?? 'TBD') ?>
-                                </span>
-                            </td>
-                            <td><?= h($post['assigned_user'] ?? 'Unassigned') ?></td>
-                            <td class="text-end pe-3">
-                                <button class="btn btn-sm btn-outline-primary" onclick='editPost(<?= json_encode($post) ?>)'><i class="bi bi-pencil"></i></button>
-                                <form method="POST" class="d-inline" onsubmit="return confirm('Delete this post?');">
-                                    <input type="hidden" name="action" value="delete">
-                                    <input type="hidden" name="id" value="<?= $post['id'] ?>">
-                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                </form>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<!-- Add/Edit Modal -->
-<div class="modal fade" id="contentModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <form method="POST" class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold" id="contentModalTitle">Add Post</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Content Calendar - CRM</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+            background-color: #dee2e6;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .calendar-header {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            text-align: center;
+            padding: 10px;
+            color: #495057;
+        }
+        .calendar-day {
+            background-color: #ffffff;
+            min-height: 120px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+        .calendar-day.empty { background-color: #f8f9fa; }
+        .calendar-day.today { background-color: #fff8e1; border: 2px solid #ffc107; }
+        .day-number {
+            font-weight: bold;
+            color: #6c757d;
+            margin-bottom: 5px;
+            text-align: right;
+        }
+        .task-badge {
+            font-size: 0.75rem;
+            padding: 4px 6px;
+            margin-bottom: 4px;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: block;
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+        .task-badge:hover { opacity: 0.8; }
+        
+        .status-completed { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
+        .priority-urgent { background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; }
+        .priority-high { background-color: #fff3cd; color: #664d03; border: 1px solid #ffecb5; }
+        .default-badge { background-color: #e2e3e5; color: #41464b; border: 1px solid #d3d6d8; }
+    </style>
+</head>
+<body>
+<div class="d-flex">
+    <?php include 'header.php'; ?>
+    <div class="main-content flex-grow-1 p-4" style="margin-left: 250px; overflow-y: auto; height: 100vh;">
+        
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="fw-bold mb-0">Task Calendar</h2>
+            <div class="d-flex align-items-center gap-3">
+                <a href="?year=<?= $prevYear ?>&month=<?= $prevMonth ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chevron-left"></i></a>
+                <h4 class="mb-0 fw-bold text-primary mx-3" style="min-width: 180px; text-align: center;"><?= $monthName ?></h4>
+                <a href="?year=<?= $nextYear ?>&month=<?= $nextMonth ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chevron-right"></i></a>
+                <a href="?year=<?= date('Y') ?>&month=<?= date('n') ?>" class="btn btn-primary btn-sm ms-3 fw-bold">Today</a>
             </div>
-            <div class="modal-body">
-                <input type="hidden" name="action" id="contentAction" value="add">
-                <input type="hidden" name="id" id="contentId" value="">
-                
-                <div class="row g-3">
-                    <div class="col-md-12">
-                        <label class="form-label text-muted small fw-bold">POST TITLE *</label>
-                        <input type="text" name="post_title" id="contentTitle" class="form-control" required>
-                    </div>
+        </div>
 
-                    <div class="col-md-6">
-                        <label class="form-label text-muted small fw-bold">CLIENT</label>
-                        <select name="client_id" id="contentClient" class="form-select">
-                            <option value="">Internal / None</option>
-                            <?php foreach($clients as $c): ?>
-                                <option value="<?= $c['id'] ?>"><?= h($c['client_name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-body p-0">
+                <div class="calendar-grid">
+                    <!-- Week Headers -->
+                    <div class="calendar-header">Sun</div>
+                    <div class="calendar-header">Mon</div>
+                    <div class="calendar-header">Tue</div>
+                    <div class="calendar-header">Wed</div>
+                    <div class="calendar-header">Thu</div>
+                    <div class="calendar-header">Fri</div>
+                    <div class="calendar-header">Sat</div>
 
-                    <div class="col-md-6">
-                        <label class="form-label text-muted small fw-bold">PLATFORM</label>
-                        <select name="platform" id="contentPlatform" class="form-select">
-                            <option value="IG">IG</option>
-                            <option value="TikTok">TikTok</option>
-                            <option value="LinkedIn">LinkedIn</option>
-                        </select>
-                    </div>
+                    <!-- Empty slots before 1st of month -->
+                    <?php for($i = 0; $i < $firstDayOfWeek; $i++): ?>
+                        <div class="calendar-day empty"></div>
+                    <?php endfor; ?>
 
-                    <div class="col-md-6">
-                        <label class="form-label text-muted small fw-bold">STATUS</label>
-                        <select name="status" id="contentStatus" class="form-select">
-                            <option value="Draft">Draft</option>
-                            <option value="Scheduled">Scheduled</option>
-                            <option value="Posted">Posted</option>
-                        </select>
-                    </div>
+                    <!-- Days -->
+                    <?php 
+                    $currentDate = date('Y-m-d');
+                    for($day = 1; $day <= $daysInMonth; $day++): 
+                        $thisDate = sprintf('%04d-%02d-%02d', $year, $month, $day);
+                        $isToday = ($thisDate === $currentDate);
+                    ?>
+                        <div class="calendar-day <?= $isToday ? 'today' : '' ?>">
+                            <div class="day-number <?= $isToday ? 'text-warning' : '' ?>"><?= $day ?></div>
+                            
+                            <?php if(isset($calendarTasks[$day])): ?>
+                                <?php foreach($calendarTasks[$day] as $task): 
+                                    $badgeClass = 'default-badge';
+                                    if ($task['status'] === 'Completed') {
+                                        $badgeClass = 'status-completed';
+                                    } elseif ($task['priority'] === 'Urgent') {
+                                        $badgeClass = 'priority-urgent';
+                                    } elseif ($task['priority'] === 'High') {
+                                        $badgeClass = 'priority-high';
+                                    }
+                                ?>
+                                    <div class="task-badge <?= $badgeClass ?>" onclick='showTaskModal(<?= json_encode($task) ?>)'>
+                                        <strong><?= h($task['task_name']) ?></strong><br>
+                                        <span class="text-muted" style="font-size:0.65rem;"><?= h($task['company_name'] ?? 'Internal') ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                            
+                        </div>
+                    <?php endfor; ?>
 
-                    <div class="col-md-6">
-                        <label class="form-label text-muted small fw-bold">POST DATE</label>
-                        <input type="date" name="post_date" id="contentDate" class="form-control">
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label text-muted small fw-bold">ASSIGNED TO</label>
-                        <select name="assigned_to" id="contentAssigned" class="form-select">
-                            <option value="">Unassigned</option>
-                            <?php foreach($users as $u): ?>
-                                <option value="<?= $u['id'] ?>"><?= h($u['username']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label text-muted small fw-bold">DRIVE LINK (ASSETS)</label>
-                        <input type="url" name="drive_link" id="contentDrive" class="form-control">
-                    </div>
-
-                    <div class="col-12">
-                        <label class="form-label text-muted small fw-bold">CAPTION</label>
-                        <textarea name="caption" id="contentCaption" class="form-control" rows="4"></textarea>
-                    </div>
+                    <!-- Empty slots after end of month to complete grid -->
+                    <?php 
+                    $totalCells = $firstDayOfWeek + $daysInMonth;
+                    $remainingCells = ($totalCells % 7 == 0) ? 0 : 7 - ($totalCells % 7);
+                    for($i = 0; $i < $remainingCells; $i++): 
+                    ?>
+                        <div class="calendar-day empty"></div>
+                    <?php endfor; ?>
                 </div>
             </div>
-            <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-primary">Save Post</button>
-            </div>
-        </form>
+        </div>
+        
     </div>
 </div>
 
-<script>
-function resetForm() {
-    document.getElementById('contentAction').value = 'add';
-    document.getElementById('contentId').value = '';
-    document.getElementById('contentModalTitle').innerText = 'Add Post';
-    document.getElementById('contentTitle').value = '';
-    document.getElementById('contentClient').value = '';
-    document.getElementById('contentPlatform').value = 'IG';
-    document.getElementById('contentStatus').value = 'Draft';
-    document.getElementById('contentDate').value = '';
-    document.getElementById('contentAssigned').value = '';
-    document.getElementById('contentDrive').value = '';
-    document.getElementById('contentCaption').value = '';
-}
+<!-- Task Quick View Modal -->
+<div class="modal fade" id="taskModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content rounded-4 border-0 shadow">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold" id="modalTitle">Task Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-3">
+        <h4 id="mTaskName" class="fw-bold text-primary mb-1"></h4>
+        <p id="mClient" class="text-muted small mb-3"><i class="bi bi-briefcase"></i> <span></span></p>
+        
+        <p id="mDesc" class="mb-4"></p>
+        
+        <div class="row mb-3">
+            <div class="col-6">
+                <span class="small text-muted fw-bold d-block">Status</span>
+                <span id="mStatus" class="badge bg-secondary"></span>
+            </div>
+            <div class="col-6">
+                <span class="small text-muted fw-bold d-block">Priority</span>
+                <span id="mPriority" class="badge bg-secondary"></span>
+            </div>
+        </div>
+        <div class="row mb-4">
+            <div class="col-6">
+                <span class="small text-muted fw-bold d-block">Assigned To</span>
+                <span id="mAssignee" class="fw-bold"><i class="bi bi-person"></i> <span></span></span>
+            </div>
+            <div class="col-6">
+                <span class="small text-muted fw-bold d-block">Due Date</span>
+                <span id="mDate" class="text-danger fw-bold"><i class="bi bi-calendar"></i> <span></span></span>
+            </div>
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+        <a href="tasks.php" class="btn btn-primary fw-bold">Open Execution Engine</a>
+      </div>
+    </div>
+  </div>
+</div>
 
-function editPost(post) {
-    document.getElementById('contentAction').value = 'edit';
-    document.getElementById('contentId').value = post.id;
-    document.getElementById('contentModalTitle').innerText = 'Edit Post';
-    document.getElementById('contentTitle').value = post.post_title;
-    document.getElementById('contentClient').value = post.client_id || '';
-    document.getElementById('contentPlatform').value = post.platform;
-    document.getElementById('contentStatus').value = post.status;
-    document.getElementById('contentDate').value = post.post_date;
-    document.getElementById('contentAssigned').value = post.assigned_to || '';
-    document.getElementById('contentDrive').value = post.drive_link;
-    document.getElementById('contentCaption').value = post.caption;
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function showTaskModal(task) {
+    document.getElementById('mTaskName').innerText = task.task_name;
+    document.getElementById('mClient').querySelector('span').innerText = task.company_name || 'Internal';
+    document.getElementById('mDesc').innerText = task.description;
+    document.getElementById('mStatus').innerText = task.status;
     
-    var modal = new bootstrap.Modal(document.getElementById('contentModal'));
-    modal.show();
+    let pBadge = document.getElementById('mPriority');
+    pBadge.innerText = task.priority;
+    pBadge.className = 'badge';
+    if(task.priority == 'Urgent') pBadge.classList.add('bg-danger');
+    else if(task.priority == 'High') pBadge.classList.add('bg-warning', 'text-dark');
+    else pBadge.classList.add('bg-secondary');
+    
+    let sBadge = document.getElementById('mStatus');
+    sBadge.className = 'badge';
+    if(task.status == 'Completed') sBadge.classList.add('bg-success');
+    else if(task.status == 'In Progress') sBadge.classList.add('bg-primary');
+    else sBadge.classList.add('bg-secondary');
+
+    document.getElementById('mAssignee').querySelector('span').innerText = task.assigned_user || 'Unassigned';
+    document.getElementById('mDate').querySelector('span').innerText = task.due_date;
+    
+    new bootstrap.Modal(document.getElementById('taskModal')).show();
 }
 </script>
-
-<?php include 'footer.php'; ?>
+</body>
+</html>

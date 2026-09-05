@@ -122,8 +122,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <a href="tasks.php" class="sidebar-link <?= $current_page == 'tasks.php' ? 'active' : '' ?>">
                 <i class="bi bi-check2-square"></i> My Tasks
             </a>
-            <a href="daily_work.php" class="sidebar-link <?= $current_page == 'daily_work.php' ? 'active' : '' ?>">
-                <i class="bi bi-journal-check"></i> Daily Work
+            <a href="daily_standup.php" class="sidebar-link <?= $current_page == 'daily_standup.php' ? 'active' : '' ?>">
+                <i class="bi bi-journal-check"></i> Daily Standup
             </a>
             
             

@@ -178,3 +178,13 @@ CREATE TABLE IF NOT EXISTS founder_availability (
     status ENUM('Available', 'Busy', 'Meeting', 'Unavailable') DEFAULT 'Available',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS daily_standups (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    yesterday_work TEXT NOT NULL,
+    today_plan TEXT NOT NULL,
+    blockers TEXT,
+    created_at DATE NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

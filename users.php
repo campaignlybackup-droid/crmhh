@@ -7,22 +7,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         $action = $_POST['action'];
 
-        // Helper to sync RBAC user_roles
-        $syncUserRole = function($pdo, $user_id, $role_enum) {
-            $role_name = 'Editor';
-            if ($role_enum === 'superadmin') $role_name = 'Founder';
-            if ($role_enum === 'manager') $role_name = 'Manager';
-            
-            $stmt = $pdo->prepare("SELECT id FROM roles WHERE name = ?");
-            $stmt->execute([$role_name]);
-            $role_id = $stmt->fetchColumn();
-            
-            if ($role_id) {
-                $pdo->prepare("DELETE FROM user_roles WHERE user_id = ?")->execute([$user_id]);
-                $pdo->prepare("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)")->execute([$user_id, $role_id]);
-            }
-        };
-
         if ($action === 'add' || $action === 'edit') {
             $id = $_POST['id'] ?? null;
             $username = $_POST['username'];
@@ -45,7 +29,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $stmt = $pdo->prepare("INSERT INTO users (username, password_hash, role, phone, start_date, designation, department, salary, reporting_manager_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                         $stmt->execute([$username, $hash, $role, $phone, $start_date, $designation, $department, $salary, $reporting_manager_id, $status]);
                         $new_id = $pdo->lastInsertId();
-                        $syncUserRole($pdo, $new_id, $role);
                         $_SESSION['flash_success'] = "Team member added successfully.";
                     } catch(PDOException $e) {
                         $_SESSION['flash_error'] = "Username might already exist.";
@@ -60,7 +43,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt = $pdo->prepare("UPDATE users SET username=?, role=?, phone=?, start_date=?, designation=?, department=?, salary=?, reporting_manager_id=?, status=? WHERE id=?");
                     $stmt->execute([$username, $role, $phone, $start_date, $designation, $department, $salary, $reporting_manager_id, $status, $id]);
                 }
-                $syncUserRole($pdo, $id, $role);
                 $_SESSION['flash_success'] = "Team member updated successfully.";
             }
             header("Location: users.php");

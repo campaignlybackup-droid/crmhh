@@ -77,25 +77,18 @@
     <div class="card-title">My Assigned Work & Scopes</div>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Client</th><th>Service</th><th>Scope Details</th><th>Progress</th></tr></thead>
+            <thead><tr><th>Client</th><th>Service</th><th>Assigned Requirement</th><th>Deadline</th><th>Progress</th></tr></thead>
             <tbody>
                 <?php foreach ($myAssignedServices as $svc): ?>
                 <tr>
                     <td><a href="<?= url('clients', ['action' => 'view', 'id' => $svc['client_id']]) ?>"><?= e($svc['client_name']) ?> <span class="small text-muted">(<?= e($svc['client_code']) ?>)</span></a></td>
                     <td><strong><?= e($svc['service_name']) ?></strong></td>
                     <td>
-                        <?php if (!empty($svc['scope_details'])): ?>
-                            <?php $scopes = json_decode($svc['scope_details'], true); ?>
-                            <?php if (is_array($scopes)): ?>
-                                <?php foreach ($scopes as $sk => $sv): ?>
-                                    <span style="background:var(--bg-hover);padding:2px 6px;border-radius:4px;margin-right:4px;font-size:0.85rem;display:inline-block;margin-bottom:4px;"><strong><?= e($sk) ?>:</strong> <?= e($sv) ?></span>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        <?php else: ?>
-                            <span class="text-muted small">Standard scope</span>
-                        <?php endif; ?>
+                        <strong><?= e($svc['requirement_name']) ?></strong>
+                        <?php if (!empty($svc['req_notes'])): ?><br><span class="text-muted small"><?= e($svc['req_notes']) ?></span><?php endif; ?>
                     </td>
-                    <td><?= $svc['my_completed'] ?> / <?= $svc['quantity_assigned'] !== null ? $svc['quantity_assigned'] : '—' ?> <?= e($svc['unit_label']) ?></td>
+                    <td><?= format_date($svc['deadline']) ?: '—' ?></td>
+                    <td><?= $svc['my_completed'] ?> / <?= $svc['quantity_assigned'] !== null ? $svc['quantity_assigned'] : '—' ?></td>
                 </tr>
                 <?php endforeach; ?>
             </tbody>

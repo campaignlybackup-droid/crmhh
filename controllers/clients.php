@@ -143,16 +143,19 @@ switch ($action) {
         break;
     }
 
-    case 'assign_employee': {
+    case 'add_requirement': {
         $clientServiceId = (int)($_POST['client_service_id'] ?? 0);
         $clientId = (int)($_POST['client_id'] ?? 0);
         if (!Permission::canAccessClient($clientId)) Permission::deny();
         Permission::requireAny(['clients.manage_services', 'clients.assign']);
         csrf_check_or_die();
         $userId = (int)($_POST['user_id'] ?? 0);
-        if ($userId) {
-            ClientModel::assignEmployeeToService($clientServiceId, $userId, $_POST['quantity_assigned'] !== '' ? (int)$_POST['quantity_assigned'] : null);
-            Flash::success('Employee assigned to this work.');
+        $reqName = trim($_POST['requirement_name'] ?? '');
+        if ($userId && $reqName !== '') {
+            ClientModel::addRequirement($clientServiceId, $reqName, $userId, $_POST['quantity_assigned'] !== '' ? (int)$_POST['quantity_assigned'] : null, $_POST['deadline'] ?: null, $_POST['notes'] ?: null);
+            Flash::success('Requirement assigned to employee.');
+        } else {
+            Flash::error('Requirement name and assignee are required.');
         }
         redirect(url('clients', ['action' => 'view', 'id' => $clientId]));
         break;

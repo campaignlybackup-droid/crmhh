@@ -25,6 +25,9 @@
         </div>
         <div class="form-group"><label>Start Date</label><input type="date" name="start_date" value="<?= e($client['start_date'] ?? '') ?>"></div>
         <div class="form-group"><label>Renewal Date</label><input type="date" name="renewal_date" value="<?= e($client['renewal_date'] ?? '') ?>"></div>
+        <?php if (Permission::hasAny(['clients.edit', 'clients.create'])): ?>
+        <div class="form-group"><label>Retention Date</label><input type="date" name="retention_date" value="<?= e($client['retention_date'] ?? '') ?>"></div>
+        <?php endif; ?>
     </div>
     <div class="form-group"><label>Google Drive Link</label><input type="url" name="drive_link" value="<?= e($client['drive_link'] ?? '') ?>" placeholder="https://drive.google.com/..."></div>
     <div class="form-group"><label>Notes</label><textarea name="notes"><?= e($client['notes'] ?? '') ?></textarea></div>
@@ -37,10 +40,10 @@
             <select name="initial_service_id"><option value="">— None —</option><?php foreach ($allServices as $s): ?><option value="<?= $s['id'] ?>"><?= e($s['name']) ?></option><?php endforeach; ?></select>
         </div>
         <div class="form-group"><label>Manager</label>
-            <select name="initial_manager_id"><option value="">— Unassigned —</option><?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['name']) ?></option><?php endforeach; ?></select>
+            <select name="initial_manager_id"><option value="">— Unassigned —</option><?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['name']) ?><?= $m['id'] === Auth::id() ? ' (YOU)' : '' ?></option><?php endforeach; ?></select>
         </div>
         <div class="form-group"><label>Assign To</label>
-            <select name="initial_assignee_id"><option value="">— Unassigned —</option><?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['name']) ?></option><?php endforeach; ?></select>
+            <select name="initial_assignee_id"><option value="">— Unassigned —</option><?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['name']) ?><?= $m['id'] === Auth::id() ? ' (YOU)' : '' ?></option><?php endforeach; ?></select>
         </div>
     </div>
     <div class="form-group">

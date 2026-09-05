@@ -68,7 +68,7 @@ class ClientModel
     {
         return Database::all(
             'SELECT csa.*, u.name AS user_name FROM client_service_assignments csa
-             JOIN users u ON u.id = csa.user_id WHERE csa.client_service_id = ? ORDER BY u.name',
+             JOIN users u ON u.id = csa.user_id WHERE csa.client_service_id = ? ORDER BY csa.id ASC',
             [$clientServiceId]
         );
     }
@@ -77,12 +77,12 @@ class ClientModel
     {
         $code = next_code('clients', 'client_code', 'CL');
         Database::run(
-            'INSERT INTO clients (client_code, name, company, contact_person, phone, email, website, status, start_date, renewal_date, drive_link, notes, source_lead_id, created_by, created_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())',
+            'INSERT INTO clients (client_code, name, company, contact_person, phone, email, website, status, start_date, renewal_date, retention_date, drive_link, notes, source_lead_id, created_by, created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())',
             [
                 $code, $data['name'], $data['company'] ?: null, $data['contact_person'] ?: null, $data['phone'] ?: null,
                 $data['email'] ?: null, $data['website'] ?: null, $data['status'] ?: 'active', $data['start_date'] ?: null,
-                $data['renewal_date'] ?: null, $data['drive_link'] ?: null, $data['notes'] ?: null, $data['source_lead_id'] ?: null, Auth::id(),
+                $data['renewal_date'] ?: null, $data['retention_date'] ?: null, $data['drive_link'] ?: null, $data['notes'] ?: null, $data['source_lead_id'] ?: null, Auth::id(),
             ]
         );
         $id = (int)Database::lastInsertId();
@@ -94,11 +94,11 @@ class ClientModel
     public static function update(int $id, array $data): void
     {
         Database::run(
-            'UPDATE clients SET name=?, company=?, contact_person=?, phone=?, email=?, website=?, status=?, start_date=?, renewal_date=?, drive_link=?, notes=? WHERE id=?',
+            'UPDATE clients SET name=?, company=?, contact_person=?, phone=?, email=?, website=?, status=?, start_date=?, renewal_date=?, retention_date=?, drive_link=?, notes=? WHERE id=?',
             [
                 $data['name'], $data['company'] ?: null, $data['contact_person'] ?: null, $data['phone'] ?: null,
                 $data['email'] ?: null, $data['website'] ?: null, $data['status'] ?: 'active', $data['start_date'] ?: null,
-                $data['renewal_date'] ?: null, $data['drive_link'] ?: null, $data['notes'] ?: null, $id,
+                $data['renewal_date'] ?: null, $data['retention_date'] ?: null, $data['drive_link'] ?: null, $data['notes'] ?: null, $id,
             ]
         );
         ActivityModel::log('client', $id, 'updated', 'Client details updated');
@@ -127,7 +127,7 @@ class ClientModel
         AuditLog::record('add_service', 'client', $clientId, null, $serviceName);
 
         if ($assigneeId) {
-            self::assignEmployeeToService($id, $assigneeId, $quantityRequired);
+            self::addRequirement($id, 'Initial Assignment', $assigneeId, $quantityRequired, null, null);
         }
 
         return $id;
@@ -146,23 +146,18 @@ class ClientModel
         AuditLog::record('update_service', 'client_service', $clientServiceId, null, "qty=$quantityRequired,status=$status");
     }
 
-    public static function assignEmployeeToService(int $clientServiceId, int $userId, ?int $quantity): int
+    public static function addRequirement(int $clientServiceId, string $reqName, int $userId, ?int $quantity, ?string $deadline, ?string $notes): int
     {
-        $existing = Database::one('SELECT id FROM client_service_assignments WHERE client_service_id = ? AND user_id = ?', [$clientServiceId, $userId]);
-        if ($existing) {
-            Database::run('UPDATE client_service_assignments SET quantity_assigned = ? WHERE id = ?', [$quantity, $existing['id']]);
-            $id = (int)$existing['id'];
-        } else {
-            Database::run(
-                'INSERT INTO client_service_assignments (client_service_id, user_id, quantity_assigned, assigned_by, assigned_at) VALUES (?,?,?,?,NOW())',
-                [$clientServiceId, $userId, $quantity, Auth::id()]
-            );
-            $id = (int)Database::lastInsertId();
-        }
+        Database::run(
+            'INSERT INTO client_service_assignments (client_service_id, requirement_name, user_id, quantity_assigned, deadline, notes, assigned_by, assigned_at) VALUES (?,?,?,?,?,?,?,NOW())',
+            [$clientServiceId, $reqName, $userId, $quantity, $deadline ?: null, $notes ?: null, Auth::id()]
+        );
+        $id = (int)Database::lastInsertId();
+        
         $cs = Database::one('SELECT cs.client_id, s.name AS service_name FROM client_services cs JOIN services s ON s.id = cs.service_id WHERE cs.id = ?', [$clientServiceId]);
         if ($cs) {
-            ActivityModel::log('client', (int)$cs['client_id'], 'work_assigned', "{$cs['service_name']} work assigned to user");
-            Notifier::send($userId, 'work_assigned', 'New work assigned', "{$cs['service_name']} work has been assigned to you.", 'client', (int)$cs['client_id']);
+            ActivityModel::log('client', (int)$cs['client_id'], 'work_assigned', "$reqName assigned to user for {$cs['service_name']}");
+            Notifier::send($userId, 'work_assigned', 'New requirement assigned', "You have been assigned to: $reqName", 'client', (int)$cs['client_id']);
         }
         return $id;
     }
@@ -203,7 +198,7 @@ class ClientModel
     public static function myAssignedServices(int $userId): array
     {
         return Database::all(
-            "SELECT cs.*, s.name AS service_name, s.unit_label, csa.quantity_assigned, csa.quantity_completed AS my_completed, csa.id AS assignment_id, c.name AS client_name, c.client_code
+            "SELECT cs.*, s.name AS service_name, s.unit_label, csa.requirement_name, csa.deadline, csa.notes AS req_notes, csa.quantity_assigned, csa.quantity_completed AS my_completed, csa.id AS assignment_id, c.name AS client_name, c.client_code
              FROM client_services cs
              JOIN services s ON s.id = cs.service_id
              JOIN client_service_assignments csa ON csa.client_service_id = cs.id

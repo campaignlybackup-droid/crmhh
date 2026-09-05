@@ -23,6 +23,7 @@
         <div><span class="text-muted small">Start Date</span><br><?= format_date($client['start_date']) ?: '—' ?></div>
         <div><span class="text-muted small">Renewal Date</span><br><?= format_date($client['renewal_date']) ?: '—' ?></div>
         <div><span class="text-muted small">Status</span><br><span class="badge badge-<?= status_badge_class($client['status']) ?>"><?= e(humanize($client['status'])) ?></span></div>
+        <div><span class="text-muted small">Retention Date</span><br><?= format_date($client['retention_date']) ?: '—' ?></div>
         <div><span class="text-muted small">Google Drive</span><br><?= $client['drive_link'] ? '<a href="'.e($client['drive_link']).'" target="_blank" rel="noopener">Open folder</a>' : '—' ?></div>
     </div>
     <?php if ($client['notes']): ?><hr><div class="text-muted small">Notes</div><p><?= nl2br(e($client['notes'])) ?></p><?php endif; ?>
@@ -63,14 +64,22 @@
             <div class="progress" style="margin:8px 0"><div class="progress-bar" style="width:<?= $pct ?>%"></div></div>
 
             <?php if ($fullAccess): ?>
-                <div class="small text-muted">Manager: <?= e(Database::scalar('SELECT name FROM users WHERE id=?', [$svc['manager_id']]) ?: '—') ?></div>
+                <div class="small text-muted" style="margin-bottom:8px">Manager: <?= e(Database::scalar('SELECT name FROM users WHERE id=?', [$svc['manager_id']]) ?: '—') ?></div>
+                
+                <?php if (Permission::hasAny(['clients.manage_services','clients.assign'])): ?>
+                <button class="btn btn-sm" onclick="openAddRequirement(<?= $svc['id'] ?>, '<?= e(addslashes($svc['service_name'])) ?>')">+ Add Requirement</button>
+                <?php endif; ?>
+
+                <?php if (!empty($svc['assignments'])): ?>
                 <table style="margin-top:8px">
-                    <thead><tr><th>Assigned To</th><th>Qty Assigned</th><th>Completed</th><th></th></tr></thead>
+                    <thead><tr><th>Requirement</th><th>Assigned To</th><th>Qty</th><th>Deadline</th><th>Completed</th><th></th></tr></thead>
                     <tbody>
                     <?php foreach ($svc['assignments'] as $a): ?>
                         <tr>
+                            <td><strong><?= e($a['requirement_name']) ?></strong><br><span class="small text-muted" style="font-weight:normal"><?= e($a['notes']) ?></span></td>
                             <td><?= e($a['user_name']) ?></td>
                             <td><?= $a['quantity_assigned'] !== null ? (int)$a['quantity_assigned'] : '—' ?></td>
+                            <td><?= format_date($a['deadline']) ?: '—' ?></td>
                             <td><?= (int)$a['quantity_completed'] ?></td>
                             <td>
                                 <?php if (Permission::hasAny(['clients.manage_services','clients.assign'])): ?>
@@ -84,18 +93,8 @@
                     <?php endforeach; ?>
                     </tbody>
                 </table>
-                <?php if (Permission::hasAny(['clients.manage_services','clients.assign'])): ?>
-                <form method="post" action="<?= url('clients', ['action' => 'assign_employee']) ?>" class="form-row" style="margin-top:8px;align-items:flex-end">
-                    <?= Csrf::field() ?><input type="hidden" name="client_service_id" value="<?= $svc['id'] ?>"><input type="hidden" name="client_id" value="<?= $client['id'] ?>">
-                    <div class="form-group"><label>Assign employee</label>
-                        <select name="user_id"><option value="">— Select —</option>
-                            <?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['name']) ?></option><?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="form-group" style="max-width:120px"><label>Quantity</label><input type="number" name="quantity_assigned" min="0"></div>
-                    <button class="btn btn-sm">Assign</button>
-                </form>
                 <?php endif; ?>
+
                 <?php if (Permission::has('clients.manage_services')): ?>
                 <details style="margin-top:8px"><summary class="small">Edit requirement</summary>
                 <form method="post" action="<?= url('clients', ['action' => 'update_service']) ?>" class="form-row mt-2">
@@ -103,7 +102,7 @@
                     <div class="form-group" style="max-width:120px"><label>Required Qty</label><input type="number" name="quantity_required" value="<?= (int)$svc['quantity_required'] ?>" min="0"></div>
                     <div class="form-group"><label>Manager</label>
                         <select name="manager_id"><option value="">—</option>
-                            <?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>" <?= $m['id']==$svc['manager_id']?'selected':'' ?>><?= e($m['name']) ?></option><?php endforeach; ?>
+                            <?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>" <?= $m['id']==$svc['manager_id']?'selected':'' ?>><?= e($m['name']) ?><?= $m['id'] === Auth::id() ? ' (YOU)' : '' ?></option><?php endforeach; ?>
                         </select>
                     </div>
                     <div class="form-group"><label>Status</label>
@@ -175,7 +174,7 @@
             <div class="form-row">
                 <div class="form-group"><label>Quantity Required</label><input type="number" name="quantity_required" min="0" value="0" required></div>
                 <div class="form-group"><label>Manager</label>
-                    <select name="manager_id"><option value="">—</option><?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['name']) ?></option><?php endforeach; ?></select>
+                    <select name="manager_id"><option value="">—</option><?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['name']) ?><?= $m['id'] === Auth::id() ? ' (YOU)' : '' ?></option><?php endforeach; ?></select>
                 </div>
             </div>
             <div class="form-row">
@@ -184,7 +183,7 @@
             </div>
             <div class="form-row">
                 <div class="form-group"><label>Assign Immediately To</label>
-                    <select name="assignee_id"><option value="">— Don't Assign Yet —</option><?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['name']) ?></option><?php endforeach; ?></select>
+                    <select name="assignee_id"><option value="">— Don't Assign Yet —</option><?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['name']) ?><?= $m['id'] === Auth::id() ? ' (YOU)' : '' ?></option><?php endforeach; ?></select>
                 </div>
             </div>
             <hr>
@@ -216,4 +215,33 @@
         </script>
     </div>
 </div>
+
+<div class="modal-overlay" id="addRequirementModal">
+    <div class="modal">
+        <span class="modal-close" data-modal-close>&times;</span>
+        <div class="modal-title">Add Requirement to <span id="reqServiceName"></span></div>
+        <form method="post" action="<?= url('clients', ['action' => 'add_requirement']) ?>">
+            <?= Csrf::field() ?>
+            <input type="hidden" name="client_id" value="<?= $client['id'] ?>">
+            <input type="hidden" name="client_service_id" id="reqClientServiceId" value="">
+            <div class="form-group"><label>Requirement / Task Name</label><input type="text" name="requirement_name" placeholder="e.g. 5 Reels, Video Editing" required></div>
+            <div class="form-row">
+                <div class="form-group"><label>Assign To</label>
+                    <select name="user_id" required><option value="">— Select —</option><?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['name']) ?><?= $m['id'] === Auth::id() ? ' (YOU)' : '' ?></option><?php endforeach; ?></select>
+                </div>
+                <div class="form-group"><label>Quantity</label><input type="number" name="quantity_assigned" min="1"></div>
+            </div>
+            <div class="form-group"><label>Deadline</label><input type="date" name="deadline"></div>
+            <div class="form-group"><label>Notes</label><textarea name="notes" placeholder="Specific details for the assignee..."></textarea></div>
+            <button class="btn btn-primary">Assign Requirement</button>
+        </form>
+    </div>
+</div>
+<script>
+function openAddRequirement(csId, svcName) {
+    document.getElementById('reqClientServiceId').value = csId;
+    document.getElementById('reqServiceName').innerText = svcName;
+    document.getElementById('addRequirementModal').classList.add('active');
+}
+</script>
 <?php endif; ?>

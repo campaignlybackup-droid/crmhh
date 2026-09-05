@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS leads (
     assigned_to INT NULL,
     next_follow_up DATETIME,
     notes TEXT,
+    deal_value DECIMAL(10,2) DEFAULT 0.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP NULL DEFAULT NULL,
     FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL

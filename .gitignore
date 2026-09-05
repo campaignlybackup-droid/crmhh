@@ -1,2 +1,5 @@
-config.local.php
-uploads/
+config/config.php
+config/installed.lock
+storage/logs/*.log
+uploads/*.csv
+.DS_Store

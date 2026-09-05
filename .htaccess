@@ -1,0 +1,26 @@
+# Agency CRM - root .htaccess
+# Shared-hosting friendly: no mod_rewrite dependency for routing (index.php uses query strings).
+
+DirectoryIndex index.php
+
+# Never allow directory listings
+Options -Indexes
+
+# Block direct access to sensitive file types anywhere under the app
+<FilesMatch "\.(sql|log|md|lock|env)$">
+    Require all denied
+</FilesMatch>
+
+# Block access to dotfiles (.git, .htaccess itself via other vhosts, etc.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Basic security headers (safe defaults, no functional impact)
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set Referrer-Policy "same-origin"
+</IfModule>
+
+php_flag display_errors off

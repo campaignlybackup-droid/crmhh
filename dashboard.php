@@ -25,7 +25,6 @@ if ($isFounder) {
     $revLabel = "Personal Deal Value";
     $convLabel = "My Conversion Rate";
     $taskLabel = "My Pending Tasks";
-    $boardLabel = "My Performance Snapshot";
 }
 
 // Metrics
@@ -59,22 +58,7 @@ try {
     }
     $pendingTasksCount = $pdo->query($taskSql)->fetchColumn();
 
-    // Leaderboard
-    $boardSql = "
-        SELECT u.id, u.username,
-               (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = u.id AND t.status = 'Completed' AND t.deleted_at IS NULL) as completed_tasks,
-               (SELECT COALESCE(SUM(deal_value), 0) FROM leads l WHERE l.assigned_to = u.id AND l.status = 'Won' AND l.deleted_at IS NULL) as won_revenue
-        FROM users u
-        WHERE u.status = 'active' AND u.deleted_at IS NULL
-    ";
-    if ($hasFilter) {
-        $boardSql .= " AND u.id IN ($visibleIdsStr)";
-    }
-    $boardSql .= " ORDER BY won_revenue DESC, completed_tasks DESC";
-    if ($isFounder) {
-        $boardSql .= " LIMIT 5";
-    }
-    $leaderboard = $pdo->query($boardSql)->fetchAll();
+    // Leaderboard logic removed
 
     // Recent Audit Logs
     $auditSql = "SELECT a.*, u.username FROM audit_logs a LEFT JOIN users u ON a.user_id = u.id";
@@ -162,55 +146,8 @@ try {
         </div>
 
         <div class="row g-4">
-            <!-- Leaderboard -->
-            <div class="col-md-7">
-                <div class="card border-0 shadow-sm rounded-4 h-100">
-                    <div class="card-header bg-white border-0 pt-4 pb-0">
-                        <h5 class="fw-bold mb-0"><?= h($boardLabel) ?></h5>
-                    </div>
-                    <div class="card-body">
-                        <?php if (empty($leaderboard)): ?>
-                            <p class="text-muted text-center py-4">No data available.</p>
-                        <?php else: ?>
-                            <div class="table-responsive">
-                                <table class="table table-hover align-middle">
-                                    <thead>
-                                        <tr class="text-secondary">
-                                            <th>Rank</th>
-                                            <th>User</th>
-                                            <th>Won Revenue</th>
-                                            <th>Completed Tasks</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php $rank = 1; foreach ($leaderboard as $member): ?>
-                                        <tr>
-                                            <td>
-                                                <?php if($rank == 1): ?>
-                                                    <span class="badge bg-warning text-dark px-2 py-1"><i class="bi bi-trophy-fill"></i> 1st</span>
-                                                <?php elseif($rank == 2): ?>
-                                                    <span class="badge bg-secondary px-2 py-1">2nd</span>
-                                                <?php elseif($rank == 3): ?>
-                                                    <span class="badge bg-dark px-2 py-1">3rd</span>
-                                                <?php else: ?>
-                                                    <span class="badge bg-light text-dark px-2 py-1"><?= $rank ?>th</span>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td class="fw-bold"><?= h($member['username']) ?></td>
-                                            <td class="text-success fw-bold">$<?= number_format($member['won_revenue'], 2) ?></td>
-                                            <td><span class="badge bg-info-subtle text-info fw-bold"><?= $member['completed_tasks'] ?> Tasks</span></td>
-                                        </tr>
-                                        <?php $rank++; endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-
             <!-- Recent Activity -->
-            <div class="col-md-5">
+            <div class="col-12">
                 <div class="card border-0 shadow-sm rounded-4 h-100">
                     <div class="card-header bg-white border-0 pt-4 pb-0">
                         <h5 class="fw-bold mb-0">Recent Activity Log</h5>

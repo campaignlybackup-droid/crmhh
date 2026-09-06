@@ -56,15 +56,69 @@ class LeadModel
         
         $sql = "SELECT u.id, u.name, COUNT(l.id) AS lead_count 
                 FROM users u 
+                JOIN user_roles ur ON ur.user_id = u.id
+                JOIN roles r ON r.id = ur.role_id
                 LEFT JOIN leads l ON l.assigned_user_id = u.id AND l.deleted_at IS NULL
-                WHERE u.status = 'active' AND u.deleted_at IS NULL";
+                WHERE u.status = 'active' AND u.deleted_at IS NULL
+                  AND r.slug IN ('manager', 'sales') ";
                 
         if (!$isFounder && $isManager) {
-            $sql .= " AND u.id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+            $sql .= " AND u.id NOT IN (SELECT ur2.user_id FROM user_roles ur2 JOIN roles r2 ON r2.id = ur2.role_id WHERE r2.slug = 'founder')";
         }
         
         $sql .= " GROUP BY u.id ORDER BY u.name";
         return Database::all($sql);
+    }
+
+    public static function getDashboardStats(array $filters, ?int $userId = null): array
+    {
+        $userId = $userId ?? Auth::id();
+        $isFounder = Auth::hasRole('founder');
+        $isManager = Auth::hasRole('manager');
+        
+        $where = ['l.deleted_at IS NULL'];
+        $params = [];
+        
+        $assignedUserId = $filters['assigned_user_id'] ?? '';
+        if ($assignedUserId === 'all') {
+            $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+        } elseif ($assignedUserId !== '') {
+            $where[] = "l.assigned_user_id = ?";
+            $params[] = $assignedUserId;
+        } elseif (!$isFounder && !$isManager) {
+            $where[] = 'l.assigned_user_id = ?';
+            $params[] = $userId;
+        } elseif (!$isFounder && $isManager) {
+             $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+        }
+
+        $baseWhere = implode(' AND ', $where);
+        
+        $dateWhere = "";
+        $dateParams = [];
+        if (!empty($filters['date_from'])) {
+            $dateWhere .= ' AND DATE(l.created_at) >= ?';
+            $dateParams[] = $filters['date_from'];
+        }
+        if (!empty($filters['date_to'])) {
+            $dateWhere .= ' AND DATE(l.created_at) <= ?';
+            $dateParams[] = $filters['date_to'];
+        }
+        
+        $mergedParams = array_merge($params, $dateParams);
+        
+        // Stats queries
+        $contacted = (int)Database::scalar("SELECT COUNT(*) FROM leads l JOIN lead_statuses ls ON ls.id = l.status_id WHERE $baseWhere $dateWhere AND ls.slug = 'contacted' AND DATE(l.updated_at) = CURDATE()", $mergedParams);
+        $followups = (int)Database::scalar("SELECT COUNT(*) FROM leads l WHERE $baseWhere $dateWhere AND l.next_followup_date = CURDATE()", $mergedParams);
+        $pending = (int)Database::scalar("SELECT COUNT(*) FROM leads l JOIN lead_statuses ls ON ls.id = l.status_id WHERE $baseWhere $dateWhere AND ls.slug = 'new'", $mergedParams);
+        $missed = (int)Database::scalar("SELECT COUNT(*) FROM leads l WHERE $baseWhere $dateWhere AND l.next_followup_date < CURDATE()", $mergedParams);
+        
+        return [
+            'contacted' => $contacted,
+            'followups' => $followups,
+            'pending' => $pending,
+            'missed' => $missed
+        ];
     }
 
     public static function paginate(int $page, int $perPage, array $filters, ?int $userId = null): array
@@ -76,7 +130,14 @@ class LeadModel
         $isFounder = Auth::hasRole('founder');
         $isManager = Auth::hasRole('manager');
         
-        if (!$isFounder && !$isManager) {
+        $assignedUserId = $filters['assigned_user_id'] ?? '';
+        
+        if ($assignedUserId === 'all') {
+             $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+        } elseif ($assignedUserId !== '') {
+             $where[] = 'l.assigned_user_id = ?'; 
+             $params[] = $assignedUserId; 
+        } elseif (!$isFounder && !$isManager) {
             $where[] = 'l.assigned_user_id = ?';
             $params[] = $userId;
         } elseif (!$isFounder && $isManager) {

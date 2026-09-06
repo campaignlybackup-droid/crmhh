@@ -41,9 +41,38 @@
             <option value="upcoming" <?= $filters['followup']==='upcoming'?'selected':'' ?>>Next 7 Days</option>
         </select>
     </div>
+    <div class="form-group">
+        <label>Created From</label>
+        <input type="date" name="date_from" value="<?= e($filters['date_from']) ?>">
+    </div>
+    <div class="form-group">
+        <label>Created To</label>
+        <input type="date" name="date_to" value="<?= e($filters['date_to']) ?>">
+    </div>
     <button class="btn btn-primary btn-sm">Filter</button>
     <a href="<?= url('leads') ?>" class="btn btn-sm">Reset</a>
 </form>
+
+<?php if (isset($dashboardStats)): ?>
+<div class="grid grid-4" style="margin-bottom:24px;">
+    <div class="card" style="text-align:center; padding:16px;">
+        <div style="font-size:2rem; font-weight:bold; color:var(--primary);"><?= (int)$dashboardStats['contacted'] ?></div>
+        <div class="text-muted small text-uppercase">Contacted Today</div>
+    </div>
+    <div class="card" style="text-align:center; padding:16px;">
+        <div style="font-size:2rem; font-weight:bold; color:var(--warning);"><?= (int)$dashboardStats['followups'] ?></div>
+        <div class="text-muted small text-uppercase">Follow-ups Today</div>
+    </div>
+    <div class="card" style="text-align:center; padding:16px;">
+        <div style="font-size:2rem; font-weight:bold; color:var(--info);"><?= (int)$dashboardStats['pending'] ?></div>
+        <div class="text-muted small text-uppercase">Pending (New)</div>
+    </div>
+    <div class="card" style="text-align:center; padding:16px;">
+        <div style="font-size:2rem; font-weight:bold; color:var(--danger);"><?= (int)$dashboardStats['missed'] ?></div>
+        <div class="text-muted small text-uppercase">Missed Follow-ups</div>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="table-wrap" style="overflow-x:auto;">
 <table style="min-width: 1000px;">

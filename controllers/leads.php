@@ -358,7 +358,9 @@ switch ($action) {
         $statuses = LeadModel::statuses();
         $users = UserModel::activeSelectList();
         $sources = LeadModel::distinctSources();
-        render_page('leads/list', compact('rows', 'p', 'statuses', 'users', 'sources', 'filters'), 'Leads');
+        $dashboardStats = LeadModel::getDashboardStats($filters);
+        
+        render_page('leads/list', compact('rows', 'p', 'statuses', 'users', 'sources', 'filters', 'dashboardStats'), 'Leads');
         break;
     }
 }
@@ -382,6 +384,8 @@ function leads_filters_from_request(): array
         'source' => $_GET['source'] ?? '',
         'followup' => $_GET['followup'] ?? '',
         'search' => trim($_GET['search'] ?? ''),
+        'date_from' => $_GET['date_from'] ?? '',
+        'date_to' => $_GET['date_to'] ?? '',
     ];
 }
 

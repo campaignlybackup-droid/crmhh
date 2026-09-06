@@ -14,6 +14,14 @@
             </a>
         <?php endforeach; ?>
 
+        <a href="<?= url('leads', ['assigned_user_id' => 'all']) ?>" style="text-decoration:none; color:inherit;">
+            <div class="card" style="text-align:center; padding:32px 16px; background:var(--bg-hover); transition:transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.transform='none'; this.style.boxShadow='var(--shadow)'">
+                <div style="font-size:3rem; margin-bottom:12px; color:var(--text-muted)">📋</div>
+                <h3 style="margin:0 0 8px 0">All Leads</h3>
+                <div class="text-muted small">View all agency leads</div>
+            </div>
+        </a>
+
         <a href="<?= url('leads', ['assigned_user_id' => 'unassigned']) ?>" style="text-decoration:none; color:inherit;">
             <div class="card" style="text-align:center; padding:32px 16px; background:var(--bg-hover); transition:transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.transform='none'; this.style.boxShadow='var(--shadow)'">
                 <div style="font-size:3rem; margin-bottom:12px; color:var(--text-muted)">📂</div>

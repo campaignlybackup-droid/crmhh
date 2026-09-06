@@ -210,7 +210,8 @@ async function quickAddLead() {
         source: document.getElementById('qa_source').value,
         status_id: document.getElementById('qa_status_id').value,
         assigned_user_id: document.getElementById('qa_assigned_user_id') ? document.getElementById('qa_assigned_user_id').value : '',
-        next_followup_date: document.getElementById('qa_next_followup_date').value
+        next_followup_date: document.getElementById('qa_next_followup_date').value,
+        folder_id: '<?= e($filters['folder_id'] ?? '') ?>'
     };
     
     if (!data.name) return alert('Name is required');

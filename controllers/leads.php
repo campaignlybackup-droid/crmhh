@@ -304,12 +304,18 @@ switch ($action) {
         if (!empty($json['assigned_user_id']) && Permission::has('leads.assign')) {
             $assignedUserId = (int)$json['assigned_user_id'];
         }
+        $folderId = !empty($json['folder_id']) ? (int)$json['folder_id'] : null;
+        if ($folderId && !Auth::hasRole('founder')) {
+            $hasAccess = (int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ? AND user_id = ?', [$folderId, Auth::id()]);
+            if (!$hasAccess) { echo json_encode(['success' => false, 'error' => 'Access denied to this folder']); exit; }
+        }
         
         $id = LeadModel::create([
             'name' => trim($json['name']), 'phone' => trim($json['phone'] ?? ''), 'email' => trim($json['email'] ?? ''),
             'company' => trim($json['company'] ?? ''), 'source' => trim($json['source'] ?? ''),
             'status_id' => $json['status_id'] ?? null, 'assigned_user_id' => $assignedUserId,
-            'next_followup_date' => $json['next_followup_date'] ?: null, 'notes' => ''
+            'next_followup_date' => $json['next_followup_date'] ?: null, 'notes' => '',
+            'folder_id' => $folderId
         ]);
         
         $lead = LeadModel::find($id);
@@ -340,6 +346,24 @@ switch ($action) {
         echo json_encode(['success' => true, 'lead' => $lead]);
         exit;
     }
+    
+    case 'api_create_folder': {
+        Permission::require('leads.assign'); // Only founder
+        $json = json_decode(file_get_contents('php://input'), true);
+        $name = trim($json['name'] ?? '');
+        if (!$name) { echo json_encode(['success' => false, 'error' => 'Folder name is required']); exit; }
+        
+        Database::run('INSERT INTO lead_folders (name, created_by) VALUES (?, ?)', [$name, Auth::id()]);
+        $folderId = Database::lastInsertId();
+        
+        if (!empty($json['users']) && is_array($json['users'])) {
+            foreach ($json['users'] as $uid) {
+                Database::run('INSERT IGNORE INTO lead_folder_users (folder_id, user_id) VALUES (?, ?)', [$folderId, (int)$uid]);
+            }
+        }
+        echo json_encode(['success' => true]);
+        exit;
+    }
 
     default: {
         $filters = leads_filters_from_request();
@@ -347,9 +371,10 @@ switch ($action) {
         $hasActiveFilters = !empty($filters['status_id']) || !empty($filters['source']) || !empty($filters['followup']) || !empty($filters['search']);
         
         // Show folder view for admins if they aren't looking for a specific list
-        if ($isManagerOrFounder && empty($filters['assigned_user_id']) && !$hasActiveFilters) {
+        if ($isManagerOrFounder && empty($filters['assigned_user_id']) && empty($filters['folder_id']) && !$hasActiveFilters) {
             $folders = LeadModel::getFolderStats(Auth::id());
-            render_page('leads/folders', compact('folders'), 'Lead Folders');
+            $customFolders = LeadModel::getCustomFolders(Auth::id());
+            render_page('leads/folders', compact('folders', 'customFolders'), 'Lead Folders');
             break;
         }
 
@@ -386,6 +411,7 @@ function leads_filters_from_request(): array
         'search' => trim($_GET['search'] ?? ''),
         'date_from' => $_GET['date_from'] ?? '',
         'date_to' => $_GET['date_to'] ?? '',
+        'folder_id' => $_GET['folder_id'] ?? '',
     ];
 }
 

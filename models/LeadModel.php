@@ -33,19 +33,34 @@ class LeadModel
         $isFounder = Auth::hasRole('founder');
         if ($isFounder) return true;
         
-        $lead = Database::one('SELECT assigned_user_id, created_by FROM leads WHERE id = ? AND deleted_at IS NULL', [$leadId]);
+        $lead = Database::one('SELECT assigned_user_id, created_by, folder_id FROM leads WHERE id = ? AND deleted_at IS NULL', [$leadId]);
         if (!$lead) return false;
+        
+        if ($lead['folder_id']) {
+            $hasAccess = (int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ? AND user_id = ?', [$lead['folder_id'], $userId]);
+            if ($hasAccess > 0) return true;
+        }
         
         $ownerId = (int)$lead['assigned_user_id'] ?: (int)$lead['created_by'];
         if ($ownerId === $userId) return true;
         
         $isManager = Auth::hasRole('manager');
-        if ($isManager) {
+        if ($isManager && !$lead['folder_id']) {
             $isOwnerFounder = (int)Database::scalar('SELECT COUNT(*) FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ? AND r.slug = ?', [$ownerId, 'founder']);
             return $isOwnerFounder === 0;
         }
         
         return false;
+    }
+
+    public static function getCustomFolders(int $userId): array
+    {
+        $isFounder = Auth::hasRole('founder');
+        if ($isFounder) {
+            return Database::all('SELECT lf.*, (SELECT COUNT(*) FROM leads l WHERE l.folder_id = lf.id AND l.deleted_at IS NULL) as lead_count FROM lead_folders lf ORDER BY lf.name');
+        } else {
+            return Database::all('SELECT lf.*, (SELECT COUNT(*) FROM leads l WHERE l.folder_id = lf.id AND l.deleted_at IS NULL) as lead_count FROM lead_folders lf JOIN lead_folder_users lfu ON lfu.folder_id = lf.id WHERE lfu.user_id = ? ORDER BY lf.name', [$userId]);
+        }
     }
 
     public static function getFolderStats(int $userId): array
@@ -80,16 +95,30 @@ class LeadModel
         $params = [];
         
         $assignedUserId = $filters['assigned_user_id'] ?? '';
-        if ($assignedUserId === 'all') {
-            $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
-        } elseif ($assignedUserId !== '') {
-            $where[] = "l.assigned_user_id = ?";
-            $params[] = $assignedUserId;
-        } elseif (!$isFounder && !$isManager) {
-            $where[] = 'l.assigned_user_id = ?';
-            $params[] = $userId;
-        } elseif (!$isFounder && $isManager) {
-             $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+        $folderId = $filters['folder_id'] ?? '';
+        
+        if ($folderId !== '') {
+            $where[] = "l.folder_id = ?";
+            $params[] = $folderId;
+            // Access is checked at the controller level or we can enforce it here
+            if (!$isFounder) {
+                $where[] = "EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id = ?)";
+                $params[] = $userId;
+            }
+        } else {
+            $where[] = "l.folder_id IS NULL"; // Regular assignments
+            
+            if ($assignedUserId === 'all') {
+                $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+            } elseif ($assignedUserId !== '') {
+                $where[] = "l.assigned_user_id = ?";
+                $params[] = $assignedUserId;
+            } elseif (!$isFounder && !$isManager) {
+                $where[] = 'l.assigned_user_id = ?';
+                $params[] = $userId;
+            } elseif (!$isFounder && $isManager) {
+                 $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+            }
         }
 
         $baseWhere = implode(' AND ', $where);
@@ -126,22 +155,33 @@ class LeadModel
         $userId = $userId ?? Auth::id();
         $where = ['l.deleted_at IS NULL'];
         $params = [];
-
+        
         $isFounder = Auth::hasRole('founder');
         $isManager = Auth::hasRole('manager');
         
         $assignedUserId = $filters['assigned_user_id'] ?? '';
+        $folderId = $filters['folder_id'] ?? '';
         
-        if ($assignedUserId === 'all') {
-             $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
-        } elseif ($assignedUserId !== '') {
-             $where[] = 'l.assigned_user_id = ?'; 
-             $params[] = $assignedUserId; 
-        } elseif (!$isFounder && !$isManager) {
-            $where[] = 'l.assigned_user_id = ?';
-            $params[] = $userId;
-        } elseif (!$isFounder && $isManager) {
-            $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+        if ($folderId !== '') {
+            $where[] = "l.folder_id = ?";
+            $params[] = $folderId;
+            if (!$isFounder) {
+                $where[] = "EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id = ?)";
+                $params[] = $userId;
+            }
+        } else {
+            $where[] = "l.folder_id IS NULL";
+            if ($assignedUserId === 'all') {
+                 $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+            } elseif ($assignedUserId !== '') {
+                 $where[] = 'l.assigned_user_id = ?'; 
+                 $params[] = $assignedUserId; 
+            } elseif (!$isFounder && !$isManager) {
+                $where[] = 'l.assigned_user_id = ?';
+                $params[] = $userId;
+            } elseif (!$isFounder && $isManager) {
+                $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+            }
         }
 
         if (!empty($filters['status_id'])) { $where[] = 'l.status_id = ?'; $params[] = $filters['status_id']; }
@@ -193,12 +233,13 @@ class LeadModel
     {
         $code = next_code('leads', 'lead_code', 'LD');
         Database::run(
-            'INSERT INTO leads (lead_code, name, phone, email, company, source, status_id, assigned_user_id, created_by, next_followup_date, notes, created_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())',
+            'INSERT INTO leads (lead_code, name, phone, email, company, source, status_id, assigned_user_id, created_by, next_followup_date, notes, folder_id, created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW())',
             [
                 $code, $data['name'], $data['phone'] ?: null, $data['email'] ?: null, $data['company'] ?: null,
                 $data['source'] ?: null, $data['status_id'] ?: self::defaultStatusId(), $data['assigned_user_id'] ?: null,
                 $data['created_by'] ?? Auth::id(), $data['next_followup_date'] ?: null, $data['notes'] ?: null,
+                $data['folder_id'] ?? null
             ]
         );
         $id = (int)Database::lastInsertId();

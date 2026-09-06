@@ -30,11 +30,41 @@ class LeadModel
     public static function canAccess(int $leadId, ?int $userId = null): bool
     {
         $userId = $userId ?? Auth::id();
-        if (Permission::has('leads.view_all', $userId)) return true;
-        $ids = Permission::managedUserIds($userId);
+        $isFounder = Auth::hasRole('founder');
+        if ($isFounder) return true;
+        
         $lead = Database::one('SELECT assigned_user_id, created_by FROM leads WHERE id = ? AND deleted_at IS NULL', [$leadId]);
         if (!$lead) return false;
-        return in_array((int)$lead['assigned_user_id'], $ids, true) || in_array((int)$lead['created_by'], $ids, true);
+        
+        $ownerId = (int)$lead['assigned_user_id'] ?: (int)$lead['created_by'];
+        if ($ownerId === $userId) return true;
+        
+        $isManager = Auth::hasRole('manager');
+        if ($isManager) {
+            $isOwnerFounder = (int)Database::scalar('SELECT COUNT(*) FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ? AND r.slug = ?', [$ownerId, 'founder']);
+            return $isOwnerFounder === 0;
+        }
+        
+        return false;
+    }
+
+    public static function getFolderStats(int $userId): array
+    {
+        $isFounder = Auth::hasRole('founder');
+        $isManager = Auth::hasRole('manager');
+        if (!$isFounder && !$isManager) return [];
+        
+        $sql = "SELECT u.id, u.name, COUNT(l.id) AS lead_count 
+                FROM users u 
+                LEFT JOIN leads l ON l.assigned_user_id = u.id AND l.deleted_at IS NULL
+                WHERE u.status = 'active' AND u.deleted_at IS NULL";
+                
+        if (!$isFounder && $isManager) {
+            $sql .= " AND u.id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+        }
+        
+        $sql .= " GROUP BY u.id ORDER BY u.name";
+        return Database::all($sql);
     }
 
     public static function paginate(int $page, int $perPage, array $filters, ?int $userId = null): array
@@ -43,15 +73,14 @@ class LeadModel
         $where = ['l.deleted_at IS NULL'];
         $params = [];
 
-        $scope = Permission::scopeIds('leads.view_all', $userId);
-        if ($scope !== null) {
-            if (empty($scope)) {
-                $where[] = '0=1';
-            } else {
-                $ph = implode(',', array_fill(0, count($scope), '?'));
-                $where[] = "(l.assigned_user_id IN ($ph) OR l.created_by IN ($ph))";
-                $params = array_merge($params, $scope, $scope);
-            }
+        $isFounder = Auth::hasRole('founder');
+        $isManager = Auth::hasRole('manager');
+        
+        if (!$isFounder && !$isManager) {
+            $where[] = 'l.assigned_user_id = ?';
+            $params[] = $userId;
+        } elseif (!$isFounder && $isManager) {
+            $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
         }
 
         if (!empty($filters['status_id'])) { $where[] = 'l.status_id = ?'; $params[] = $filters['status_id']; }

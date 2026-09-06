@@ -45,26 +45,167 @@
     <a href="<?= url('leads') ?>" class="btn btn-sm">Reset</a>
 </form>
 
-<div class="table-wrap">
-<table>
-<thead><tr><th>Lead ID</th><th>Name</th><th>Phone</th><th>Company</th><th>Status</th><th>Assigned To</th><th>Next Follow-up</th><th>Created</th></tr></thead>
+<div class="table-wrap" style="overflow-x:auto;">
+<table style="min-width: 1000px;">
+<thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th><th>Status</th><th>Assigned</th><th>Follow-up</th><th>Actions</th></tr></thead>
 <tbody>
+<?php if (Permission::has('leads.create')): ?>
+<tr id="quick-add-row" style="background:var(--bg-hover)">
+    <td class="text-muted small">New</td>
+    <td><input type="text" id="qa_name" placeholder="Name *" class="form-control form-control-sm" style="width:100px"></td>
+    <td><input type="text" id="qa_phone" placeholder="Phone" class="form-control form-control-sm" style="width:90px"></td>
+    <td><input type="email" id="qa_email" placeholder="Email" class="form-control form-control-sm" style="width:100px"></td>
+    <td><input type="text" id="qa_company" placeholder="Company" class="form-control form-control-sm" style="width:100px"></td>
+    <td><input type="text" id="qa_source" placeholder="Source" class="form-control form-control-sm" style="width:80px"></td>
+    <td>
+        <select id="qa_status_id" class="form-control form-control-sm">
+            <?php foreach ($statuses as $s): ?><option value="<?= $s['id'] ?>"><?= e($s['name']) ?></option><?php endforeach; ?>
+        </select>
+    </td>
+    <td>
+        <?php if (Permission::has('leads.assign')): ?>
+        <select id="qa_assigned_user_id" class="form-control form-control-sm" style="width:90px">
+            <option value="">Self</option>
+            <?php foreach ($users as $u): ?><option value="<?= $u['id'] ?>"><?= e($u['name']) ?><?= $u['id'] === Auth::id() ? ' (YOU)' : '' ?></option><?php endforeach; ?>
+        </select>
+        <?php else: ?><span class="text-muted small">Self</span><?php endif; ?>
+    </td>
+    <td><input type="date" id="qa_next_followup_date" class="form-control form-control-sm" style="width:110px"></td>
+    <td><button class="btn btn-sm btn-primary" onclick="quickAddLead()">+ Add</button></td>
+</tr>
+<?php endif; ?>
+
 <?php if (empty($rows)): ?>
-    <tr><td colspan="8" class="text-muted">No leads found.</td></tr>
+    <tr><td colspan="10" class="text-muted">No leads found.</td></tr>
 <?php endif; ?>
 <?php foreach ($rows as $r): ?>
-    <tr>
-        <td><a href="<?= url('leads', ['action' => 'view', 'id' => $r['id']]) ?>"><?= e($r['lead_code']) ?></a></td>
-        <td><?= e($r['name']) ?></td>
-        <td><?= e($r['phone']) ?></td>
-        <td><?= e($r['company']) ?></td>
-        <td><span class="badge" style="background:<?= e($r['status_color']) ?>"><?= e($r['status_name']) ?></span></td>
+    <tr id="row_<?= $r['id'] ?>">
+        <td>
+            <a href="<?= url('leads', ['action' => 'view', 'id' => $r['id']]) ?>"><?= e($r['lead_code']) ?></a>
+            <input type="hidden" class="edit-input" data-field="id" value="<?= $r['id'] ?>">
+        </td>
+        <td>
+            <span class="view-mode"><?= e($r['name']) ?></span>
+            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100px" data-field="name" value="<?= e($r['name']) ?>">
+        </td>
+        <td>
+            <span class="view-mode"><?= e($r['phone']) ?></span>
+            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:90px" data-field="phone" value="<?= e($r['phone']) ?>">
+        </td>
+        <td>
+            <span class="view-mode" style="max-width:100px;overflow:hidden;text-overflow:ellipsis;display:inline-block;" title="<?= e($r['email']) ?>"><?= e($r['email']) ?></span>
+            <input type="email" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100px" data-field="email" value="<?= e($r['email']) ?>">
+        </td>
+        <td>
+            <span class="view-mode"><?= e($r['company']) ?></span>
+            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100px" data-field="company" value="<?= e($r['company']) ?>">
+        </td>
+        <td>
+            <span class="view-mode"><?= e($r['source']) ?></span>
+            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:80px" data-field="source" value="<?= e($r['source']) ?>">
+        </td>
+        <td>
+            <span class="view-mode badge" style="background:<?= e($r['status_color']) ?>"><?= e($r['status_name']) ?></span>
+            <select class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100px" data-field="status_id">
+                <?php foreach ($statuses as $s): ?><option value="<?= $s['id'] ?>" <?= $s['id']==$r['status_id']?'selected':'' ?>><?= e($s['name']) ?></option><?php endforeach; ?>
+            </select>
+        </td>
         <td><?= e($r['assigned_name'] ?? 'Unassigned') ?></td>
-        <td><?= format_date($r['next_followup_date']) ?></td>
-        <td><?= format_date($r['created_at']) ?></td>
+        <td>
+            <span class="view-mode"><?= format_date($r['next_followup_date']) ?></span>
+            <input type="date" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:110px" data-field="next_followup_date" value="<?= $r['next_followup_date'] ?>">
+        </td>
+        <td>
+            <button class="btn btn-sm btn-link view-mode" onclick="toggleEdit(<?= $r['id'] ?>)">Edit</button>
+            <button class="btn btn-sm btn-primary edit-mode" style="display:none;" onclick="saveEdit(<?= $r['id'] ?>)">Save</button>
+            <button class="btn btn-sm btn-link text-muted edit-mode" style="display:none;" onclick="toggleEdit(<?= $r['id'] ?>)">Cancel</button>
+        </td>
     </tr>
 <?php endforeach; ?>
 </tbody>
 </table>
 </div>
+
+<script>
+function toggleEdit(id) {
+    const row = document.getElementById('row_' + id);
+    const viewModes = row.querySelectorAll('.view-mode');
+    const editModes = row.querySelectorAll('.edit-mode');
+    const isEditing = row.classList.contains('is-editing');
+    
+    if (isEditing) {
+        viewModes.forEach(el => el.style.display = '');
+        editModes.forEach(el => el.style.display = 'none');
+        row.classList.remove('is-editing');
+    } else {
+        viewModes.forEach(el => el.style.display = 'none');
+        editModes.forEach(el => el.style.display = '');
+        row.classList.add('is-editing');
+    }
+}
+
+async function saveEdit(id) {
+    const row = document.getElementById('row_' + id);
+    const inputs = row.querySelectorAll('.edit-input');
+    const data = {};
+    inputs.forEach(inp => data[inp.dataset.field] = inp.value);
+    
+    try {
+        const btn = row.querySelector('.btn-primary.edit-mode');
+        btn.innerText = '...'; btn.disabled = true;
+        
+        const res = await fetch('<?= url('leads', ['action' => 'api_update']) ?>', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const json = await res.json();
+        
+        if (json.success) {
+            window.location.reload(); // Quickest way to reflect colors, statuses, sorting
+        } else {
+            alert('Error: ' + json.error);
+            btn.innerText = 'Save'; btn.disabled = false;
+        }
+    } catch (e) {
+        alert('Network error.');
+        window.location.reload();
+    }
+}
+
+async function quickAddLead() {
+    const data = {
+        name: document.getElementById('qa_name').value,
+        phone: document.getElementById('qa_phone').value,
+        email: document.getElementById('qa_email').value,
+        company: document.getElementById('qa_company').value,
+        source: document.getElementById('qa_source').value,
+        status_id: document.getElementById('qa_status_id').value,
+        assigned_user_id: document.getElementById('qa_assigned_user_id') ? document.getElementById('qa_assigned_user_id').value : '',
+        next_followup_date: document.getElementById('qa_next_followup_date').value
+    };
+    
+    if (!data.name) return alert('Name is required');
+    
+    try {
+        const btn = document.querySelector('#quick-add-row .btn-primary');
+        btn.innerText = '...'; btn.disabled = true;
+        
+        const res = await fetch('<?= url('leads', ['action' => 'api_create']) ?>', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const json = await res.json();
+        
+        if (json.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + json.error);
+            btn.innerText = '+ Add'; btn.disabled = false;
+        }
+    } catch (e) {
+        alert('Network error.');
+        window.location.reload();
+    }
+}
+</script>
 <?php render('partials/pagination', ['p' => $p]); ?>

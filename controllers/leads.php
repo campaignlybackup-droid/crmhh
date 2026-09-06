@@ -289,14 +289,77 @@ switch ($action) {
         exit;
     }
 
+    case 'api_create': {
+        Permission::require('leads.create');
+        $json = json_decode(file_get_contents('php://input'), true);
+        if (!$json) { echo json_encode(['success' => false, 'error' => 'Invalid JSON']); exit; }
+        
+        $v = Validator::make($json)->required('name', 'Name')->email('email', 'Email');
+        if ($v->fails()) { echo json_encode(['success' => false, 'error' => $v->firstError()]); exit; }
+        
+        $dup = LeadModel::findByPhoneOrEmail($json['phone'] ?? null, $json['email'] ?? null);
+        if ($dup) { echo json_encode(['success' => false, 'error' => 'Lead with this phone/email already exists.']); exit; }
+        
+        $assignedUserId = Auth::id(); // Default to self
+        if (!empty($json['assigned_user_id']) && Permission::has('leads.assign')) {
+            $assignedUserId = (int)$json['assigned_user_id'];
+        }
+        
+        $id = LeadModel::create([
+            'name' => trim($json['name']), 'phone' => trim($json['phone'] ?? ''), 'email' => trim($json['email'] ?? ''),
+            'company' => trim($json['company'] ?? ''), 'source' => trim($json['source'] ?? ''),
+            'status_id' => $json['status_id'] ?? null, 'assigned_user_id' => $assignedUserId,
+            'next_followup_date' => $json['next_followup_date'] ?: null, 'notes' => ''
+        ]);
+        
+        $lead = LeadModel::find($id);
+        echo json_encode(['success' => true, 'lead' => $lead]);
+        exit;
+    }
+
+    case 'api_update': {
+        $json = json_decode(file_get_contents('php://input'), true);
+        $id = (int)($json['id'] ?? 0);
+        if (!$id || !LeadModel::canAccess($id)) { echo json_encode(['success' => false, 'error' => 'Access denied']); exit; }
+        Permission::require('leads.edit');
+        
+        $v = Validator::make($json)->required('name', 'Name')->email('email', 'Email');
+        if ($v->fails()) { echo json_encode(['success' => false, 'error' => $v->firstError()]); exit; }
+        
+        $dup = LeadModel::findByPhoneOrEmail($json['phone'] ?? null, $json['email'] ?? null);
+        if ($dup && (int)$dup['id'] !== $id) { echo json_encode(['success' => false, 'error' => 'Phone/email belongs to another lead.']); exit; }
+        
+        LeadModel::update($id, [
+            'name' => trim($json['name']), 'phone' => trim($json['phone'] ?? ''), 'email' => trim($json['email'] ?? ''),
+            'company' => trim($json['company'] ?? ''), 'source' => trim($json['source'] ?? ''),
+            'status_id' => $json['status_id'] ?? null, 'next_followup_date' => $json['next_followup_date'] ?: null,
+            'notes' => $json['notes'] ?? null
+        ]);
+        
+        $lead = LeadModel::find($id);
+        echo json_encode(['success' => true, 'lead' => $lead]);
+        exit;
+    }
+
     default: {
         $filters = leads_filters_from_request();
+        $isManagerOrFounder = Auth::hasRole('founder') || Auth::hasRole('manager');
+        $hasActiveFilters = !empty($filters['status_id']) || !empty($filters['source']) || !empty($filters['followup']) || !empty($filters['search']);
+        
+        // Show folder view for admins if they aren't looking for a specific list
+        if ($isManagerOrFounder && empty($filters['assigned_user_id']) && !$hasActiveFilters) {
+            $folders = LeadModel::getFolderStats(Auth::id());
+            render_page('leads/folders', compact('folders'), 'Lead Folders');
+            break;
+        }
+
         $page = current_page_int();
         [$rows, $p] = LeadModel::paginate($page, 25, $filters);
         $statuses = LeadModel::statuses();
         $users = UserModel::activeSelectList();
         $sources = LeadModel::distinctSources();
         render_page('leads/list', compact('rows', 'p', 'statuses', 'users', 'sources', 'filters'), 'Leads');
+        break;
     }
 }
 

@@ -2,30 +2,71 @@
 
 class CalendarModel
 {
-    /** Events visible to $userId for the given month: their own events + tasks/deadlines assigned to them. */
-    public static function eventsForMonth(int $userId, int $year, int $month): array
+    public static function eventsForMonth($userId, int $year, int $month): array
     {
-        $events = Database::all(
-            'SELECT * FROM calendar_events WHERE user_id = ? AND start_datetime BETWEEN ? AND ?',
-            [$userId, "$year-" . str_pad((string)$month, 2, '0', STR_PAD_LEFT) . '-01 00:00:00', date('Y-m-t 23:59:59', strtotime("$year-$month-01"))]
-        );
+        $startDate = "$year-" . str_pad((string)$month, 2, '0', STR_PAD_LEFT) . '-01 00:00:00';
+        $endDate = date('Y-m-t 23:59:59', strtotime("$year-$month-01"));
+        $isFounder = Auth::hasRole('founder');
+        $isManager = Auth::hasRole('manager');
+        
+        $events = [];
+        
+        // 1. Events Query
+        $evWhere = "start_datetime BETWEEN ? AND ?";
+        $evParams = [$startDate, $endDate];
+        if ($userId !== 'all') { $evWhere .= " AND user_id = ?"; $evParams[] = $userId; }
+        if (!$isFounder && $isManager) { $evWhere .= " AND user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')"; }
+        
+        $dbEvents = Database::all("SELECT * FROM calendar_events WHERE $evWhere", $evParams);
+        foreach ($dbEvents as $e) { $events[] = $e; }
 
-        $taskWhere = "assigned_user_id = ? AND deadline IS NOT NULL AND deleted_at IS NULL AND deadline BETWEEN ? AND ?";
-        $tasks = Database::all(
-            "SELECT id, title, deadline AS start_datetime, task_code FROM tasks WHERE $taskWhere",
-            [$userId, "$year-" . str_pad((string)$month, 2, '0', STR_PAD_LEFT) . '-01 00:00:00', date('Y-m-t 23:59:59', strtotime("$year-$month-01"))]
-        );
+        // 2. Tasks Query
+        $taskWhere = "deadline IS NOT NULL AND deleted_at IS NULL AND deadline BETWEEN ? AND ?";
+        $taskParams = [$startDate, $endDate];
+        if ($userId !== 'all') { $taskWhere .= " AND assigned_user_id = ?"; $taskParams[] = $userId; }
+        if (!$isFounder && $isManager) { $taskWhere .= " AND assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')"; }
+        
+        $tasks = Database::all("SELECT id, title, deadline AS start_datetime, task_code, description FROM tasks WHERE $taskWhere", $taskParams);
         foreach ($tasks as $t) {
             $events[] = [
                 'id' => 'task-' . $t['id'],
-                'title' => 'Deadline: ' . $t['title'],
+                'title' => 'Task: ' . $t['title'],
+                'description' => $t['description'],
                 'event_type' => 'deadline',
                 'start_datetime' => $t['start_datetime'],
                 'end_datetime' => null,
                 'related_type' => 'task',
                 'related_id' => $t['id'],
+                'location' => null
             ];
         }
+        
+        // 3. Leads Follow-ups Query
+        $leadWhere = "next_followup_date IS NOT NULL AND deleted_at IS NULL AND next_followup_date BETWEEN ? AND ?";
+        $leadParams = [date('Y-m-d', strtotime($startDate)), date('Y-m-d', strtotime($endDate))];
+        if ($userId !== 'all') { $leadWhere .= " AND assigned_user_id = ?"; $leadParams[] = $userId; }
+        if (!$isFounder && $isManager) { $leadWhere .= " AND assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')"; }
+        
+        $leads = Database::all("SELECT id, name, next_followup_date, notes FROM leads WHERE $leadWhere", $leadParams);
+        foreach ($leads as $l) {
+            $events[] = [
+                'id' => 'lead-' . $l['id'],
+                'title' => 'Lead Follow-up: ' . $l['name'],
+                'description' => $l['notes'],
+                'event_type' => 'followup',
+                'start_datetime' => $l['next_followup_date'] . ' 09:00:00', // Default to 9am for sorting
+                'end_datetime' => null,
+                'related_type' => 'lead',
+                'related_id' => $l['id'],
+                'location' => null
+            ];
+        }
+
+        // Sort all chronologically
+        usort($events, function($a, $b) {
+            return strtotime($a['start_datetime']) <=> strtotime($b['start_datetime']);
+        });
+
         return $events;
     }
 

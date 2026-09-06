@@ -29,11 +29,31 @@ $year = (int)($_GET['y'] ?? date('Y'));
 $month = (int)($_GET['m'] ?? date('n'));
 $viewUserId = Auth::id();
 if (Permission::has('calendar.view_all') && !empty($_GET['user_id'])) {
-    $viewUserId = (int)$_GET['user_id'];
+    if ($_GET['user_id'] === 'all') {
+        $viewUserId = 'all';
+    } else {
+        $viewUserId = (int)$_GET['user_id'];
+    }
 }
 
 $events = CalendarModel::eventsForMonth($viewUserId, $year, $month);
-$users = Permission::has('calendar.view_all') ? UserModel::activeSelectList() : [];
+
+$users = [];
+if (Permission::has('calendar.view_all')) {
+    $allUsers = UserModel::activeSelectList();
+    $isFounder = Auth::hasRole('founder');
+    if ($isFounder) {
+        $users = $allUsers;
+    } else {
+        // Filter out founder from the list
+        foreach ($allUsers as $u) {
+            $isUFounder = (int)Database::scalar('SELECT COUNT(*) FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ? AND r.slug = ?', [$u['id'], 'founder']);
+            if (!$isUFounder) {
+                $users[] = $u;
+            }
+        }
+    }
+}
 
 $prevMonth = $month - 1; $prevYear = $year;
 if ($prevMonth < 1) { $prevMonth = 12; $prevYear--; }

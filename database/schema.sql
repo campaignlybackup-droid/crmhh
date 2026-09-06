@@ -516,10 +516,10 @@ SELECT (SELECT id FROM roles WHERE slug='founder'), id FROM permissions;
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT (SELECT id FROM roles WHERE slug='manager'), id FROM permissions
 WHERE slug IN (
- 'leads.view','leads.create','leads.edit','leads.assign','leads.import','leads.export',
+ 'leads.view','leads.create','leads.edit','leads.import','leads.export',
  'clients.view','clients.edit','clients.manage_services','clients.assign',
  'tasks.view','tasks.create','tasks.edit','tasks.assign',
- 'reports.view_team','leave.approve_team','workload.view_team'
+ 'reports.view_team','leave.approve_team','workload.view_team','calendar.view_all'
 );
 
 -- Sales role

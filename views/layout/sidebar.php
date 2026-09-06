@@ -11,7 +11,8 @@ $canTeams = Permission::has('teams.manage') || !empty(UserModel::managedTeamsFor
         <li class="<?= nav_active('tasks', $page) ?>"><a href="<?= url('tasks') ?>"><span class="nav-ico">&#9745;</span> Tasks</a></li>
         <li class="<?= nav_active('calendar', $page) ?>"><a href="<?= url('calendar') ?>"><span class="nav-ico">&#128197;</span> Calendar</a></li>
         <li class="<?= nav_active('availability', $page) ?>"><a href="<?= url('availability') ?>"><span class="nav-ico">&#9200;</span> Founder Availability</a></li>
-        <li class="<?= nav_active('reports', $page) ?>"><a href="<?= url('reports') ?>"><span class="nav-ico">&#128221;</span> Daily Reports</a></li>
+        <li class="<?= nav_active('approvals', $page) ?>"><a href="<?= url('approvals') ?>"><span class="nav-ico">&#10004;</span> Approvals</a></li>
+        <li class="<?= nav_active('reports', $page) ?>"><a href="<?= url('reports') ?>"><span class="nav-ico">&#128202;</span> Reports</a></li>
         <li class="<?= nav_active('leave', $page) ?>"><a href="<?= url('leave') ?>"><span class="nav-ico">&#128203;</span> Leave</a></li>
         <?php if ($canTeams): ?>
         <li class="<?= nav_active('teams', $page) ?>"><a href="<?= url('teams') ?>"><span class="nav-ico">&#128101;</span> Teams</a></li>

@@ -4,7 +4,7 @@ require __DIR__ . '/core/bootstrap.php';
 $allowedPages = [
     'login', 'dashboard', 'users', 'teams', 'roles', 'leads', 'clients',
     'services', 'tasks', 'calendar', 'availability', 'reports', 'leave',
-    'notifications', 'search', 'audit', 'profile',
+    'notifications', 'search', 'audit', 'profile', 'approvals',
 ];
 
 $page = $_GET['page'] ?? 'dashboard';

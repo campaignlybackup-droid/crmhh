@@ -34,8 +34,13 @@ class ClientModel
             "SELECT clients.* FROM clients WHERE $whereSql ORDER BY clients.name ASC LIMIT {$p['perPage']} OFFSET {$p['offset']}",
             $params
         );
+        $fullAccess = Permission::hasAny(['clients.view_all', 'clients.edit', 'clients.manage_services'], $userId);
         foreach ($rows as &$row) {
-            $row['services'] = self::servicesFor((int)$row['id']);
+            if ($fullAccess) {
+                $row['services'] = self::servicesFor((int)$row['id']);
+            } else {
+                $row['services'] = self::servicesForEmployee((int)$row['id'], $userId);
+            }
         }
         return [$rows, $p];
     }

@@ -16,6 +16,12 @@ $statusColors = ['available' => 'success', 'busy' => 'warning', 'meeting' => 'pr
 </div>
 <p class="text-muted small">All team members can see the Founder's availability so they know the best time to reach out or schedule meetings.</p>
 
+<div style="margin: 24px 0;">
+    <!-- Google Calendar Appointment Scheduling begin -->
+    <iframe src="https://calendar.google.com/calendar/appointments/AcZssZ0TibWzR9plALFSAtpMHGxECfIdW_Yty0s296c=?gv=true" style="border: 0" width="100%" height="600" frameborder="0"></iframe>
+    <!-- end Google Calendar Appointment Scheduling --> 
+</div>
+
 <div class="table-wrap">
 <table>
 <thead><tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr></thead>

@@ -1,10 +1,28 @@
 <h1>Daily Reports</h1>
 
+<div style="background: var(--bg-hover); border-left: 4px solid var(--danger); padding: 16px; margin-bottom: 24px; border-radius: 4px;">
+    <h3 style="margin-top:0; color: var(--danger);">Strict Policy: Please Note</h3>
+    <p>All employees are required to send their daily work update in this CRM at the end of each working day. Kindly note the following policy will be strictly implemented:</p>
+    <ul style="margin-bottom: 0;">
+        <li><strong>No Daily Update Submitted:</strong> If your daily work update is not received, that day will be considered as leave.</li>
+        <li><strong>Leave Without Prior Notice:</strong> If anyone takes leave without informing management in advance, double leave deduction (2x days) will be applied.</li>
+        <li><strong>Continuous Leave with Sunday/Weekly Off:</strong> If leave is taken continuously attached to Sunday/weekly off/rest day, double leave deduction will also apply.</li>
+        <li><strong>Salary Deductions:</strong> Leave deductions from salary will be implemented strictly. Please ensure proper communication to avoid unnecessary deductions.</li>
+        <li><strong>Prior Approved Leave:</strong> If leave is informed and approved in advance, and it is not continuous with Sunday/Weekly Rest Day, only the actual leave days will be deducted.</li>
+        <li><strong>Urgent Work on Sunday/Weekly Off:</strong> In such cases, it will be treated as company work adjustment/company leave, with no salary deduction.</li>
+    </ul>
+    <p style="margin-bottom: 0; margin-top: 12px;"><strong>We expect everyone’s cooperation, professionalism, and discipline moving forward. Please take this seriously and ensure compliance. Thank you.</strong></p>
+    <p style="margin-bottom: 0; margin-top: 8px; color: var(--danger);"><strong>Note:</strong> Reports must be submitted for the day + the next 12 hours period. You strictly have 36 hours to submit a report for any given day. You cannot submit past this window.</p>
+</div>
+
 <div class="card" style="max-width:680px">
-    <div class="card-title"><?= $today ? "Today's Report (submitted)" : "Submit Today's Report" ?></div>
+    <div class="card-title"><?= $today ? "Today's Report (submitted)" : "Submit Report" ?></div>
     <form method="post" action="<?= url('reports', ['action' => 'submit']) ?>">
         <?= Csrf::field() ?>
-        <input type="hidden" name="report_date" value="<?= date('Y-m-d') ?>">
+        <div class="form-group">
+            <label>Report Date</label>
+            <input type="date" name="report_date" class="form-control" value="<?= date('Y-m-d') ?>" max="<?= date('Y-m-d') ?>" min="<?= date('Y-m-d', strtotime('-1 day')) ?>" required>
+        </div>
         <div class="form-group"><label>Work Completed</label><textarea name="work_completed"><?= e($today['work_completed'] ?? '') ?></textarea></div>
         <div class="form-group"><label>Tasks Worked On</label><textarea name="tasks_worked_on"><?= e($today['tasks_worked_on'] ?? '') ?></textarea></div>
         <div class="form-group"><label>Pending Work</label><textarea name="pending_work"><?= e($today['pending_work'] ?? '') ?></textarea></div>

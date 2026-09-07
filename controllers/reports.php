@@ -5,6 +5,20 @@ $action = $_GET['action'] ?? 'index';
 if ($action === 'submit') {
     csrf_check_or_die();
     $date = $_POST['report_date'] ?: date('Y-m-d');
+    
+    // Enforce 36-hour rule (End of the given day + 12 hours)
+    // The deadline to submit a report for 'Y-m-d' is noon of 'Y-m-d + 1 day'
+    $reportStart = new DateTime($date);
+    $reportStart->setTime(0, 0, 0);
+    $deadline = clone $reportStart;
+    $deadline->modify('+36 hours'); 
+    
+    $now = new DateTime();
+    if ($now > $deadline) {
+        Flash::error("The deadline for submitting a report for {$date} has passed. Reports must be submitted within 36 hours.");
+        redirect(url('reports'));
+    }
+
     ReportModel::upsert(Auth::id(), $date, $_POST);
     Flash::success('Daily report saved.');
     redirect(url('reports'));

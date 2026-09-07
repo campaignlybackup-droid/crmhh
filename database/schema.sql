@@ -440,13 +440,15 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- ============================================================
 
 INSERT INTO lead_statuses (name, slug, color, sort_order, is_won, is_lost, is_default) VALUES
-('New', 'new', '#0d6efd', 1, 0, 0, 1),
-('Contacted', 'contacted', '#6f42c1', 2, 0, 0, 0),
-('Interested', 'interested', '#20c997', 3, 0, 0, 0),
-('Follow-up', 'follow-up', '#fd7e14', 4, 0, 0, 0),
-('Negotiation', 'negotiation', '#ffc107', 5, 0, 0, 0),
-('Won', 'won', '#198754', 6, 1, 0, 0),
-('Lost', 'lost', '#dc3545', 7, 0, 1, 0);
+('New leads', 'new-leads', '#0d6efd', 1, 0, 0, 1),
+('Cold lead', 'cold-lead', '#6c757d', 2, 0, 0, 0),
+('Warm lead', 'warm-lead', '#ffc107', 3, 0, 0, 0),
+('Call scheduled', 'call-scheduled', '#17a2b8', 4, 0, 0, 0),
+('Follow up', 'follow-up', '#fd7e14', 5, 0, 0, 0),
+('Long nurture', 'long-nurture', '#20c997', 6, 0, 0, 0),
+('Meet', 'meet', '#6f42c1', 7, 0, 0, 0),
+('Closed', 'closed', '#198754', 8, 1, 0, 0),
+('Dead', 'dead', '#dc3545', 9, 0, 1, 0);
 
 INSERT INTO services (name, slug, unit_label) VALUES
 ('Social Media Management', 'social-media', 'posts'),

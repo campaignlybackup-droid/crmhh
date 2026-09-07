@@ -57,4 +57,42 @@ class ReportModel
         );
         return [$rows, $p];
     }
+
+    public static function getMonthlyReports(int $year, int $month, ?int $userId = null): array
+    {
+        $userId = $userId ?? Auth::id();
+        $startDate = sprintf('%04d-%02d-01', $year, $month);
+        $endDate = date('Y-m-t', strtotime($startDate));
+
+        $where = ['dr.report_date >= ?', 'dr.report_date <= ?'];
+        $params = [$startDate, $endDate];
+
+        if (Permission::has('reports.view_all', $userId)) {
+            // no restriction
+        } elseif (Permission::has('reports.view_team', $userId)) {
+            $ids = Permission::managedUserIds($userId);
+            if (empty($ids)) return []; // No team to view
+            $ph = implode(',', array_fill(0, count($ids), '?'));
+            $where[] = "dr.user_id IN ($ph)";
+            $params = array_merge($params, $ids);
+        } else {
+            $where[] = 'dr.user_id = ?';
+            $params[] = $userId;
+        }
+
+        $whereSql = implode(' AND ', $where);
+        $rows = Database::all(
+            "SELECT dr.*, u.name AS user_name FROM daily_reports dr JOIN users u ON u.id = dr.user_id
+             WHERE $whereSql ORDER BY dr.report_date ASC, u.name ASC",
+            $params
+        );
+
+        $grouped = [];
+        foreach ($rows as $row) {
+            $date = $row['report_date'];
+            if (!isset($grouped[$date])) $grouped[$date] = [];
+            $grouped[$date][] = $row;
+        }
+        return $grouped;
+    }
 }

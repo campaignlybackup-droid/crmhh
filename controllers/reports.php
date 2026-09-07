@@ -21,4 +21,25 @@ $page = current_page_int();
 $today = ReportModel::findForDate(Auth::id(), date('Y-m-d'));
 $users = $canViewTeam ? UserModel::activeSelectList() : [];
 
-render_page('reports/index', compact('rows', 'p', 'today', 'canViewTeam', 'filters', 'users'), 'Daily Reports');
+// Calendar data for Founder/Manager
+$monthlyReports = [];
+$calYear = (int)($_GET['year'] ?? date('Y'));
+$calMonth = (int)($_GET['month'] ?? date('n'));
+if ($canViewTeam) {
+    $monthlyReports = ReportModel::getMonthlyReports($calYear, $calMonth);
+}
+
+// Handle AJAX request for a specific date's reports
+if ($action === 'ajax_day' && $canViewTeam) {
+    $date = $_GET['date'] ?? date('Y-m-d');
+    $dayReports = [];
+    $allInMonth = ReportModel::getMonthlyReports((int)substr($date, 0, 4), (int)substr($date, 5, 2));
+    if (isset($allInMonth[$date])) {
+        $dayReports = $allInMonth[$date];
+    }
+    header('Content-Type: application/json');
+    echo json_encode($dayReports);
+    exit;
+}
+
+render_page('reports/index', compact('rows', 'p', 'today', 'canViewTeam', 'filters', 'users', 'calYear', 'calMonth', 'monthlyReports'), 'Daily Reports');

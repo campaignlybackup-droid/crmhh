@@ -406,6 +406,29 @@ CREATE TABLE notifications (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ------------------------------------------------------------
+-- PROPOSALS
+-- ------------------------------------------------------------
+
+CREATE TABLE proposals (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    business_details TEXT NOT NULL,
+    priority ENUM('Low', 'Medium', 'High', 'Urgent') NOT NULL DEFAULT 'Medium',
+    deadline_hours INT UNSIGNED NOT NULL DEFAULT 24,
+    deadline_at DATETIME NOT NULL,
+    status ENUM('pending', 'in_progress', 'ready', 'sent') NOT NULL DEFAULT 'pending',
+    assigned_user_id INT UNSIGNED DEFAULT NULL,
+    created_by INT UNSIGNED NOT NULL,
+    notes TEXT DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_proposals_assigned (assigned_user_id),
+    KEY idx_proposals_status (status),
+    CONSTRAINT fk_proposals_assigned FOREIGN KEY (assigned_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_proposals_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
 -- AUDIT LOG
 -- ------------------------------------------------------------
 
@@ -494,7 +517,9 @@ INSERT INTO permissions (slug, name, `group`) VALUES
 ('availability.manage', 'Manage founder availability', 'calendar'),
 ('audit.view', 'View audit log', 'admin'),
 ('workload.view_team', 'View team workload', 'reports'),
-('workload.view_all', 'View all workload', 'reports');
+('workload.view_all', 'View all workload', 'reports'),
+('proposals.view', 'View assigned proposals', 'proposals'),
+('proposals.manage', 'Create & manage all proposals', 'proposals');
 
 INSERT INTO roles (name, slug, description, is_system) VALUES
 ('Founder', 'founder', 'Highest level access. Full control of the agency CRM.', 1),
@@ -518,10 +543,11 @@ SELECT (SELECT id FROM roles WHERE slug='founder'), id FROM permissions;
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT (SELECT id FROM roles WHERE slug='manager'), id FROM permissions
 WHERE slug IN (
- 'leads.view','leads.create','leads.edit','leads.import','leads.export',
- 'clients.view','clients.edit','clients.manage_services','clients.assign',
- 'tasks.view','tasks.create','tasks.edit','tasks.assign',
- 'reports.view_team','leave.approve_team','workload.view_team','calendar.view_all'
+    'leads.view', 'leads.create', 'leads.edit', 'leads.assign', 'leads.import', 'leads.export',
+    'clients.view', 'clients.create', 'clients.edit', 'clients.manage_services', 'clients.assign',
+    'tasks.view', 'tasks.create', 'tasks.edit', 'tasks.assign',
+    'reports.view_team', 'workload.view_team', 'leave.approve_team',
+    'proposals.view', 'proposals.manage'
 );
 
 -- Sales role

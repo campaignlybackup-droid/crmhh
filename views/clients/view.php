@@ -241,7 +241,7 @@
 function openAddRequirement(csId, svcName) {
     document.getElementById('reqClientServiceId').value = csId;
     document.getElementById('reqServiceName').innerText = svcName;
-    document.getElementById('addRequirementModal').classList.add('active');
+    document.getElementById('addRequirementModal').classList.add('show');
 }
 </script>
 <?php endif; ?>

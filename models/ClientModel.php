@@ -151,6 +151,11 @@ class ClientModel
         AuditLog::record('update_service', 'client_service', $clientServiceId, null, "qty=$quantityRequired,status=$status");
     }
 
+    public static function removeService(int $clientServiceId): void
+    {
+        Database::run('UPDATE client_services SET deleted_at = NOW() WHERE id = ?', [$clientServiceId]);
+    }
+
     public static function addRequirement(int $clientServiceId, string $reqName, int $userId, ?int $quantity, ?string $deadline, ?string $notes): int
     {
         Database::run(

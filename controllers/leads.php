@@ -136,7 +136,7 @@ switch ($action) {
     }
 
     case 'bulk_delete': {
-        Permission::requireRole('founder');
+        if (!Auth::hasRole('founder')) { Permission::deny(); }
         csrf_check_or_die();
         $ids = $_POST['ids'] ?? [];
         if (!is_array($ids)) $ids = [];

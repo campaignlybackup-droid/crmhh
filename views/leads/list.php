@@ -74,13 +74,14 @@
 </div>
 <?php endif; ?>
 
-<div class="table-wrap" style="overflow-x:auto; position:relative;">
 <?php if (Auth::hasRole('founder')): ?>
-    <div id="bulk-action-bar" style="display:none; position:sticky; left:0; top:0; background:var(--bg-hover); padding:10px; border-bottom:1px solid var(--border); z-index:10;">
-        <span id="bulk-count" style="margin-right:15px; font-weight:bold;">0 leads selected</span>
-        <button class="btn btn-danger btn-sm" onclick="bulkDelete()">Delete Selected Leads</button>
-    </div>
+<div id="bulk-action-bar" style="display:none; position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#fff; padding:12px 24px; border-radius:30px; box-shadow:0 4px 20px rgba(0,0,0,0.15); z-index:999; border:1px solid var(--border); align-items:center; justify-content:center; gap:16px;">
+    <span id="bulk-count" style="font-weight:bold; color:var(--text);">0 leads selected</span>
+    <button class="btn btn-danger btn-sm" onclick="bulkDelete()" style="border-radius:20px;">Delete Selected</button>
+</div>
 <?php endif; ?>
+
+<div class="table-wrap" style="overflow-x:auto; position:relative;">
 <table style="min-width: 1000px;">
 <thead><tr>
     <?php if (Auth::hasRole('founder')): ?><th style="width:30px;"><input type="checkbox" onclick="toggleAllLeads(this)" title="Select All"></th><?php endif; ?>
@@ -274,7 +275,7 @@ function updateBulkDeleteBtn() {
     const checked = document.querySelectorAll('.lead-checkbox:checked').length;
     const bar = document.getElementById('bulk-action-bar');
     if (bar) {
-        bar.style.display = checked > 0 ? 'block' : 'none';
+        bar.style.display = checked > 0 ? 'flex' : 'none';
         document.getElementById('bulk-count').innerText = checked + ' leads selected';
     }
 }

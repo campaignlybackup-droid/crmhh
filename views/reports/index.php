@@ -109,7 +109,8 @@
 <?php render('partials/pagination', ['p' => $p]); ?>
 
 <!-- Modal for Viewing Day Reports -->
-<div class="modal" id="reportsModal">
+<div class="modal-overlay" id="reportsModalOverlay">
+<div class="modal" id="reportsModal" style="max-width: 800px; padding: 0;">
     <div class="modal-content" style="max-width: 800px; max-height: 80vh; overflow-y: auto;">
         <div class="flex-between" style="position: sticky; top: 0; background: var(--bg); padding-bottom: 15px; border-bottom: 1px solid var(--border); margin-bottom: 20px; z-index: 10;">
             <h2 style="margin: 0;" id="modalDateTitle">Reports for ...</h2>
@@ -118,7 +119,9 @@
         <div id="modalReportsContainer">
             <p class="text-muted">Loading...</p>
         </div>
+        </div>
     </div>
+</div>
 </div>
 
 <script>
@@ -130,7 +133,7 @@ function openReportsModal(dateStr) {
     title.textContent = 'Reports for ' + dateStr;
     container.innerHTML = '<p class="text-muted">Loading...</p>';
     
-    modal.classList.add('active');
+    document.getElementById('reportsModalOverlay').classList.add('show');
     
     fetch('?page=reports&action=ajax_day&date=' + dateStr)
         .then(res => res.json())
@@ -170,10 +173,5 @@ function escapeHtml(unsafe) {
          .replace(/'/g, "&#039;");
 }
 
-// Close modal when clicking on background or close button
-document.querySelectorAll('[data-modal-close]').forEach(btn => {
-    btn.addEventListener('click', e => {
-        e.target.closest('.modal').classList.remove('active');
-    });
-});
+// Modals are handled automatically by app.js data-modal-close logic
 </script>

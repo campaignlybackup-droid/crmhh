@@ -1,7 +1,7 @@
 <div class="flex-between">
     <h1>Lead Folders</h1>
     <?php if (Auth::hasRole('founder')): ?>
-        <button class="btn btn-primary" onclick="document.getElementById('newFolderModal').style.display='block'">+ Create Custom Folder</button>
+        <button class="btn btn-primary" data-modal-open="newFolderModal">+ Create Custom Folder</button>
     <?php endif; ?>
 </div>
 
@@ -64,8 +64,8 @@
 <?php endif; ?>
 
 <?php if (Auth::hasRole('founder')): ?>
-<div id="newFolderModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999;">
-    <div class="modal-content card" style="max-width:500px; margin:100px auto; padding:24px;">
+<div class="modal-overlay" id="newFolderModal">
+    <div class="modal">
         <h2 style="margin-top:0;">Create Custom Folder</h2>
         <div class="form-group">
             <label>Folder Name</label>
@@ -81,7 +81,7 @@
         </div>
         <div class="flex-between" style="margin-top:24px;">
             <button class="btn btn-primary" onclick="createFolder()">Create Folder</button>
-            <button class="btn" onclick="document.getElementById('newFolderModal').style.display='none'">Cancel</button>
+            <button class="btn" data-modal-close>Cancel</button>
         </div>
     </div>
 </div>

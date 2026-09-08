@@ -1,6 +1,9 @@
 <div class="flex-between">
     <h1>Leads</h1>
     <div class="btn-group">
+        <?php if (Auth::hasRole('founder')): ?>
+            <button class="btn btn-danger" style="display:none;" id="bulk-delete-btn" onclick="bulkDelete()">Delete Selected</button>
+        <?php endif; ?>
         <?php if (Permission::has('leads.import')): ?><a href="<?= url('leads', ['action' => 'import']) ?>" class="btn">Import CSV</a><?php endif; ?>
         <?php if (Permission::has('leads.export')): ?><a href="<?= url('leads', ['action' => 'export'] + $filters) ?>" class="btn">Export CSV</a><?php endif; ?>
         <?php if (Permission::has('leads.create')): ?><a href="<?= url('leads', ['action' => 'create']) ?>" class="btn btn-primary">+ New Lead</a><?php endif; ?>
@@ -76,10 +79,14 @@
 
 <div class="table-wrap" style="overflow-x:auto;">
 <table style="min-width: 1000px;">
-<thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th><th>Status</th><th>Assigned</th><th>Follow-up</th><th>Next Step</th><th>Notes</th><th>Actions</th></tr></thead>
+<thead><tr>
+    <?php if (Auth::hasRole('founder')): ?><th style="width:30px;"><input type="checkbox" onchange="toggleAllLeads(this)"></th><?php endif; ?>
+    <th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th><th>Status</th><th>Assigned</th><th>Follow-up</th><th>Next Step</th><th>Notes</th><th>Actions</th>
+</tr></thead>
 <tbody>
 <?php if (Permission::has('leads.create')): ?>
 <tr id="quick-add-row" style="background:var(--bg-hover)">
+    <?php if (Auth::hasRole('founder')): ?><td></td><?php endif; ?>
     <td class="text-muted small">New</td>
     <td><input type="text" id="qa_name" placeholder="Name *" class="form-control form-control-sm" style="width:100px"></td>
     <td><input type="text" id="qa_phone" placeholder="Phone" class="form-control form-control-sm" style="width:90px"></td>
@@ -111,6 +118,9 @@
 <?php endif; ?>
 <?php foreach ($rows as $r): ?>
     <tr id="row_<?= $r['id'] ?>">
+        <?php if (Auth::hasRole('founder')): ?>
+            <td><input type="checkbox" class="lead-checkbox" value="<?= $r['id'] ?>" onchange="updateBulkDeleteBtn()"></td>
+        <?php endif; ?>
         <td>
             <a href="<?= url('leads', ['action' => 'view', 'id' => $r['id']]) ?>"><?= e($r['lead_code']) ?></a>
             <input type="hidden" class="edit-input" data-field="id" value="<?= $r['id'] ?>">
@@ -249,5 +259,45 @@ async function quickAddLead() {
         window.location.reload();
     }
 }
+
+<?php if (Auth::hasRole('founder')): ?>
+function toggleAllLeads(source) {
+    const checkboxes = document.querySelectorAll('.lead-checkbox');
+    checkboxes.forEach(cb => cb.checked = source.checked);
+    updateBulkDeleteBtn();
+}
+
+function updateBulkDeleteBtn() {
+    const checked = document.querySelectorAll('.lead-checkbox:checked').length;
+    document.getElementById('bulk-delete-btn').style.display = checked > 0 ? 'inline-block' : 'none';
+}
+
+function bulkDelete() {
+    const checked = Array.from(document.querySelectorAll('.lead-checkbox:checked')).map(cb => cb.value);
+    if (checked.length === 0) return;
+    if (!confirm('Are you sure you want to delete ' + checked.length + ' selected leads?')) return;
+    
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '<?= url('leads', ['action' => 'bulk_delete']) ?>';
+    
+    const csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = 'csrf_token';
+    csrf.value = '<?= e(csrf_token()) ?>';
+    form.appendChild(csrf);
+    
+    checked.forEach(id => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'ids[]';
+        input.value = id;
+        form.appendChild(input);
+    });
+    
+    document.body.appendChild(form);
+    form.submit();
+}
+<?php endif; ?>
 </script>
 <?php render('partials/pagination', ['p' => $p]); ?>

@@ -135,6 +135,24 @@ switch ($action) {
         break;
     }
 
+    case 'bulk_delete': {
+        Permission::requireRole('founder');
+        csrf_check_or_die();
+        $ids = $_POST['ids'] ?? [];
+        if (!is_array($ids)) $ids = [];
+        $count = 0;
+        foreach ($ids as $id) {
+            $id = (int)$id;
+            if ($id > 0) {
+                LeadModel::softDelete($id);
+                $count++;
+            }
+        }
+        Flash::success("$count leads deleted successfully.");
+        redirect(url('leads'));
+        break;
+    }
+
     case 'import': {
         Permission::require('leads.import');
         cleanup_stale_imports();

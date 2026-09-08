@@ -29,6 +29,8 @@ $canTeams = Permission::has('teams.manage') || !empty(UserModel::managedTeamsFor
         <?php endif; ?>
         <?php if (Permission::has('audit.view')): ?>
         <li class="<?= nav_active('audit', $page) ?>"><a href="<?= url('audit') ?>"><span class="nav-ico">&#128269;</span> Audit Log</a></li>
+        <?php if (Auth::hasRole('founder')): ?>
+        <li class="<?= nav_active('backup', $page) ?>"><a href="<?= url('backup') ?>"><span class="nav-ico">&#128190;</span> Full Backup</a></li>
         <?php endif; ?>
     </ul>
 </nav>

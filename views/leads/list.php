@@ -1,9 +1,6 @@
 <div class="flex-between">
     <h1>Leads</h1>
     <div class="btn-group">
-        <?php if (Auth::hasRole('founder')): ?>
-            <button class="btn btn-danger" style="display:none;" id="bulk-delete-btn" onclick="bulkDelete()">Delete Selected</button>
-        <?php endif; ?>
         <?php if (Permission::has('leads.import')): ?><a href="<?= url('leads', ['action' => 'import']) ?>" class="btn">Import CSV</a><?php endif; ?>
         <?php if (Permission::has('leads.export')): ?><a href="<?= url('leads', ['action' => 'export'] + $filters) ?>" class="btn">Export CSV</a><?php endif; ?>
         <?php if (Permission::has('leads.create')): ?><a href="<?= url('leads', ['action' => 'create']) ?>" class="btn btn-primary">+ New Lead</a><?php endif; ?>
@@ -77,10 +74,16 @@
 </div>
 <?php endif; ?>
 
-<div class="table-wrap" style="overflow-x:auto;">
+<div class="table-wrap" style="overflow-x:auto; position:relative;">
+<?php if (Auth::hasRole('founder')): ?>
+    <div id="bulk-action-bar" style="display:none; position:sticky; left:0; top:0; background:var(--bg-hover); padding:10px; border-bottom:1px solid var(--border); z-index:10;">
+        <span id="bulk-count" style="margin-right:15px; font-weight:bold;">0 leads selected</span>
+        <button class="btn btn-danger btn-sm" onclick="bulkDelete()">Delete Selected Leads</button>
+    </div>
+<?php endif; ?>
 <table style="min-width: 1000px;">
 <thead><tr>
-    <?php if (Auth::hasRole('founder')): ?><th style="width:30px;"><input type="checkbox" onchange="toggleAllLeads(this)"></th><?php endif; ?>
+    <?php if (Auth::hasRole('founder')): ?><th style="width:30px;"><input type="checkbox" onclick="toggleAllLeads(this)" title="Select All"></th><?php endif; ?>
     <th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th><th>Status</th><th>Assigned</th><th>Follow-up</th><th>Next Step</th><th>Notes</th><th>Actions</th>
 </tr></thead>
 <tbody>
@@ -269,7 +272,11 @@ function toggleAllLeads(source) {
 
 function updateBulkDeleteBtn() {
     const checked = document.querySelectorAll('.lead-checkbox:checked').length;
-    document.getElementById('bulk-delete-btn').style.display = checked > 0 ? 'inline-block' : 'none';
+    const bar = document.getElementById('bulk-action-bar');
+    if (bar) {
+        bar.style.display = checked > 0 ? 'block' : 'none';
+        document.getElementById('bulk-count').innerText = checked + ' leads selected';
+    }
 }
 
 function bulkDelete() {

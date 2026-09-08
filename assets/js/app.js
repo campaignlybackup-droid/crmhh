@@ -15,6 +15,7 @@
     var userMenu = document.getElementById('userMenu');
     var sidebarToggle = document.getElementById('sidebarToggle');
     var sidebar = document.getElementById('sidebar');
+    var sidebarBackdrop = document.getElementById('sidebarBackdrop');
 
     if (notifBtn) notifBtn.addEventListener('click', function (e) { e.stopPropagation(); closeAll(notifMenu); toggle(notifMenu); });
     if (userBtn) userBtn.addEventListener('click', function (e) { e.stopPropagation(); closeAll(userMenu); toggle(userMenu); });
@@ -23,6 +24,12 @@
     if (sidebarToggle) sidebarToggle.addEventListener('click', function (e) {
       e.stopPropagation();
       sidebar.classList.toggle('show');
+      if (sidebarBackdrop) sidebarBackdrop.classList.toggle('show');
+    });
+    
+    if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', function (e) {
+      sidebar.classList.remove('show');
+      sidebarBackdrop.classList.remove('show');
     });
 
     // Confirm dialogs for destructive actions

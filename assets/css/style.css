@@ -17,6 +17,7 @@ p{margin:0 0 8px}
 .brand{font-weight:700;font-size:16px;color:var(--text);white-space:nowrap}
 .brand:hover{text-decoration:none}
 .global-search{flex:1;max-width:420px}
+.search-btn-mobile{display:none}
 .global-search input{width:100%;padding:7px 12px;border:1px solid var(--border);border-radius:20px;background:var(--bg);font-size:13px}
 .global-search input:focus{outline:2px solid var(--primary);background:var(--surface)}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;position:relative}
@@ -39,6 +40,8 @@ p{margin:0 0 8px}
 
 /* Shell / sidebar */
 .app-shell{display:flex;padding-top:var(--topbar-h)}
+.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:140;top:var(--topbar-h)}
+.sidebar-backdrop.show{display:block}
 .sidebar{width:var(--sidebar-w);flex-shrink:0;position:fixed;top:var(--topbar-h);bottom:0;left:0;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto}
 .sidebar ul{list-style:none;margin:0;padding:12px 0}
 .sidebar li a{display:flex;align-items:center;gap:10px;padding:10px 18px;color:var(--text);font-size:13.5px}
@@ -169,6 +172,21 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   .sidebar-toggle{display:block}
   .sidebar{transform:translateX(-100%);transition:transform .2s;z-index:150}
   .sidebar.show{transform:translateX(0)}
-  .main-content{margin-left:0}
+  .main-content{margin-left:0;padding:16px}
   .global-search{display:none}
+  .search-btn-mobile{display:inline-block}
+  .filters-bar{flex-direction:column;align-items:stretch}
+  .filters-bar .form-group{width:100%}
+  .filters-bar .btn{width:100%}
+  #quick-add-row{display:none}
+  .modal{margin:16px;width:calc(100% - 32px)}
+  .btn-group{justify-content:flex-start}
+}
+
+@media(max-width:500px){
+  .main-content{padding:12px}
+  .topbar{padding:0 10px;gap:8px}
+  .brand{font-size:15px}
+  .stat-card{padding:12px}
+  .stat-value{font-size:22px}
 }

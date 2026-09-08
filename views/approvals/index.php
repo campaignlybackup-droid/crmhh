@@ -4,6 +4,7 @@
 </div>
 
 <div class="card">
+    <div class="table-wrap">
     <table class="table">
         <thead>
             <tr>

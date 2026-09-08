@@ -563,4 +563,4 @@ WHERE r.slug IN ('editor','videographer','social-media','content','designer','pe
 
 INSERT INTO app_settings (`key`, `value`) VALUES ('installed', '0');
 INSERT INTO app_settings (`key`, `value`) VALUES ('app_name', 'Agency CRM');
-INSERT INTO app_settings (`key`, `value`) VALUES ('timezone', 'Asia/Kolkata');
+INSERT INTO app_settings (`key`, `value`) VALUES ('timezone', 'Asia/Dubai');

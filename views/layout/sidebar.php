@@ -6,6 +6,7 @@ $canTeams = Permission::has('teams.manage') || !empty(UserModel::managedTeamsFor
 <nav class="sidebar" id="sidebar">
     <ul>
         <li class="<?= nav_active('dashboard', $page) ?>"><a href="<?= url('dashboard') ?>"><span class="nav-ico">&#9632;</span> Dashboard</a></li>
+        <li class="<?= nav_active('announcements', $page) ?>"><a href="<?= url('announcements') ?>"><span class="nav-ico">&#128227;</span> Announcements</a></li>
         <li class="<?= nav_active('leads', $page) ?>"><a href="<?= url('leads') ?>"><span class="nav-ico">&#9679;</span> Leads</a></li>
         <li class="<?= nav_active('clients', $page) ?>"><a href="<?= url('clients') ?>"><span class="nav-ico">&#9670;</span> Clients</a></li>
         <li class="<?= nav_active('tasks', $page) ?>"><a href="<?= url('tasks') ?>"><span class="nav-ico">&#9745;</span> Tasks</a></li>

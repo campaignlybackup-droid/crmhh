@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pass = (string)($_POST['db_pass'] ?? '');
         $appName = trim($_POST['app_name'] ?? 'Agency CRM');
         $appUrl = rtrim(trim($_POST['app_url'] ?? ''), '/');
-        $timezone = trim($_POST['timezone'] ?? 'Asia/Kolkata');
+        $timezone = trim($_POST['timezone'] ?? 'Asia/Dubai');
 
         if ($host === '' || $name === '' || $user === '') {
             $errors[] = 'Please fill in all required database fields.';
@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         "    'app' => [\n" .
                         "        'name'     => " . var_export($appName ?: 'Agency CRM', true) . ",\n" .
                         "        'url'      => " . var_export($appUrl, true) . ",\n" .
-                        "        'timezone' => " . var_export($timezone ?: 'Asia/Kolkata', true) . ",\n" .
+                        "        'timezone' => " . var_export($timezone ?: 'Asia/Dubai', true) . ",\n" .
                         "        'secret'   => " . var_export($secret, true) . ",\n" .
                         "        'debug'    => false,\n" .
                         "    ],\n" .
@@ -196,7 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <h3>Application Settings</h3>
             <div class="form-group"><label>Application Name</label><input type="text" name="app_name" value="<?= h($_POST['app_name'] ?? 'Agency CRM') ?>"></div>
             <div class="form-group"><label>Application URL</label><input type="text" name="app_url" value="<?= h($_POST['app_url'] ?? '') ?>" placeholder="https://yourdomain.com/crm"></div>
-            <div class="form-group"><label>Timezone</label><input type="text" name="timezone" value="<?= h($_POST['timezone'] ?? 'Asia/Kolkata') ?>"></div>
+            <div class="form-group"><label>Timezone</label><input type="text" name="timezone" value="<?= h($_POST['timezone'] ?? 'Asia/Dubai') ?>"></div>
             <button class="btn btn-primary" style="width:100%">Test Connection &amp; Install Database</button>
         </form>
     <?php elseif ($step == 2): ?>

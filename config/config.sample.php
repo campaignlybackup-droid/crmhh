@@ -15,7 +15,7 @@ return [
     'app' => [
         'name'      => 'Agency CRM',
         'url'       => 'https://example.com/crm',
-        'timezone'  => 'Asia/Kolkata',
+        'timezone'  => 'Asia/Dubai',
         // Change this to a long random string on every install.
         'secret'    => 'change-this-to-a-random-secret-string',
         'debug'     => false,

@@ -143,6 +143,18 @@ switch ($action) {
         break;
     }
 
+    case 'remove_service': {
+        $clientServiceId = (int)($_POST['client_service_id'] ?? 0);
+        $clientId = (int)($_POST['client_id'] ?? 0);
+        if (!Permission::canAccessClient($clientId)) Permission::deny();
+        Permission::require('clients.manage_services');
+        csrf_check_or_die();
+        ClientModel::removeService($clientServiceId);
+        Flash::success('Service/requirement removed successfully.');
+        redirect(url('clients', ['action' => 'view', 'id' => $clientId]));
+        break;
+    }
+
     case 'add_requirement': {
         $clientServiceId = (int)($_POST['client_service_id'] ?? 0);
         $clientId = (int)($_POST['client_id'] ?? 0);

@@ -112,7 +112,10 @@
                             <option value="paused" <?= $svc['status']==='paused'?'selected':'' ?>>Paused</option>
                         </select>
                     </div>
-                    <button class="btn btn-sm btn-primary">Save</button>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-primary">Save</button>
+                        <button type="submit" formaction="<?= url('clients', ['action' => 'remove_service']) ?>" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to completely remove this service and all its requirements from this client?')">Remove Service</button>
+                    </div>
                 </form>
                 </details>
                 <?php endif; ?>

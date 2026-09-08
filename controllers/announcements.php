@@ -4,10 +4,16 @@ Auth::requireLogin();
 $action = $_GET['action'] ?? 'index';
 
 if ($action === 'index') {
-    $announcements = AnnouncementModel::all();
+    try {
+        $announcements = AnnouncementModel::all();
+    } catch (\PDOException $e) {
+        if (strpos($e->getMessage(), "Base table or view not found") !== false || strpos($e->getMessage(), "announcements' doesn't exist") !== false) {
+            fatal_error("The 'announcements' table is missing. Please run the migration script by visiting: " . url('')."migrate_announcements_and_tz.php");
+        }
+        throw $e;
+    }
     $canManage = Permission::has('announcements.manage');
-    $pageTitle = 'Announcements';
-    View::render('announcements/index', compact('announcements', 'canManage'));
+    render_page('announcements/index', compact('announcements', 'canManage'), 'Announcements');
     exit;
 }
 

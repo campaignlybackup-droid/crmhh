@@ -3,12 +3,11 @@ require __DIR__ . '/core/bootstrap.php';
 
 echo "Starting Announcements & Timezone migration...\n";
 
-$db = Database::getInstance();
-$db->beginTransaction();
+Database::beginTransaction();
 
 try {
     // 1. Create Announcements table
-    $db->exec("
+    Database::run("
         CREATE TABLE IF NOT EXISTS announcements (
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             title VARCHAR(255) NOT NULL,
@@ -22,29 +21,25 @@ try {
     echo "- Created announcements table\n";
 
     // 2. Add permission
-    $stmt = $db->prepare("SELECT id FROM permissions WHERE slug = 'announcements.manage'");
-    $stmt->execute();
-    if (!$stmt->fetch()) {
-        $db->prepare("INSERT INTO permissions (slug, name, `group`) VALUES ('announcements.manage', 'Manage announcements', 'admin')")->execute();
-        $permId = $db->lastInsertId();
+    $perm = Database::one("SELECT id FROM permissions WHERE slug = 'announcements.manage'");
+    if (!$perm) {
+        Database::run("INSERT INTO permissions (slug, name, `group`) VALUES ('announcements.manage', 'Manage announcements', 'admin')");
+        $permId = Database::lastInsertId();
         
-        $stmt = $db->prepare("SELECT id FROM roles WHERE slug = 'founder'");
-        $stmt->execute();
-        $founder = $stmt->fetch();
-        
+        $founder = Database::one("SELECT id FROM roles WHERE slug = 'founder'");
         if ($founder) {
-            $db->prepare("INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)")->execute([$founder['id'], $permId]);
+            Database::run("INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)", [$founder['id'], $permId]);
         }
         echo "- Added announcements.manage permission\n";
     }
 
     // 3. Update Timezone in app_settings
-    $db->prepare("UPDATE app_settings SET value = 'Asia/Dubai' WHERE `key` = 'timezone'")->execute();
+    Database::run("UPDATE app_settings SET value = 'Asia/Dubai' WHERE `key` = 'timezone'");
     echo "- Updated app_settings timezone to Asia/Dubai\n";
 
-    $db->commit();
+    Database::commit();
     echo "Migration completed successfully!\n";
 } catch (Exception $e) {
-    $db->rollBack();
+    Database::rollBack();
     echo "Migration failed: " . $e->getMessage() . "\n";
 }

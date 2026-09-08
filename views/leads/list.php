@@ -76,7 +76,7 @@
 
 <div class="table-wrap" style="overflow-x:auto;">
 <table style="min-width: 1000px;">
-<thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th><th>Status</th><th>Assigned</th><th>Follow-up</th><th>Actions</th></tr></thead>
+<thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th><th>Status</th><th>Assigned</th><th>Follow-up</th><th>Next Step</th><th>Notes</th><th>Actions</th></tr></thead>
 <tbody>
 <?php if (Permission::has('leads.create')): ?>
 <tr id="quick-add-row" style="background:var(--bg-hover)">
@@ -100,12 +100,14 @@
         <?php else: ?><span class="text-muted small">Self</span><?php endif; ?>
     </td>
     <td><input type="date" id="qa_next_followup_date" class="form-control form-control-sm" style="width:110px"></td>
+    <td><input type="text" id="qa_next_step" placeholder="Next Step" class="form-control form-control-sm" style="width:100px"></td>
+    <td><input type="text" id="qa_notes" placeholder="Notes" class="form-control form-control-sm" style="width:120px"></td>
     <td><button class="btn btn-sm btn-primary" onclick="quickAddLead()">+ Add</button></td>
 </tr>
 <?php endif; ?>
 
 <?php if (empty($rows)): ?>
-    <tr><td colspan="10" class="text-muted">No leads found.</td></tr>
+    <tr><td colspan="12" class="text-muted">No leads found.</td></tr>
 <?php endif; ?>
 <?php foreach ($rows as $r): ?>
     <tr id="row_<?= $r['id'] ?>">
@@ -143,6 +145,14 @@
         <td>
             <span class="view-mode"><?= format_date($r['next_followup_date']) ?></span>
             <input type="date" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:110px" data-field="next_followup_date" value="<?= $r['next_followup_date'] ?>">
+        </td>
+        <td>
+            <span class="view-mode"><?= e($r['next_step'] ?? '') ?></span>
+            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100px" data-field="next_step" value="<?= e($r['next_step'] ?? '') ?>">
+        </td>
+        <td>
+            <span class="view-mode" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;display:inline-block;" title="<?= e($r['notes'] ?? '') ?>"><?= e($r['notes'] ?? '') ?></span>
+            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:120px" data-field="notes" value="<?= e($r['notes'] ?? '') ?>">
         </td>
         <td>
             <button class="btn btn-sm btn-link view-mode" onclick="toggleEdit(<?= $r['id'] ?>)">Edit</button>
@@ -211,6 +221,8 @@ async function quickAddLead() {
         status_id: document.getElementById('qa_status_id').value,
         assigned_user_id: document.getElementById('qa_assigned_user_id') ? document.getElementById('qa_assigned_user_id').value : '',
         next_followup_date: document.getElementById('qa_next_followup_date').value,
+        next_step: document.getElementById('qa_next_step').value,
+        notes: document.getElementById('qa_notes').value,
         folder_id: '<?= e($filters['folder_id'] ?? '') ?>'
     };
     

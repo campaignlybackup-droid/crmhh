@@ -45,7 +45,7 @@ switch ($action) {
             'name' => trim($_POST['name']), 'phone' => trim($_POST['phone'] ?? ''), 'email' => trim($_POST['email'] ?? ''),
             'company' => trim($_POST['company'] ?? ''), 'source' => trim($_POST['source'] ?? ''),
             'status_id' => $_POST['status_id'] ?? null, 'assigned_user_id' => $assignedUserId ?: null,
-            'next_followup_date' => $_POST['next_followup_date'] ?? null, 'notes' => trim($_POST['notes'] ?? ''),
+            'next_followup_date' => $_POST['next_followup_date'] ?? null, 'next_step' => trim($_POST['next_step'] ?? ''), 'notes' => trim($_POST['notes'] ?? ''),
         ]);
         Flash::success('Lead created successfully.');
         redirect(url('leads', ['action' => 'view', 'id' => $id]));
@@ -78,7 +78,7 @@ switch ($action) {
             'name' => trim($_POST['name']), 'phone' => trim($_POST['phone'] ?? ''), 'email' => trim($_POST['email'] ?? ''),
             'company' => trim($_POST['company'] ?? ''), 'source' => trim($_POST['source'] ?? ''),
             'status_id' => $_POST['status_id'] ?? null, 'next_followup_date' => $_POST['next_followup_date'] ?? null,
-            'notes' => trim($_POST['notes'] ?? ''),
+            'next_step' => trim($_POST['next_step'] ?? ''), 'notes' => trim($_POST['notes'] ?? ''),
         ]);
         Flash::success('Lead updated.');
         redirect(url('leads', ['action' => 'view', 'id' => $id]));
@@ -314,7 +314,7 @@ switch ($action) {
             'name' => trim($json['name']), 'phone' => trim($json['phone'] ?? ''), 'email' => trim($json['email'] ?? ''),
             'company' => trim($json['company'] ?? ''), 'source' => trim($json['source'] ?? ''),
             'status_id' => $json['status_id'] ?? null, 'assigned_user_id' => $assignedUserId,
-            'next_followup_date' => $json['next_followup_date'] ?: null, 'notes' => '',
+            'next_followup_date' => $json['next_followup_date'] ?: null, 'next_step' => $json['next_step'] ?? '', 'notes' => $json['notes'] ?? '',
             'folder_id' => $folderId
         ]);
         
@@ -339,7 +339,7 @@ switch ($action) {
             'name' => trim($json['name']), 'phone' => trim($json['phone'] ?? ''), 'email' => trim($json['email'] ?? ''),
             'company' => trim($json['company'] ?? ''), 'source' => trim($json['source'] ?? ''),
             'status_id' => $json['status_id'] ?? null, 'next_followup_date' => $json['next_followup_date'] ?: null,
-            'notes' => $json['notes'] ?? null
+            'next_step' => $json['next_step'] ?? null, 'notes' => $json['notes'] ?? null
         ]);
         
         $lead = LeadModel::find($id);

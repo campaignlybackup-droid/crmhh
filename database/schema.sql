@@ -122,6 +122,7 @@ CREATE TABLE leads (
     assigned_user_id INT UNSIGNED DEFAULT NULL,
     created_by INT UNSIGNED DEFAULT NULL,
     next_followup_date DATE DEFAULT NULL,
+    next_step VARCHAR(255) DEFAULT NULL,
     notes TEXT DEFAULT NULL,
     converted_client_id INT UNSIGNED DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

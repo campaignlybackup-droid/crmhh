@@ -19,6 +19,7 @@
             <tr><td class="text-muted">Email</td><td><?= e($lead['email'] ?: '—') ?></td></tr>
             <tr><td class="text-muted">Company</td><td><?= e($lead['company'] ?: '—') ?></td></tr>
             <tr><td class="text-muted">Source</td><td><?= e($lead['source'] ?: '—') ?></td></tr>
+            <tr><td class="text-muted">Next Step</td><td><?= e($lead['next_step'] ?: '—') ?></td></tr>
             <tr><td class="text-muted">Created By</td><td><?= e($lead['created_by_name'] ?? '—') ?> on <?= format_date($lead['created_at']) ?></td></tr>
             <tr><td class="text-muted">Notes</td><td class="wrap"><?= nl2br(e($lead['notes'] ?? '')) ?: '—' ?></td></tr>
         </table>

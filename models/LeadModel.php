@@ -233,12 +233,12 @@ class LeadModel
     {
         $code = next_code('leads', 'lead_code', 'LD');
         Database::run(
-            'INSERT INTO leads (lead_code, name, phone, email, company, source, status_id, assigned_user_id, created_by, next_followup_date, notes, folder_id, created_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW())',
+            'INSERT INTO leads (lead_code, name, phone, email, company, source, status_id, assigned_user_id, created_by, next_followup_date, next_step, notes, folder_id, created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())',
             [
                 $code, $data['name'], $data['phone'] ?: null, $data['email'] ?: null, $data['company'] ?: null,
                 $data['source'] ?: null, $data['status_id'] ?: self::defaultStatusId(), $data['assigned_user_id'] ?: null,
-                $data['created_by'] ?? Auth::id(), $data['next_followup_date'] ?: null, $data['notes'] ?: null,
+                $data['created_by'] ?? Auth::id(), $data['next_followup_date'] ?: null, $data['next_step'] ?: null, $data['notes'] ?: null,
                 $data['folder_id'] ?? null
             ]
         );
@@ -255,8 +255,8 @@ class LeadModel
     {
         $before = self::find($id);
         Database::run(
-            'UPDATE leads SET name=?, phone=?, email=?, company=?, source=?, notes=?, next_followup_date=? WHERE id=?',
-            [$data['name'], $data['phone'] ?: null, $data['email'] ?: null, $data['company'] ?: null, $data['source'] ?: null, $data['notes'] ?: null, $data['next_followup_date'] ?: null, $id]
+            'UPDATE leads SET name=?, phone=?, email=?, company=?, source=?, notes=?, next_followup_date=?, next_step=? WHERE id=?',
+            [$data['name'], $data['phone'] ?: null, $data['email'] ?: null, $data['company'] ?: null, $data['source'] ?: null, $data['notes'] ?: null, $data['next_followup_date'] ?: null, $data['next_step'] ?: null, $id]
         );
 
         if (!empty($data['status_id']) && (int)$data['status_id'] !== (int)$before['status_id']) {

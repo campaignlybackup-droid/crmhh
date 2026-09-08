@@ -29,6 +29,7 @@
         <?php endif; ?>
         <div class="form-group"><label>Next Follow-up</label><input type="date" name="next_followup_date" value="<?= e($lead['next_followup_date'] ?? '') ?>"></div>
     </div>
+    <div class="form-group"><label>Next Step</label><input type="text" name="next_step" value="<?= e($lead['next_step'] ?? '') ?>"></div>
     <div class="form-group"><label>Notes</label><textarea name="notes"><?= e($lead['notes'] ?? '') ?></textarea></div>
     <button class="btn btn-primary"><?= $lead ? 'Save Changes' : 'Create Lead' ?></button>
     <a href="<?= url('leads') ?>" class="btn">Cancel</a>

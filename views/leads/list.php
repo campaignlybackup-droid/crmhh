@@ -74,7 +74,7 @@
 </div>
 <?php endif; ?>
 
-<?php if (Auth::hasRole('founder')): ?>
+<?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
 <div id="bulk-action-bar" style="display:none; position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#fff; padding:12px 24px; border-radius:30px; box-shadow:0 4px 20px rgba(0,0,0,0.15); z-index:999; border:1px solid var(--border); align-items:center; justify-content:center; gap:16px;">
     <span id="bulk-count" style="font-weight:bold; color:var(--text);">0 leads selected</span>
     <button class="btn btn-danger btn-sm" onclick="bulkDelete()" style="border-radius:20px;">Delete Selected</button>
@@ -84,13 +84,13 @@
 <div class="table-wrap" style="overflow-x:auto; position:relative;">
 <table style="min-width: 1000px;">
 <thead><tr>
-    <?php if (Auth::hasRole('founder')): ?><th style="width:30px;"><input type="checkbox" onclick="toggleAllLeads(this)" title="Select All"></th><?php endif; ?>
+    <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?><th style="width:30px;"><input type="checkbox" onclick="toggleAllLeads(this)" title="Select All"></th><?php endif; ?>
     <th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th><th>Status</th><th>Assigned</th><th>Follow-up</th><th>Next Step</th><th>Notes</th><th>Actions</th>
 </tr></thead>
 <tbody>
 <?php if (Permission::has('leads.create')): ?>
 <tr id="quick-add-row" style="background:var(--bg-hover)">
-    <?php if (Auth::hasRole('founder')): ?><td></td><?php endif; ?>
+    <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?><td></td><?php endif; ?>
     <td class="text-muted small">New</td>
     <td><input type="text" id="qa_name" placeholder="Name *" class="form-control form-control-sm" style="width:100px"></td>
     <td><input type="text" id="qa_phone" placeholder="Phone" class="form-control form-control-sm" style="width:90px"></td>
@@ -122,7 +122,7 @@
 <?php endif; ?>
 <?php foreach ($rows as $r): ?>
     <tr id="row_<?= $r['id'] ?>">
-        <?php if (Auth::hasRole('founder')): ?>
+        <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
             <td><input type="checkbox" class="lead-checkbox" value="<?= $r['id'] ?>" onchange="updateBulkDeleteBtn()"></td>
         <?php endif; ?>
         <td>

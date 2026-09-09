@@ -22,6 +22,11 @@
             <tr><td class="text-muted">Next Step</td><td><?= e($lead['next_step'] ?: '—') ?></td></tr>
             <tr><td class="text-muted">Created By</td><td><?= e($lead['created_by_name'] ?? '—') ?> on <?= format_date($lead['created_at']) ?></td></tr>
             <tr><td class="text-muted">Notes</td><td class="wrap"><?= nl2br(e($lead['notes'] ?? '')) ?: '—' ?></td></tr>
+            <?php if (!empty($customFields)): ?>
+                <?php foreach ($customFields as $cf): $val = $customValues[$cf['id']] ?? ''; ?>
+                    <tr><td class="text-muted"><?= e($cf['field_name']) ?></td><td><?= e($val !== '' ? $val : '—') ?></td></tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
         </table>
 
         <hr>

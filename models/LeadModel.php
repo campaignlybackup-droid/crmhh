@@ -2,15 +2,56 @@
 
 class LeadModel
 {
-    public static function statuses(): array
+    public static function statuses(?int $folderId = null): array
     {
-        return Database::all('SELECT * FROM lead_statuses ORDER BY sort_order ASC');
+        if ($folderId !== null) {
+            return Database::all('SELECT * FROM lead_statuses WHERE folder_id = ? ORDER BY sort_order ASC', [$folderId]);
+        }
+        return Database::all('SELECT * FROM lead_statuses WHERE folder_id IS NULL ORDER BY sort_order ASC');
     }
 
-    public static function defaultStatusId(): int
+    public static function defaultStatusId(?int $folderId = null): ?int
     {
-        $row = Database::one("SELECT id FROM lead_statuses WHERE is_default = 1 LIMIT 1");
-        return $row ? (int)$row['id'] : 1;
+        if ($folderId !== null) {
+            $row = Database::one("SELECT id FROM lead_statuses WHERE is_default = 1 AND folder_id = ? LIMIT 1", [$folderId]);
+            if ($row) return (int)$row['id'];
+            $row = Database::one("SELECT id FROM lead_statuses WHERE folder_id = ? ORDER BY sort_order ASC LIMIT 1", [$folderId]);
+            return $row ? (int)$row['id'] : null;
+        }
+        $row = Database::one("SELECT id FROM lead_statuses WHERE is_default = 1 AND folder_id IS NULL LIMIT 1");
+        if ($row) return (int)$row['id'];
+        $row = Database::one("SELECT id FROM lead_statuses WHERE folder_id IS NULL ORDER BY sort_order ASC LIMIT 1");
+        return $row ? (int)$row['id'] : null;
+    }
+
+    public static function getCustomFields(?int $folderId): array
+    {
+        if (!$folderId) return [];
+        return Database::all('SELECT * FROM folder_custom_fields WHERE folder_id = ? ORDER BY sort_order ASC', [$folderId]);
+    }
+
+    public static function getCustomValues(int $leadId): array
+    {
+        $rows = Database::all('SELECT field_id, field_value FROM lead_custom_values WHERE lead_id = ?', [$leadId]);
+        $values = [];
+        foreach ($rows as $r) {
+            $values[$r['field_id']] = $r['field_value'];
+        }
+        return $values;
+    }
+
+    public static function saveCustomValues(int $leadId, array $values)
+    {
+        foreach ($values as $fieldId => $val) {
+            if ($val === '' || $val === null) {
+                Database::run('DELETE FROM lead_custom_values WHERE lead_id = ? AND field_id = ?', [$leadId, (int)$fieldId]);
+            } else {
+                Database::run(
+                    'INSERT INTO lead_custom_values (lead_id, field_id, field_value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE field_value = ?',
+                    [$leadId, (int)$fieldId, $val, $val]
+                );
+            }
+        }
     }
 
     public static function find(int $id): ?array

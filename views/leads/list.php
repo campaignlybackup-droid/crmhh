@@ -1,6 +1,9 @@
 <div class="flex-between">
     <h1>Leads</h1>
     <div class="btn-group">
+        <?php if (!empty($filters['folder_id']) && Auth::hasRole('founder')): ?>
+        <a href="<?= url('folder_settings', ['folder_id' => $filters['folder_id']]) ?>" class="btn btn-secondary">Folder Settings</a>
+        <?php endif; ?>
         <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
         <button id="bulk-delete-btn" class="btn btn-danger" style="display:none;" onclick="bulkDelete()">Delete Selected (<span id="bulk-count">0</span>)</button>
         <?php endif; ?>
@@ -82,7 +85,9 @@
 <table>
 <thead><tr>
     <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?><th style="width:30px;"><input type="checkbox" onclick="toggleAllLeads(this)" title="Select All"></th><?php endif; ?>
-    <th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th><th>Status</th><th>Assigned</th><th>Follow-up</th><th>Next Step</th><th>Notes</th><th>Actions</th>
+    <th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th>
+    <?php if (!empty($customFields)) foreach ($customFields as $cf): ?><th><?= e($cf['field_name']) ?></th><?php endforeach; ?>
+    <th>Status</th><th>Assigned</th><th>Follow-up</th><th>Next Step</th><th>Notes</th><th>Actions</th>
 </tr></thead>
 <tbody>
 <?php if (Permission::has('leads.create')): ?>
@@ -94,6 +99,25 @@
     <td data-label="Email"><input type="email" id="qa_email" placeholder="Email" class="form-control form-control-sm" style="width:100%; min-width:100px;"></td>
     <td data-label="Company"><input type="text" id="qa_company" placeholder="Company" class="form-control form-control-sm" style="width:100%; min-width:90px;"></td>
     <td data-label="Source"><input type="text" id="qa_source" placeholder="Source" class="form-control form-control-sm" style="width:100%; min-width:80px;"></td>
+    
+    <?php if (!empty($customFields)) foreach ($customFields as $cf): ?>
+    <td data-label="<?= e($cf['field_name']) ?>">
+        <?php if ($cf['field_type'] === 'select'): 
+            $opts = json_decode($cf['options'] ?: '[]', true) ?: []; ?>
+            <select class="form-control form-control-sm cf-input" data-cf-id="<?= $cf['id'] ?>">
+                <option value="">—</option>
+                <?php foreach ($opts as $opt): ?><option value="<?= e($opt) ?>"><?= e($opt) ?></option><?php endforeach; ?>
+            </select>
+        <?php elseif ($cf['field_type'] === 'date'): ?>
+            <input type="date" class="form-control form-control-sm cf-input" data-cf-id="<?= $cf['id'] ?>">
+        <?php elseif ($cf['field_type'] === 'number'): ?>
+            <input type="number" step="any" class="form-control form-control-sm cf-input" data-cf-id="<?= $cf['id'] ?>" style="width:100%; min-width:80px;">
+        <?php else: ?>
+            <input type="text" class="form-control form-control-sm cf-input" data-cf-id="<?= $cf['id'] ?>" style="width:100%; min-width:90px;">
+        <?php endif; ?>
+    </td>
+    <?php endforeach; ?>
+
     <td data-label="Status">
         <select id="qa_status_id" class="form-control form-control-sm">
             <?php foreach ($statuses as $s): ?><option value="<?= $s['id'] ?>"><?= e($s['name']) ?></option><?php endforeach; ?>
@@ -146,6 +170,26 @@
             <span class="view-mode"><?= e($r['source']) ?></span>
             <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:80px;" data-field="source" value="<?= e($r['source']) ?>">
         </td>
+        
+        <?php if (!empty($customFields)) foreach ($customFields as $cf): $val = $customValuesMap[$r['id']][$cf['id']] ?? ''; ?>
+        <td data-label="<?= e($cf['field_name']) ?>">
+            <span class="view-mode"><?= e($val) ?></span>
+            <?php if ($cf['field_type'] === 'select'): 
+                $opts = json_decode($cf['options'] ?: '[]', true) ?: []; ?>
+                <select class="edit-input edit-mode form-control form-control-sm" style="display:none;" data-cf-id="<?= $cf['id'] ?>">
+                    <option value="">—</option>
+                    <?php foreach ($opts as $opt): ?><option value="<?= e($opt) ?>" <?= $val === $opt ? 'selected' : '' ?>><?= e($opt) ?></option><?php endforeach; ?>
+                </select>
+            <?php elseif ($cf['field_type'] === 'date'): ?>
+                <input type="date" class="edit-input edit-mode form-control form-control-sm" style="display:none;" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>">
+            <?php elseif ($cf['field_type'] === 'number'): ?>
+                <input type="number" step="any" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:80px;" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>">
+            <?php else: ?>
+                <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:90px;" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>">
+            <?php endif; ?>
+        </td>
+        <?php endforeach; ?>
+
         <td data-label="Status">
             <span class="view-mode badge" style="background:<?= e($r['status_color']) ?>; white-space:normal; text-align:center;"><?= e($r['status_name']) ?></span>
             <select class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="status_id">
@@ -204,7 +248,12 @@ async function saveEdit(id) {
     const row = document.getElementById('row_' + id);
     const inputs = row.querySelectorAll('.edit-input');
     const data = {};
-    inputs.forEach(inp => data[inp.dataset.field] = inp.value);
+    const cf = {};
+    inputs.forEach(inp => {
+        if (inp.dataset.field) data[inp.dataset.field] = inp.value;
+        if (inp.dataset.cfId) cf[inp.dataset.cfId] = inp.value;
+    });
+    data.custom_fields = cf;
     
     try {
         const btn = row.querySelector('.btn-primary.edit-mode');
@@ -243,6 +292,11 @@ async function quickAddLead() {
         folder_id: '<?= e($filters['folder_id'] ?? '') ?>'
     };
     
+    const cfInputs = document.querySelectorAll('#quick-add-row .cf-input');
+    const cf = {};
+    cfInputs.forEach(inp => cf[inp.dataset.cfId] = inp.value);
+    data.custom_fields = cf;
+
     if (!data.name) return alert('Name is required');
     
     try {

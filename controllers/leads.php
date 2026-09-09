@@ -12,17 +12,22 @@ switch ($action) {
         $lead = LeadModel::find($id);
         if (!$lead) fatal_error('Lead not found.');
         $timeline = ActivityModel::timeline('lead', $id);
-        $statuses = LeadModel::statuses();
+        $folderId = $lead['folder_id'] ? (int)$lead['folder_id'] : null;
+        $statuses = LeadModel::statuses($folderId);
+        $customFields = LeadModel::getCustomFields($folderId);
+        $customValues = LeadModel::getCustomValues($id);
         $users = UserModel::activeSelectList();
-        render_page('leads/view', compact('lead', 'timeline', 'statuses', 'users'), 'Lead ' . $lead['lead_code']);
+        render_page('leads/view', compact('lead', 'timeline', 'statuses', 'customFields', 'customValues', 'users'), 'Lead ' . $lead['lead_code']);
         break;
     }
 
     case 'create': {
         Permission::require('leads.create');
-        $statuses = LeadModel::statuses();
+        $folderId = isset($_GET['folder_id']) && $_GET['folder_id'] !== '' ? (int)$_GET['folder_id'] : null;
+        $statuses = LeadModel::statuses($folderId);
+        $customFields = LeadModel::getCustomFields($folderId);
         $users = UserModel::activeSelectList();
-        render_page('leads/form', ['lead' => null, 'statuses' => $statuses, 'users' => $users], 'New Lead');
+        render_page('leads/form', ['lead' => null, 'folderId' => $folderId, 'statuses' => $statuses, 'customFields' => $customFields, 'customValues' => [], 'users' => $users], 'New Lead');
         break;
     }
 
@@ -41,12 +46,15 @@ switch ($action) {
         }
         $assignedUserId = $_POST['assigned_user_id'] ?? null;
         if ($assignedUserId && !Permission::has('leads.assign')) $assignedUserId = null;
+        $folderId = isset($_POST['folder_id']) && $_POST['folder_id'] !== '' ? (int)$_POST['folder_id'] : null;
         $id = LeadModel::create([
             'name' => trim($_POST['name']), 'phone' => trim($_POST['phone'] ?? ''), 'email' => trim($_POST['email'] ?? ''),
             'company' => trim($_POST['company'] ?? ''), 'source' => trim($_POST['source'] ?? ''),
             'status_id' => $_POST['status_id'] ?? null, 'assigned_user_id' => $assignedUserId ?: null,
             'next_followup_date' => $_POST['next_followup_date'] ?? null, 'next_step' => trim($_POST['next_step'] ?? ''), 'notes' => trim($_POST['notes'] ?? ''),
+            'folder_id' => $folderId
         ]);
+        LeadModel::saveCustomValues($id, $_POST['custom_fields'] ?? []);
         Flash::success('Lead created successfully.');
         redirect(url('leads', ['action' => 'view', 'id' => $id]));
         break;
@@ -58,9 +66,12 @@ switch ($action) {
         Permission::require('leads.edit');
         $lead = LeadModel::find($id);
         if (!$lead) fatal_error('Lead not found.');
-        $statuses = LeadModel::statuses();
+        $folderId = $lead['folder_id'] ? (int)$lead['folder_id'] : null;
+        $statuses = LeadModel::statuses($folderId);
+        $customFields = LeadModel::getCustomFields($folderId);
+        $customValues = LeadModel::getCustomValues($id);
         $users = UserModel::activeSelectList();
-        render_page('leads/form', compact('lead', 'statuses', 'users'), 'Edit Lead');
+        render_page('leads/form', compact('lead', 'folderId', 'statuses', 'customFields', 'customValues', 'users'), 'Edit Lead');
         break;
     }
 
@@ -80,6 +91,7 @@ switch ($action) {
             'status_id' => $_POST['status_id'] ?? null, 'next_followup_date' => $_POST['next_followup_date'] ?? null,
             'next_step' => trim($_POST['next_step'] ?? ''), 'notes' => trim($_POST['notes'] ?? ''),
         ]);
+        LeadModel::saveCustomValues($id, $_POST['custom_fields'] ?? []);
         Flash::success('Lead updated.');
         redirect(url('leads', ['action' => 'view', 'id' => $id]));
         break;
@@ -341,6 +353,10 @@ switch ($action) {
             'folder_id' => $folderId
         ]);
         
+        if (isset($json['custom_fields']) && is_array($json['custom_fields'])) {
+            LeadModel::saveCustomValues($id, $json['custom_fields']);
+        }
+        
         $lead = LeadModel::find($id);
         echo json_encode(['success' => true, 'lead' => $lead]);
         exit;
@@ -364,6 +380,10 @@ switch ($action) {
             'status_id' => $json['status_id'] ?? null, 'next_followup_date' => $json['next_followup_date'] ?: null,
             'next_step' => $json['next_step'] ?? null, 'notes' => $json['notes'] ?? null
         ]);
+        
+        if (isset($json['custom_fields']) && is_array($json['custom_fields'])) {
+            LeadModel::saveCustomValues($id, $json['custom_fields']);
+        }
         
         $lead = LeadModel::find($id);
         echo json_encode(['success' => true, 'lead' => $lead]);
@@ -403,12 +423,25 @@ switch ($action) {
 
         $page = current_page_int();
         [$rows, $p] = LeadModel::paginate($page, 25, $filters);
-        $statuses = LeadModel::statuses();
+        
+        $folderId = isset($filters['folder_id']) && $filters['folder_id'] !== '' ? (int)$filters['folder_id'] : null;
+        $statuses = LeadModel::statuses($folderId);
+        $customFields = LeadModel::getCustomFields($folderId);
+        
+        $leadIds = array_column($rows, 'id');
+        $customValuesMap = [];
+        if (!empty($leadIds) && !empty($customFields)) {
+            $cvRows = Database::all('SELECT lead_id, field_id, field_value FROM lead_custom_values WHERE lead_id IN ('.implode(',', $leadIds).')');
+            foreach ($cvRows as $r) {
+                $customValuesMap[$r['lead_id']][$r['field_id']] = $r['field_value'];
+            }
+        }
+
         $users = UserModel::activeSelectList();
         $sources = LeadModel::distinctSources();
         $dashboardStats = LeadModel::getDashboardStats($filters);
         
-        render_page('leads/list', compact('rows', 'p', 'statuses', 'users', 'sources', 'filters', 'dashboardStats'), 'Leads');
+        render_page('leads/list', compact('rows', 'p', 'statuses', 'users', 'sources', 'filters', 'dashboardStats', 'customFields', 'customValuesMap'), 'Leads');
         break;
     }
 }

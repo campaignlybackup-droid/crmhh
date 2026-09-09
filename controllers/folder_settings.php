@@ -1,5 +1,8 @@
 <?php
-Auth::requireRole('founder');
+Auth::requireLogin();
+if (!Auth::hasRole('founder')) {
+    Permission::deny();
+}
 
 $action = $_GET['action'] ?? 'index';
 $folderId = (int)($_GET['folder_id'] ?? 0);

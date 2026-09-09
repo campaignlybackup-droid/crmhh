@@ -34,10 +34,14 @@ $recentActivity = Database::all(
 );
 if (!Permission::has('leads.view_all') && !Permission::has('tasks.view_all')) {
     $scope = Permission::managedUserIds($userId);
-    $recentActivity = Database::all(
-        "SELECT a.*, u.name AS user_name FROM activities a LEFT JOIN users u ON u.id = a.user_id WHERE a.user_id IN (" . implode(',', array_fill(0, count($scope), '?')) . ") ORDER BY a.created_at DESC LIMIT 10",
-        $scope
-    );
+    if (empty($scope)) {
+        $recentActivity = [];
+    } else {
+        $recentActivity = Database::all(
+            "SELECT a.*, u.name AS user_name FROM activities a LEFT JOIN users u ON u.id = a.user_id WHERE a.user_id IN (" . implode(',', array_fill(0, count($scope), '?')) . ") ORDER BY a.created_at DESC LIMIT 10",
+            $scope
+        );
+    }
 }
 
 $myTeams = UserModel::teamsFor($userId);

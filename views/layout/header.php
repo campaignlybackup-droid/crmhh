@@ -19,6 +19,7 @@
         <input type="text" name="q" placeholder="Search leads, clients, tasks, people&hellip;" value="<?= old('q') ?>">
     </form>
     <div class="topbar-right">
+        <button class="icon-btn" onclick="window.location.reload()" title="Refresh">&#8635;</button>
         <a href="<?= url('search') ?>" class="icon-btn search-btn-mobile">&#128269;</a>
         <div class="dropdown" id="notifDropdown">
             <button class="icon-btn" id="notifBtn">&#128276;<?php $uc = Notifier::unreadCount(Auth::id()); if ($uc): ?><span class="badge-dot"><?= $uc > 9 ? '9+' : $uc ?></span><?php endif; ?></button>

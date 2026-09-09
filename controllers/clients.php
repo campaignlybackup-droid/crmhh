@@ -33,9 +33,14 @@ switch ($action) {
              WHERE t.client_id = ? AND t.deleted_at IS NULL ORDER BY (t.deadline IS NULL), t.deadline ASC LIMIT 20",
             [$id]
         );
+        $contentItems = ContentCalendarModel::all($id);
+        $proposals = Database::all(
+            "SELECT p.*, u.name AS assigned_name FROM proposals p LEFT JOIN users u ON u.id = p.assigned_user_id WHERE p.client_id = ? ORDER BY p.deadline_at ASC",
+            [$id]
+        );
         $allServices = ServiceModel::all();
         $managers = UserModel::activeSelectList();
-        render_page('clients/view', compact('client', 'services', 'timeline', 'tasks', 'fullAccess', 'allServices', 'managers'), $client['name']);
+        render_page('clients/view', compact('client', 'services', 'timeline', 'tasks', 'contentItems', 'proposals', 'fullAccess', 'allServices', 'managers'), $client['name']);
         break;
     }
 

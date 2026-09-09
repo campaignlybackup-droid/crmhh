@@ -32,6 +32,42 @@
     </div>
 </div>
 
+<?php if (Auth::isFounder() && isset($masterPendingActions)): ?>
+<div class="card" style="margin-top:16px;">
+    <div class="card-title" style="color:var(--danger)">Master Action Center (All Pending Items)</div>
+    <?php if (empty($masterPendingActions)): ?>
+        <p class="text-muted small">No pending actions across the agency. Everything is caught up!</p>
+    <?php else: ?>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Title / Subject</th>
+                        <th>Context / Client</th>
+                        <th>Assigned To</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($masterPendingActions as $item): ?>
+                    <tr>
+                        <td><strong><?= e($item['type']) ?></strong></td>
+                        <td><?= e($item['title']) ?></td>
+                        <td><?= e($item['context']) ?></td>
+                        <td><?= e($item['assigned_user_id']) ?></td>
+                        <td><span class="badge badge-<?= status_badge_class($item['status']) ?>"><?= e(humanize($item['status'])) ?></span></td>
+                        <td><a href="<?= $item['url'] ?>" class="btn btn-sm">View</a></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <div class="grid grid-2" style="margin-top:8px">
     <div class="card">
         <div class="card-title">Overdue Work <a href="<?= url('tasks', ['status' => 'overdue']) ?>" class="small">View all</a></div>

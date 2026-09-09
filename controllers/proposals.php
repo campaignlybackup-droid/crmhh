@@ -18,7 +18,11 @@ switch ($action) {
     case 'create': {
         Permission::require('proposals.manage');
         $users = UserModel::activeSelectList();
-        render_page('proposals/form', compact('users'), 'New Proposal Request');
+        $clients = Database::all('SELECT id, name FROM clients WHERE deleted_at IS NULL ORDER BY name');
+        $leads = Database::all('SELECT id, company_name FROM leads WHERE deleted_at IS NULL ORDER BY company_name');
+        $preselectClientId = (int)($_GET['client_id'] ?? 0);
+        $preselectLeadId = (int)($_GET['lead_id'] ?? 0);
+        render_page('proposals/form', compact('users', 'clients', 'leads', 'preselectClientId', 'preselectLeadId'), 'New Proposal Request');
         break;
     }
 

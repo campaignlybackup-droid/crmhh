@@ -17,6 +17,28 @@
             <textarea name="business_details" class="form-control" rows="8" required placeholder="Describe what the proposal needs to cover..."></textarea>
         </div>
         
+        <div class="grid grid-2">
+            <div class="form-group">
+                <label>Related Client (Optional)</label>
+                <select name="client_id" class="form-control">
+                    <option value="">-- None --</option>
+                    <?php foreach ($clients as $c): ?>
+                        <option value="<?= $c['id'] ?>" <?= $preselectClientId === $c['id'] ? 'selected' : '' ?>><?= e($c['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Related Lead (Optional)</label>
+                <select name="lead_id" class="form-control">
+                    <option value="">-- None --</option>
+                    <?php foreach ($leads as $l): ?>
+                        <option value="<?= $l['id'] ?>" <?= $preselectLeadId === $l['id'] ? 'selected' : '' ?>><?= e($l['company_name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
+        
         <div class="grid grid-3">
             <div class="form-group">
                 <label>Priority</label>

@@ -49,8 +49,81 @@ $roles = Auth::roles();
 
 $myAssignedServices = ClientModel::myAssignedServices($userId);
 
+$masterPendingActions = [];
+if (Auth::isFounder()) {
+    $pendingLeads = Database::all("SELECT l.id, l.company_name as title, u.name as assignee, l.status FROM leads l LEFT JOIN users u ON u.id = l.assigned_user_id WHERE l.status IN ('new', 'follow_up') AND l.deleted_at IS NULL ORDER BY l.created_at ASC");
+    foreach ($pendingLeads as $l) {
+        $masterPendingActions[] = [
+            'type' => 'Lead',
+            'title' => $l['title'] ?: 'Unnamed Lead',
+            'context' => '—',
+            'assigned_user_id' => $l['assignee'] ?: 'Unassigned',
+            'status' => $l['status'],
+            'url' => url('leads', ['action' => 'view', 'id' => $l['id']]),
+            'timestamp' => 0
+        ];
+    }
+    
+    $pendingTasks = Database::all("SELECT t.id, t.title, c.name as context, u.name as assignee, t.status, t.deadline FROM tasks t LEFT JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.assigned_user_id WHERE t.status NOT IN ('completed', 'cancelled') AND t.deleted_at IS NULL ORDER BY t.deadline ASC LIMIT 50");
+    foreach ($pendingTasks as $t) {
+        $masterPendingActions[] = [
+            'type' => 'Task',
+            'title' => $t['title'],
+            'context' => $t['context'] ?: '—',
+            'assigned_user_id' => $t['assignee'] ?: 'Unassigned',
+            'status' => $t['status'],
+            'url' => url('tasks', ['action' => 'view', 'id' => $t['id']]),
+            'timestamp' => strtotime($t['deadline'])
+        ];
+    }
+    
+    $pendingProposals = Database::all("SELECT p.id, p.title, c.name as context, u.name as assignee, p.status, p.deadline_at FROM proposals p LEFT JOIN clients c ON c.id = p.client_id LEFT JOIN users u ON u.id = p.assigned_user_id WHERE p.status IN ('pending', 'in_progress') ORDER BY p.deadline_at ASC");
+    foreach ($pendingProposals as $p) {
+        $masterPendingActions[] = [
+            'type' => 'Proposal',
+            'title' => $p['title'],
+            'context' => $p['context'] ?: '—',
+            'assigned_user_id' => $p['assignee'] ?: 'Unassigned',
+            'status' => $p['status'],
+            'url' => url('proposals', ['action' => 'view', 'id' => $p['id']]),
+            'timestamp' => strtotime($p['deadline_at'])
+        ];
+    }
+    
+    $pendingApprovals = Database::all("SELECT a.id, a.title, '' as context, u.name as assignee, a.status, a.created_at FROM approvals a LEFT JOIN users u ON u.id = a.user_id WHERE a.status = 'pending' ORDER BY a.created_at ASC");
+    foreach ($pendingApprovals as $a) {
+        $masterPendingActions[] = [
+            'type' => 'Approval',
+            'title' => $a['title'],
+            'context' => '—',
+            'assigned_user_id' => $a['assignee'] ?: 'Unassigned',
+            'status' => $a['status'],
+            'url' => url('approvals', ['action' => 'view', 'id' => $a['id']]),
+            'timestamp' => strtotime($a['created_at'])
+        ];
+    }
+    
+    $pendingContent = Database::all("SELECT cc.id, cc.title, c.name as context, u.name as assignee, cc.status, cc.post_date FROM content_calendar cc LEFT JOIN clients c ON c.id = cc.client_id LEFT JOIN users u ON u.id = cc.assigned_to WHERE cc.status IN ('draft', 'pending_approval') ORDER BY cc.post_date ASC");
+    foreach ($pendingContent as $cc) {
+        $masterPendingActions[] = [
+            'type' => 'Content',
+            'title' => $cc['title'],
+            'context' => $cc['context'] ?: '—',
+            'assigned_user_id' => $cc['assignee'] ?: 'Unassigned',
+            'status' => $cc['status'],
+            'url' => url('content_calendar', ['client_id' => $cc['client_id'] ?? 0]),
+            'timestamp' => strtotime($cc['post_date'])
+        ];
+    }
+    
+    // Sort all by timestamp if applicable
+    usort($masterPendingActions, function($a, $b) {
+        return $a['timestamp'] <=> $b['timestamp'];
+    });
+}
+
 render_page('dashboard/index', compact(
     'leadCounts', 'taskCounts', 'overdueTasks', 'renewals', 'activeClientsCount',
     'pendingLeaveApprovals', 'myLeave', 'todaysReport', 'managedTeams', 'teamWorkload',
-    'recentActivity', 'myTeams', 'roles', 'clientsVisible', 'myAssignedServices'
+    'recentActivity', 'myTeams', 'roles', 'clientsVisible', 'myAssignedServices', 'masterPendingActions'
 ), 'Dashboard');

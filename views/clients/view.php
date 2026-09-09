@@ -12,6 +12,17 @@
     <?php endif; ?>
 </div>
 
+<div class="card" style="margin-bottom: 16px;">
+    <div class="flex-between">
+        <strong>Quick Actions</strong>
+        <div class="btn-group">
+            <a href="<?= url('tasks', ['action' => 'create', 'client_id' => $client['id']]) ?>" class="btn btn-sm btn-primary">+ Add Task</a>
+            <a href="<?= url('content_calendar', ['client_id' => $client['id']]) ?>" class="btn btn-sm btn-primary">+ View/Add Content</a>
+            <a href="<?= url('proposals', ['action' => 'create', 'client_id' => $client['id']]) ?>" class="btn btn-sm btn-primary">+ Add Proposal</a>
+        </div>
+    </div>
+</div>
+
 <?php if ($fullAccess): ?>
 <div class="card">
     <div class="card-title">Client Details</div>
@@ -173,7 +184,7 @@
 </div>
 
 <div class="card">
-    <div class="card-title">Related Tasks</div>
+    <div class="card-title">Related Tasks <a href="<?= url('tasks', ['action' => 'create', 'client_id' => $client['id']]) ?>" class="btn btn-sm" style="float:right;">+ Add</a></div>
     <?php if (empty($tasks)): ?><p class="text-muted small">No tasks yet for this client.</p><?php else: ?>
     <div class="table-wrap"><table>
         <thead><tr><th>Task</th><th>Assigned</th><th>Status</th><th>Deadline</th></tr></thead>
@@ -184,6 +195,44 @@
                 <td><?= e($t['assigned_name'] ?? '—') ?></td>
                 <td><span class="badge badge-<?= status_badge_class($overdue ? 'overdue' : $t['status']) ?>"><?= $overdue ? 'Overdue' : e(humanize($t['status'])) ?></span></td>
                 <td><?= $t['deadline'] ? format_datetime($t['deadline']) : '—' ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table></div>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <div class="card-title">Related Content Calendar <a href="<?= url('content_calendar', ['client_id' => $client['id']]) ?>" class="btn btn-sm" style="float:right;">+ View/Add</a></div>
+    <?php if (empty($contentItems)): ?><p class="text-muted small">No content items yet for this client.</p><?php else: ?>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Post Date</th><th>Title</th><th>Assigned</th><th>Status</th></tr></thead>
+        <tbody>
+        <?php foreach ($contentItems as $p): ?>
+            <tr>
+                <td><?= format_date($p['post_date']) ?></td>
+                <td><strong><?= e($p['title']) ?></strong></td>
+                <td><?= e($p['assignee_name'] ?? '—') ?></td>
+                <td><span class="badge badge-<?= status_badge_class($p['status']) ?>"><?= e(humanize($p['status'])) ?></span></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table></div>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <div class="card-title">Related Proposals <a href="<?= url('proposals', ['action' => 'create', 'client_id' => $client['id']]) ?>" class="btn btn-sm" style="float:right;">+ Add</a></div>
+    <?php if (empty($proposals)): ?><p class="text-muted small">No proposals yet for this client.</p><?php else: ?>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Title</th><th>Assigned</th><th>Status</th><th>Deadline</th></tr></thead>
+        <tbody>
+        <?php foreach ($proposals as $p): ?>
+            <tr>
+                <td><a href="<?= url('proposals', ['action' => 'view', 'id' => $p['id']]) ?>"><?= e($p['title']) ?></a></td>
+                <td><?= e($p['assigned_name'] ?? '—') ?></td>
+                <td><span class="badge badge-<?= status_badge_class($p['status']) ?>"><?= e(humanize($p['status'])) ?></span></td>
+                <td><?= format_datetime($p['deadline_at']) ?></td>
             </tr>
         <?php endforeach; ?>
         </tbody>

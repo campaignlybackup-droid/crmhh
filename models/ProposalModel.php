@@ -5,10 +5,12 @@ class ProposalModel
     public static function find(int $id): ?array
     {
         return Database::one(
-            'SELECT p.*, u.name AS assigned_name, c.name AS creator_name
+            'SELECT p.*, u.name AS assigned_name, c.name AS creator_name, cl.name AS client_name, l.company_name AS lead_name
              FROM proposals p
              LEFT JOIN users u ON u.id = p.assigned_user_id
              JOIN users c ON c.id = p.created_by
+             LEFT JOIN clients cl ON cl.id = p.client_id
+             LEFT JOIN leads l ON l.id = p.lead_id
              WHERE p.id = ?',
             [$id]
         );
@@ -19,8 +21,8 @@ class ProposalModel
         $deadlineHours = (int)($data['deadline_hours'] ?? 24);
         
         Database::run(
-            'INSERT INTO proposals (title, business_details, priority, deadline_hours, deadline_at, status, assigned_user_id, created_by, created_at)
-             VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? HOUR), ?, ?, ?, NOW())',
+            'INSERT INTO proposals (title, business_details, priority, deadline_hours, deadline_at, status, assigned_user_id, created_by, client_id, lead_id, created_at)
+             VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? HOUR), ?, ?, ?, ?, ?, NOW())',
             [
                 $data['title'],
                 $data['business_details'],
@@ -29,7 +31,9 @@ class ProposalModel
                 $deadlineHours,
                 'pending',
                 $data['assigned_user_id'] ?: null,
-                Auth::id()
+                Auth::id(),
+                $data['client_id'] ?: null,
+                $data['lead_id'] ?: null
             ]
         );
         return (int)Database::lastInsertId();

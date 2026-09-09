@@ -21,5 +21,24 @@ if ($action === 'toggle') {
     redirect(url('services'));
 }
 
+if ($action === 'add_subcategory') {
+    csrf_check_or_die();
+    $serviceId = (int)($_POST['service_id'] ?? 0);
+    $name = trim($_POST['name'] ?? '');
+    if ($serviceId && $name) {
+        ServiceModel::addSubcategory($serviceId, $name);
+        Flash::success('Subcategory added.');
+    }
+    redirect(url('services'));
+}
+
+if ($action === 'remove_subcategory') {
+    csrf_check_or_die();
+    $id = (int)($_POST['id'] ?? 0);
+    if ($id) ServiceModel::removeSubcategory($id);
+    Flash::success('Subcategory removed.');
+    redirect(url('services'));
+}
+
 $services = ServiceModel::all(false);
 render_page('services/index', compact('services'), 'Services');

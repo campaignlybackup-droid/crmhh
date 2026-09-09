@@ -125,7 +125,10 @@ switch ($action) {
             }
         }
 
-        ClientModel::addService($clientId, (int)$_POST['service_id'], (int)$_POST['quantity_required'], $_POST['manager_id'] ?: null, $_POST['start_date'] ?: null, $_POST['end_date'] ?: null, $_POST['notes'] ?: null, $scopeDetails, $_POST['assignee_id'] ?: null);
+        $tenure = $_POST['tenure'] ?? 'monthly';
+        $subcategories = $_POST['subcategories'] ?? [];
+
+        ClientModel::addService($clientId, (int)$_POST['service_id'], (int)$_POST['quantity_required'], $_POST['manager_id'] ?: null, $_POST['start_date'] ?: null, $_POST['end_date'] ?: null, $_POST['notes'] ?: null, $scopeDetails, $_POST['assignee_id'] ?: null, $tenure, (array)$subcategories);
         Flash::success('Service added to client.');
         redirect(url('clients', ['action' => 'view', 'id' => $clientId]));
         break;
@@ -137,7 +140,9 @@ switch ($action) {
         if (!Permission::canAccessClient($clientId)) Permission::deny();
         Permission::require('clients.manage_services');
         csrf_check_or_die();
-        ClientModel::updateService($clientServiceId, (int)$_POST['quantity_required'], $_POST['manager_id'] ?: null, $_POST['start_date'] ?: null, $_POST['end_date'] ?: null, $_POST['notes'] ?: null, $_POST['status'] ?: 'active');
+        $tenure = $_POST['tenure'] ?? 'monthly';
+        $subcategories = $_POST['subcategories'] ?? [];
+        ClientModel::updateService($clientServiceId, (int)$_POST['quantity_required'], $_POST['manager_id'] ?: null, $_POST['start_date'] ?: null, $_POST['end_date'] ?: null, $_POST['notes'] ?: null, $_POST['status'] ?: 'active', $tenure, (array)$subcategories);
         Flash::success('Requirement updated.');
         redirect(url('clients', ['action' => 'view', 'id' => $clientId]));
         break;

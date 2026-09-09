@@ -47,18 +47,18 @@ class ClientModel
 
     public static function servicesFor(int $clientId): array
     {
-        return Database::all(
+        $services = Database::all(
             'SELECT cs.*, s.name AS service_name, s.unit_label
              FROM client_services cs JOIN services s ON s.id = cs.service_id
              WHERE cs.client_id = ? AND cs.deleted_at IS NULL ORDER BY s.name',
             [$clientId]
         );
+        return self::attachSubcategories($services);
     }
 
-    /** Services + work visible to a specific employee for a client (only what's assigned to them). */
     public static function servicesForEmployee(int $clientId, int $userId): array
     {
-        return Database::all(
+        $services = Database::all(
             "SELECT cs.*, s.name AS service_name, s.unit_label, csa.quantity_assigned, csa.quantity_completed AS my_completed, csa.id AS assignment_id
              FROM client_services cs
              JOIN services s ON s.id = cs.service_id
@@ -67,6 +67,23 @@ class ClientModel
              ORDER BY s.name",
             [$clientId, $userId]
         );
+        return self::attachSubcategories($services);
+    }
+
+    private static function attachSubcategories(array $services): array
+    {
+        if (empty($services)) return [];
+        $csIds = array_column($services, 'id');
+        $in = str_repeat('?,', count($csIds) - 1) . '?';
+        $quantities = Database::all("SELECT csq.*, sub.name as subcategory_name FROM client_service_quantities csq JOIN service_subcategories sub ON sub.id = csq.subcategory_id WHERE csq.client_service_id IN ($in)", $csIds);
+        $grouped = [];
+        foreach ($quantities as $q) {
+            $grouped[$q['client_service_id']][] = $q;
+        }
+        foreach ($services as &$s) {
+            $s['subcategories'] = $grouped[$s['id']] ?? [];
+        }
+        return $services;
     }
 
     public static function assignmentsFor(int $clientServiceId): array
@@ -116,14 +133,21 @@ class ClientModel
         AuditLog::record('delete', 'client', $id);
     }
 
-    public static function addService(int $clientId, int $serviceId, int $quantityRequired, ?int $managerId, ?string $startDate, ?string $endDate, ?string $notes, ?string $scopeDetails = null, ?int $assigneeId = null): int
+    public static function addService(int $clientId, int $serviceId, int $quantityRequired, ?int $managerId, ?string $startDate, ?string $endDate, ?string $notes, ?string $scopeDetails = null, ?int $assigneeId = null, string $tenure = 'monthly', array $subcategories = []): int
     {
         Database::run(
-            'INSERT INTO client_services (client_id, service_id, quantity_required, manager_id, start_date, end_date, scope_details, notes, created_by, created_at)
-             VALUES (?,?,?,?,?,?,?,?,?,NOW())',
-            [$clientId, $serviceId, $quantityRequired, $managerId ?: null, $startDate ?: null, $endDate ?: null, $scopeDetails, $notes ?: null, Auth::id()]
+            'INSERT INTO client_services (client_id, service_id, quantity_required, manager_id, start_date, end_date, tenure, scope_details, notes, created_by, created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,NOW())',
+            [$clientId, $serviceId, $quantityRequired, $managerId ?: null, $startDate ?: null, $endDate ?: null, $tenure, $scopeDetails, $notes ?: null, Auth::id()]
         );
         $id = (int)Database::lastInsertId();
+        
+        foreach ($subcategories as $subId => $qty) {
+            if ((int)$qty > 0) {
+                Database::run('INSERT INTO client_service_quantities (client_service_id, subcategory_id, quantity_required) VALUES (?,?,?)', [$id, (int)$subId, (int)$qty]);
+            }
+        }
+        
         $serviceName = Database::scalar('SELECT name FROM services WHERE id = ?', [$serviceId]);
         ActivityModel::log('client', $clientId, 'service_added', "$serviceName added: $quantityRequired required");
         if ($managerId) {
@@ -138,12 +162,19 @@ class ClientModel
         return $id;
     }
 
-    public static function updateService(int $clientServiceId, int $quantityRequired, ?int $managerId, ?string $startDate, ?string $endDate, ?string $notes, string $status): void
+    public static function updateService(int $clientServiceId, int $quantityRequired, ?int $managerId, ?string $startDate, ?string $endDate, ?string $notes, string $status, string $tenure = 'monthly', array $subcategories = []): void
     {
         Database::run(
-            'UPDATE client_services SET quantity_required=?, manager_id=?, start_date=?, end_date=?, notes=?, status=? WHERE id=?',
-            [$quantityRequired, $managerId ?: null, $startDate ?: null, $endDate ?: null, $notes ?: null, $status, $clientServiceId]
+            'UPDATE client_services SET quantity_required=?, manager_id=?, start_date=?, end_date=?, tenure=?, notes=?, status=? WHERE id=?',
+            [$quantityRequired, $managerId ?: null, $startDate ?: null, $endDate ?: null, $tenure, $notes ?: null, $status, $clientServiceId]
         );
+        
+        Database::run('DELETE FROM client_service_quantities WHERE client_service_id = ?', [$clientServiceId]);
+        foreach ($subcategories as $subId => $qty) {
+            if ((int)$qty > 0) {
+                Database::run('INSERT INTO client_service_quantities (client_service_id, subcategory_id, quantity_required) VALUES (?,?,?)', [$clientServiceId, (int)$subId, (int)$qty]);
+            }
+        }
         $cs = Database::one('SELECT cs.client_id, s.name AS service_name FROM client_services cs JOIN services s ON s.id = cs.service_id WHERE cs.id = ?', [$clientServiceId]);
         if ($cs) {
             ActivityModel::log('client', (int)$cs['client_id'], 'service_updated', "{$cs['service_name']} requirement updated: $quantityRequired required, status $status");
@@ -153,7 +184,12 @@ class ClientModel
 
     public static function removeService(int $clientServiceId): void
     {
+        $cs = Database::one('SELECT cs.client_id, s.name AS service_name FROM client_services cs JOIN services s ON s.id = cs.service_id WHERE cs.id = ?', [$clientServiceId]);
         Database::run('UPDATE client_services SET deleted_at = NOW() WHERE id = ?', [$clientServiceId]);
+        if ($cs) {
+            ActivityModel::log('client', (int)$cs['client_id'], 'service_removed', "{$cs['service_name']} service was removed from the client.");
+            AuditLog::record('remove_service', 'client_service', $clientServiceId, null, "Removed {$cs['service_name']}");
+        }
     }
 
     public static function addRequirement(int $clientServiceId, string $reqName, int $userId, ?int $quantity, ?string $deadline, ?string $notes): int
@@ -174,7 +210,15 @@ class ClientModel
 
     public static function removeEmployeeFromService(int $assignmentId): void
     {
-        Database::run('DELETE FROM client_service_assignments WHERE id = ?', [$assignmentId]);
+        $a = Database::one('SELECT * FROM client_service_assignments WHERE id = ?', [$assignmentId]);
+        if ($a) {
+            $cs = Database::one('SELECT cs.client_id, s.name AS service_name FROM client_services cs JOIN services s ON s.id = cs.service_id WHERE cs.id = ?', [$a['client_service_id']]);
+            Database::run('DELETE FROM client_service_assignments WHERE id = ?', [$assignmentId]);
+            if ($cs) {
+                ActivityModel::log('client', (int)$cs['client_id'], 'work_unassigned', "{$a['requirement_name']} assignment was removed.");
+                AuditLog::record('remove_assignment', 'client_service_assignment', $assignmentId, null, "Removed assignment {$a['requirement_name']}");
+            }
+        }
     }
 
     /** Employee updates their own progress on an assignment; rolls up into client_services.quantity_completed. */

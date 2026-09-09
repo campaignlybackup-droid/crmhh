@@ -6,7 +6,17 @@ class ServiceModel
     {
         $sql = 'SELECT * FROM services';
         if ($activeOnly) $sql .= ' WHERE is_active = 1';
-        return Database::all($sql . ' ORDER BY name');
+        $services = Database::all($sql . ' ORDER BY name');
+        
+        $subcategories = Database::all('SELECT * FROM service_subcategories ORDER BY name');
+        $subsByService = [];
+        foreach ($subcategories as $sub) {
+            $subsByService[$sub['service_id']][] = $sub;
+        }
+        foreach ($services as &$s) {
+            $s['subcategories'] = $subsByService[$s['id']] ?? [];
+        }
+        return $services;
     }
 
     public static function find(int $id): ?array
@@ -26,5 +36,16 @@ class ServiceModel
     public static function setActive(int $id, bool $active): void
     {
         Database::run('UPDATE services SET is_active = ? WHERE id = ?', [$active ? 1 : 0, $id]);
+    }
+
+    public static function addSubcategory(int $serviceId, string $name): int
+    {
+        Database::run('INSERT INTO service_subcategories (service_id, name) VALUES (?, ?)', [$serviceId, $name]);
+        return (int)Database::lastInsertId();
+    }
+
+    public static function removeSubcategory(int $subcategoryId): void
+    {
+        Database::run('DELETE FROM service_subcategories WHERE id = ?', [$subcategoryId]);
     }
 }

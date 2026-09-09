@@ -31,6 +31,7 @@ CREATE TABLE users (
     CONSTRAINT fk_users_manager FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+
 CREATE TABLE roles (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(80) NOT NULL,
@@ -210,6 +211,14 @@ CREATE TABLE services (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE service_subcategories (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    service_id INT UNSIGNED NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_svc_sub FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE client_services (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     client_id INT UNSIGNED NOT NULL,
@@ -219,6 +228,7 @@ CREATE TABLE client_services (
     manager_id INT UNSIGNED DEFAULT NULL,
     start_date DATE DEFAULT NULL,
     end_date DATE DEFAULT NULL,
+    tenure ENUM('monthly', 'weekly', 'one_time') NOT NULL DEFAULT 'monthly',
     scope_details JSON DEFAULT NULL,
     notes TEXT DEFAULT NULL,
     status ENUM('active','completed','paused') NOT NULL DEFAULT 'active',
@@ -232,6 +242,17 @@ CREATE TABLE client_services (
     CONSTRAINT fk_cs_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     CONSTRAINT fk_cs_service FOREIGN KEY (service_id) REFERENCES services(id),
     CONSTRAINT fk_cs_manager FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE client_service_quantities (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    client_service_id INT UNSIGNED NOT NULL,
+    subcategory_id INT UNSIGNED NOT NULL,
+    quantity_required INT UNSIGNED NOT NULL DEFAULT 0,
+    quantity_completed INT UNSIGNED NOT NULL DEFAULT 0,
+    CONSTRAINT fk_csq_cs FOREIGN KEY (client_service_id) REFERENCES client_services(id) ON DELETE CASCADE,
+    CONSTRAINT fk_csq_sub FOREIGN KEY (subcategory_id) REFERENCES service_subcategories(id) ON DELETE CASCADE,
+    UNIQUE KEY uk_csq (client_service_id, subcategory_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE client_service_assignments (

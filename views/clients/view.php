@@ -47,7 +47,25 @@
         <div class="card" style="background:var(--bg);border-style:dashed">
             <div class="flex-between">
                 <div>
-                    <strong><?= e($svc['service_name']) ?></strong>
+                    <strong><?= e($svc['service_name']) ?></strong> <span class="badge badge-secondary" style="font-size:10px;text-transform:uppercase"><?= e($svc['tenure']) ?></span>
+                    <?php if (!empty($svc['subcategories'])): ?>
+                        <div style="font-size:0.85rem;margin-top:6px;color:var(--text)">
+                            <?php foreach ($svc['subcategories'] as $sub): ?>
+                                <?php
+                                    $sReq = (int)$sub['quantity_required'];
+                                    $sCom = (int)$sub['quantity_completed'];
+                                    $sPct = $sReq > 0 ? min(100, round($sCom / $sReq * 100)) : 0;
+                                ?>
+                                <div style="margin-bottom:6px">
+                                    <div class="flex-between" style="font-size:11px;font-weight:600">
+                                        <span><?= e($sub['subcategory_name']) ?></span>
+                                        <span><?= $sCom ?> / <?= $sReq ?></span>
+                                    </div>
+                                    <div class="progress" style="margin:2px 0;height:4px"><div class="progress-bar" style="width:<?= $sPct ?>%"></div></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
                     <?php if (!empty($svc['scope_details'])): ?>
                         <div style="font-size:0.85rem;margin-top:4px;color:var(--text-muted)">
                             <?php $scopes = json_decode($svc['scope_details'], true); ?>
@@ -97,21 +115,43 @@
 
                 <?php if (Permission::has('clients.manage_services')): ?>
                 <details style="margin-top:8px"><summary class="small">Edit requirement</summary>
-                <form method="post" action="<?= url('clients', ['action' => 'update_service']) ?>" class="form-row mt-2">
+                <form method="post" action="<?= url('clients', ['action' => 'update_service']) ?>">
                     <?= Csrf::field() ?><input type="hidden" name="client_service_id" value="<?= $svc['id'] ?>"><input type="hidden" name="client_id" value="<?= $client['id'] ?>">
-                    <div class="form-group" style="max-width:120px"><label>Required Qty</label><input type="number" name="quantity_required" value="<?= (int)$svc['quantity_required'] ?>" min="0"></div>
-                    <div class="form-group"><label>Manager</label>
-                        <select name="manager_id"><option value="">—</option>
-                            <?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>" <?= $m['id']==$svc['manager_id']?'selected':'' ?>><?= e($m['name']) ?><?= $m['id'] === Auth::id() ? ' (YOU)' : '' ?></option><?php endforeach; ?>
-                        </select>
+                    <div class="form-row mt-2">
+                        <div class="form-group" style="max-width:120px"><label>Required Qty</label><input type="number" name="quantity_required" value="<?= (int)$svc['quantity_required'] ?>" min="0"></div>
+                        <div class="form-group"><label>Tenure</label>
+                            <select name="tenure">
+                                <option value="monthly" <?= $svc['tenure']==='monthly'?'selected':'' ?>>Monthly</option>
+                                <option value="weekly" <?= $svc['tenure']==='weekly'?'selected':'' ?>>Weekly</option>
+                                <option value="one_time" <?= $svc['tenure']==='one_time'?'selected':'' ?>>One-time</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Manager</label>
+                            <select name="manager_id"><option value="">—</option>
+                                <?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>" <?= $m['id']==$svc['manager_id']?'selected':'' ?>><?= e($m['name']) ?><?= $m['id'] === Auth::id() ? ' (YOU)' : '' ?></option><?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Status</label>
+                            <select name="status">
+                                <option value="active" <?= $svc['status']==='active'?'selected':'' ?>>Active</option>
+                                <option value="completed" <?= $svc['status']==='completed'?'selected':'' ?>>Completed</option>
+                                <option value="paused" <?= $svc['status']==='paused'?'selected':'' ?>>Paused</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="form-group"><label>Status</label>
-                        <select name="status">
-                            <option value="active" <?= $svc['status']==='active'?'selected':'' ?>>Active</option>
-                            <option value="completed" <?= $svc['status']==='completed'?'selected':'' ?>>Completed</option>
-                            <option value="paused" <?= $svc['status']==='paused'?'selected':'' ?>>Paused</option>
-                        </select>
-                    </div>
+                    <?php if (!empty($svc['subcategories'])): ?>
+                        <div class="form-group" style="background:var(--bg);padding:8px;border-radius:4px">
+                            <label>Subcategory Quantities</label>
+                            <div class="grid grid-3" style="gap:8px">
+                                <?php foreach ($svc['subcategories'] as $sub): ?>
+                                    <div>
+                                        <label style="font-size:11px;font-weight:600;margin-bottom:2px"><?= e($sub['subcategory_name']) ?></label>
+                                        <input type="number" name="subcategories[<?= $sub['subcategory_id'] ?>]" value="<?= (int)$sub['quantity_required'] ?>" min="0" class="form-control" style="padding:2px 4px;font-size:12px">
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
                     <div class="btn-group">
                         <button class="btn btn-sm btn-primary">Save</button>
                         <button type="submit" formaction="<?= url('clients', ['action' => 'remove_service']) ?>" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to completely remove this service and all its requirements from this client?')">Remove Service</button>
@@ -171,11 +211,27 @@
         <div class="modal-title">Add Service to <?= e($client['name']) ?></div>
         <form method="post" action="<?= url('clients', ['action' => 'add_service']) ?>">
             <?= Csrf::field() ?><input type="hidden" name="client_id" value="<?= $client['id'] ?>">
-            <div class="form-group"><label>Service</label>
-                <select name="service_id" required><?php foreach ($allServices as $s): ?><option value="<?= $s['id'] ?>"><?= e($s['name']) ?> (<?= e($s['unit_label']) ?>)</option><?php endforeach; ?></select>
-            </div>
             <div class="form-row">
-                <div class="form-group"><label>Quantity Required</label><input type="number" name="quantity_required" min="0" value="0" required></div>
+                <div class="form-group"><label>Service</label>
+                    <select name="service_id" id="addServiceSelect" required onchange="renderAddServiceSubcategories()">
+                        <option value="">— Select Service —</option>
+                        <?php foreach ($allServices as $s): ?><option value="<?= $s['id'] ?>"><?= e($s['name']) ?> (<?= e($s['unit_label']) ?>)</option><?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group"><label>Global Quantity <small>(optional)</small></label><input type="number" name="quantity_required" min="0" value="0" required></div>
+            </div>
+            
+            <!-- Dynamic Subcategories Section -->
+            <div id="addServiceSubcategories" style="background:var(--bg);padding:12px;border-radius:4px;margin-bottom:16px;display:none;"></div>
+
+            <div class="form-row">
+                <div class="form-group"><label>Tenure (Billing Cycle)</label>
+                    <select name="tenure">
+                        <option value="monthly">Monthly</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="one_time">One-time / Fixed</option>
+                    </select>
+                </div>
                 <div class="form-group"><label>Manager</label>
                     <select name="manager_id"><option value="">—</option><?php foreach ($managers as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['name']) ?><?= $m['id'] === Auth::id() ? ' (YOU)' : '' ?></option><?php endforeach; ?></select>
                 </div>
@@ -204,6 +260,27 @@
             <button class="btn btn-primary">Add Service</button>
         </form>
         <script>
+        const servicesData = <?= json_encode($allServices) ?>;
+        function renderAddServiceSubcategories() {
+            const sid = document.getElementById('addServiceSelect').value;
+            const container = document.getElementById('addServiceSubcategories');
+            container.innerHTML = '';
+            if (!sid) { container.style.display = 'none'; return; }
+            
+            const svc = servicesData.find(s => s.id == sid);
+            if (!svc || !svc.subcategories || svc.subcategories.length === 0) {
+                container.style.display = 'none'; return;
+            }
+            
+            container.style.display = 'block';
+            let html = '<label>Subcategory Quantities</label><div class="grid grid-2" style="gap:12px">';
+            svc.subcategories.forEach(sub => {
+                html += `<div><label style="font-size:12px;font-weight:600">${sub.name}</label><input type="number" name="subcategories[${sub.id}]" value="0" min="0" class="form-control"></div>`;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
         function addScopeRow() {
             const div = document.createElement('div');
             div.className = 'form-row';

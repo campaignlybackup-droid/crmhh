@@ -28,7 +28,13 @@ $canTeams = Permission::has('teams.manage') || !empty(UserModel::managedTeamsFor
         <li class="<?= nav_active('roles', $page) ?>"><a href="<?= url('roles') ?>"><span class="nav-ico">&#128273;</span> Roles &amp; Permissions</a></li>
         <li class="<?= nav_active('services', $page) ?>"><a href="<?= url('services') ?>"><span class="nav-ico">&#128736;</span> Services</a></li>
         <?php endif; ?>
-        <?php if (Permission::has('audit.view')): ?>
+        <li class="<?= $ctrl === 'tasks' ? 'active' : '' ?>">
+            <a href="<?= url('tasks') ?>"><i class="icon" style="background-image:url('data:image/svg+xml;utf8,<svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'white\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><path d=\'M9 11l3 3L22 4\'/><path d=\'M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11\'/></svg>')"></i> My Tasks</a>
+        </li>
+        <li class="<?= $ctrl === 'content_calendar' ? 'active' : '' ?>">
+            <a href="<?= url('content_calendar') ?>"><i class="icon" style="background-image:url('data:image/svg+xml;utf8,<svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'white\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><rect x=\'3\' y=\'4\' width=\'18\' height=\'18\' rx=\'2\' ry=\'2\'/><line x1=\'16\' y1=\'2\' x2=\'16\' y2=\'6\'/><line x1=\'8\' y1=\'2\' x2=\'8\' y2=\'6\'/><line x1=\'3\' y1=\'10\' x2=\'21\' y2=\'10\'/></svg>')"></i> Content Calendar</a>
+        </li>
+        <?php if (Permission::has('calendar.view')): ?>
         <li class="<?= nav_active('audit', $page) ?>"><a href="<?= url('audit') ?>"><span class="nav-ico">&#128269;</span> Audit Log</a></li>
         <?php endif; ?>
         <?php if (Auth::hasRole('founder')): ?>

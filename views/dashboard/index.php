@@ -1,6 +1,6 @@
 <h1>Welcome back, <?= e(explode(' ', $currentUser['name'])[0]) ?></h1>
 <p class="text-muted">
-    <?php if (Auth::isFounder()): ?>Founder &middot; complete agency overview<?php else: ?>
+    <?php if (Auth::hasRole('founder')): ?>Founder &middot; complete agency overview<?php else: ?>
     <?= e(implode(', ', array_column($roles, 'name'))) ?>
     <?php endif; ?>
 </p>
@@ -32,7 +32,7 @@
     </div>
 </div>
 
-<?php if (Auth::isFounder() && isset($masterPendingActions)): ?>
+<?php if (Auth::hasRole('founder') && isset($masterPendingActions)): ?>
 <div class="card" style="margin-top:16px;">
     <div class="card-title" style="color:var(--danger)">Master Action Center (All Pending Items)</div>
     <?php if (empty($masterPendingActions)): ?>

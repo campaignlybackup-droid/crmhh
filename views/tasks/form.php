@@ -35,7 +35,7 @@
         <div class="form-group"><label>Start Date</label><input type="date" name="start_date" value="<?= e($task['start_date'] ?? '') ?>"></div>
         <div class="form-group"><label>Deadline</label><input type="datetime-local" name="deadline" value="<?= $task['deadline'] ?? '' ? date('Y-m-d\TH:i', strtotime($task['deadline'])) : '' ?>"></div>
     </div>
-    <?php if (!$task && Auth::isFounder()): ?>
+    <?php if (!$task && Auth::hasRole('founder')): ?>
     <div class="form-group checkbox-group"><label><input type="checkbox" name="is_private" value="1"> Private task (only visible to me and the assignee)</label></div>
     <?php endif; ?>
     <div class="form-group"><label>Notes</label><textarea name="notes"><?= e($task['notes'] ?? '') ?></textarea></div>

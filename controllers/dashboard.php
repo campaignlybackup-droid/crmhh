@@ -50,7 +50,7 @@ $roles = Auth::roles();
 $myAssignedServices = ClientModel::myAssignedServices($userId);
 
 $masterPendingActions = [];
-if (Auth::isFounder()) {
+if (Auth::hasRole('founder')) {
     $pendingLeads = Database::all("SELECT l.id, l.company_name as title, u.name as assignee, l.status FROM leads l LEFT JOIN users u ON u.id = l.assigned_user_id WHERE l.status IN ('new', 'follow_up') AND l.deleted_at IS NULL ORDER BY l.created_at ASC");
     foreach ($pendingLeads as $l) {
         $masterPendingActions[] = [

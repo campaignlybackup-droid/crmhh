@@ -72,6 +72,7 @@ if (file_exists($configFile)) {
     require __DIR__ . '/../models/ApprovalModel.php';
     require __DIR__ . '/../models/ProposalModel.php';
     require __DIR__ . '/../models/AnnouncementModel.php';
+    require __DIR__ . '/../models/ContentCalendarModel.php';
 }
 
 function csrf_check_or_die(): void

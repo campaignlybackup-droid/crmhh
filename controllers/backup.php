@@ -26,7 +26,8 @@ switch ($action) {
             $zip->addFromString('README.txt', "Database appears to be empty.\n");
         } else {
             // Determine the column key dynamically (handles any DB name)
-            $tableKey = array_key_first($tables[0]);
+            reset($tables[0]);
+            $tableKey = key($tables[0]);
 
             foreach ($tables as $tRow) {
                 $tableName = $tRow[$tableKey];

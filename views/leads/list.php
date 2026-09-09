@@ -1,6 +1,9 @@
 <div class="flex-between">
     <h1>Leads</h1>
     <div class="btn-group">
+        <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
+        <button id="bulk-delete-btn" class="btn btn-danger" style="display:none;" onclick="bulkDelete()">Delete Selected (<span id="bulk-count">0</span>)</button>
+        <?php endif; ?>
         <?php if (Permission::has('leads.import')): ?><a href="<?= url('leads', ['action' => 'import']) ?>" class="btn">Import CSV</a><?php endif; ?>
         <?php if (Permission::has('leads.export')): ?><a href="<?= url('leads', ['action' => 'export'] + $filters) ?>" class="btn">Export CSV</a><?php endif; ?>
         <?php if (Permission::has('leads.create')): ?><a href="<?= url('leads', ['action' => 'create']) ?>" class="btn btn-primary">+ New Lead</a><?php endif; ?>
@@ -74,12 +77,6 @@
 </div>
 <?php endif; ?>
 
-<?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
-<div id="bulk-action-bar" style="display:none; position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#fff; padding:12px 24px; border-radius:30px; box-shadow:0 4px 20px rgba(0,0,0,0.15); z-index:999; border:1px solid var(--border); align-items:center; justify-content:center; gap:16px;">
-    <span id="bulk-count" style="font-weight:bold; color:var(--text);">0 leads selected</span>
-    <button class="btn btn-danger btn-sm" onclick="bulkDelete()" style="border-radius:20px;">Delete Selected</button>
-</div>
-<?php endif; ?>
 
 <div class="table-wrap responsive-table" style="position:relative;">
 <table>
@@ -278,10 +275,10 @@ function toggleAllLeads(source) {
 
 function updateBulkDeleteBtn() {
     const checked = document.querySelectorAll('.lead-checkbox:checked').length;
-    const bar = document.getElementById('bulk-action-bar');
-    if (bar) {
-        bar.style.display = checked > 0 ? 'flex' : 'none';
-        document.getElementById('bulk-count').innerText = checked + ' leads selected';
+    const btn = document.getElementById('bulk-delete-btn');
+    if (btn) {
+        btn.style.display = checked > 0 ? 'inline-flex' : 'none';
+        document.getElementById('bulk-count').innerText = checked;
     }
 }
 

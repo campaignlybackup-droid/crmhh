@@ -33,7 +33,7 @@
                 <select name="lead_id" class="form-control">
                     <option value="">-- None --</option>
                     <?php foreach ($leads as $l): ?>
-                        <option value="<?= $l['id'] ?>" <?= $preselectLeadId === $l['id'] ? 'selected' : '' ?>><?= e($l['company_name']) ?></option>
+                        <option value="<?= $l['id'] ?>" <?= $preselectLeadId === $l['id'] ? 'selected' : '' ?>><?= e($l['company']) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>

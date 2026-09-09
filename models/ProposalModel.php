@@ -5,7 +5,7 @@ class ProposalModel
     public static function find(int $id): ?array
     {
         return Database::one(
-            'SELECT p.*, u.name AS assigned_name, c.name AS creator_name, cl.name AS client_name, l.company_name AS lead_name
+            'SELECT p.*, u.name AS assigned_name, c.name AS creator_name, cl.name AS client_name, l.company AS lead_name
              FROM proposals p
              LEFT JOIN users u ON u.id = p.assigned_user_id
              JOIN users c ON c.id = p.created_by
@@ -73,7 +73,7 @@ class ProposalModel
         $total = (int)Database::scalar("SELECT COUNT(*) FROM proposals p WHERE $whereSql", $params);
         $p = paginate_params($total, $page, $perPage);
         $rows = Database::all(
-            "SELECT p.*, u.name AS assigned_name, c.name AS creator_name, cl.name AS client_name, l.company_name AS lead_name 
+            "SELECT p.*, u.name AS assigned_name, c.name AS creator_name, cl.name AS client_name, l.company AS lead_name 
              FROM proposals p
              LEFT JOIN users u ON u.id = p.assigned_user_id
              JOIN users c ON c.id = p.created_by

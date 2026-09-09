@@ -270,7 +270,6 @@ async function quickAddLead() {
     }
 }
 
-<?php if (Auth::hasRole('founder')): ?>
 function toggleAllLeads(source) {
     const checkboxes = document.querySelectorAll('.lead-checkbox');
     checkboxes.forEach(cb => cb.checked = source.checked);
@@ -312,6 +311,5 @@ function bulkDelete() {
     document.body.appendChild(form);
     form.submit();
 }
-<?php endif; ?>
 </script>
 <?php render('partials/pagination', ['p' => $p]); ?>

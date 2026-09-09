@@ -642,3 +642,13 @@ CREATE TABLE content_calendar (
     CONSTRAINT fk_cc_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     CONSTRAINT fk_cc_user FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL
 );
+
+-- Performance Indexes
+ALTER TABLE leads ADD INDEX idx_leads_deleted (deleted_at);
+ALTER TABLE clients ADD INDEX idx_clients_deleted (deleted_at);
+ALTER TABLE tasks ADD INDEX idx_tasks_deleted (deleted_at);
+ALTER TABLE proposals ADD INDEX idx_proposals_deleted (deleted_at);
+ALTER TABLE services ADD INDEX idx_services_deleted (deleted_at);
+ALTER TABLE client_services ADD INDEX idx_client_services_deleted (deleted_at);
+ALTER TABLE leads ADD INDEX idx_leads_folder_deleted (folder_id, deleted_at);
+ALTER TABLE tasks ADD INDEX idx_tasks_client_deleted (client_id, deleted_at);

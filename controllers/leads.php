@@ -335,6 +335,20 @@ switch ($action) {
         exit;
     }
 
+    case 'api_update_status': {
+        Permission::require('leads.edit');
+        $json = json_decode(file_get_contents('php://input'), true);
+        $id = (int)($json['id'] ?? 0);
+        $statusId = (int)($json['status_id'] ?? 0);
+        if ($id > 0 && $statusId > 0) {
+            Database::run('UPDATE leads SET status_id = ? WHERE id = ?', [$statusId, $id]);
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false]);
+        }
+        exit;
+    }
+
     case 'api_create': {
         Permission::require('leads.create');
         $json = json_decode(file_get_contents('php://input'), true);
@@ -433,7 +447,9 @@ switch ($action) {
         }
 
         $page = current_page_int();
-        [$rows, $p] = LeadModel::paginate($page, 25, $filters);
+        $isKanban = ($_GET['view'] ?? 'table') === 'kanban';
+        $perPage = $isKanban ? 1000 : 25; // Load heavily for kanban
+        [$rows, $p] = LeadModel::paginate($page, $perPage, $filters);
         
         $folderId = isset($filters['folder_id']) && $filters['folder_id'] !== '' ? (int)$filters['folder_id'] : null;
         $statuses = LeadModel::statuses($folderId);
@@ -452,7 +468,8 @@ switch ($action) {
         $sources = LeadModel::distinctSources();
         $dashboardStats = LeadModel::getDashboardStats($filters);
         
-        render_page('leads/list', compact('rows', 'p', 'statuses', 'users', 'sources', 'filters', 'dashboardStats', 'customFields', 'customValuesMap'), 'Leads');
+        $viewName = $isKanban ? 'leads/kanban' : 'leads/list';
+        render_page($viewName, compact('rows', 'p', 'statuses', 'users', 'sources', 'filters', 'dashboardStats', 'customFields', 'customValuesMap'), 'Leads');
         break;
     }
 }

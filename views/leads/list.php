@@ -1,5 +1,11 @@
 <div class="flex-between">
-    <h1>Leads</h1>
+    <div style="display: flex; align-items: center; gap: 16px;">
+        <h1 style="margin: 0;">Leads</h1>
+        <div class="btn-group" style="display: inline-flex;">
+            <a href="<?= url('leads', $filters + ['view' => 'table']) ?>" class="btn btn-sm <?= ($_GET['view'] ?? 'table') === 'table' ? 'btn-primary' : 'btn-secondary' ?>" style="border-radius: 4px 0 0 4px;">Table</a>
+            <a href="<?= url('leads', $filters + ['view' => 'kanban']) ?>" class="btn btn-sm <?= ($_GET['view'] ?? '') === 'kanban' ? 'btn-primary' : 'btn-secondary' ?>" style="border-radius: 0 4px 4px 0; border-left: none;">Kanban</a>
+        </div>
+    </div>
     <div class="btn-group">
         <?php if (!empty($filters['folder_id']) && Auth::hasRole('founder')): ?>
         <a href="<?= url('folder_settings', ['folder_id' => $filters['folder_id']]) ?>" class="btn btn-secondary">Folder Settings</a>

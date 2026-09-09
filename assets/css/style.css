@@ -217,3 +217,57 @@ hr{border:none;border-top:1px solid var(--border);margin:24px 0}
   .card{padding:16px}
   .form-row>.form-group{min-width:100%}
 }
+
+/* Responsive Table (Card Layout for Mobile) */
+.responsive-table table {
+  width: 100%;
+}
+.responsive-table th, .responsive-table td {
+  white-space: normal;
+  word-break: break-word;
+  vertical-align: middle;
+}
+@media (max-width: 900px) {
+  .responsive-table table, 
+  .responsive-table thead, 
+  .responsive-table tbody, 
+  .responsive-table th, 
+  .responsive-table td, 
+  .responsive-table tr {
+    display: block;
+  }
+  .responsive-table thead {
+    display: none;
+  }
+  .responsive-table tr {
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    background: var(--surface);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+  }
+  .responsive-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-align: right;
+    border-bottom: 1px solid var(--bg-hover);
+    padding: 8px 0;
+    white-space: normal;
+    border-top: none;
+  }
+  .responsive-table td:last-child {
+    border-bottom: none;
+  }
+  .responsive-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    margin-right: 16px;
+    text-align: left;
+    flex-shrink: 0;
+  }
+}

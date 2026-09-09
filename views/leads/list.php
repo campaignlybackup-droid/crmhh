@@ -81,8 +81,8 @@
 </div>
 <?php endif; ?>
 
-<div class="table-wrap" style="overflow-x:auto; position:relative;">
-<table style="min-width: 1000px;">
+<div class="table-wrap responsive-table" style="position:relative;">
+<table>
 <thead><tr>
     <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?><th style="width:30px;"><input type="checkbox" onclick="toggleAllLeads(this)" title="Select All"></th><?php endif; ?>
     <th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th><th>Status</th><th>Assigned</th><th>Follow-up</th><th>Next Step</th><th>Notes</th><th>Actions</th>
@@ -91,29 +91,29 @@
 <?php if (Permission::has('leads.create')): ?>
 <tr id="quick-add-row" style="background:var(--bg-hover)">
     <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?><td></td><?php endif; ?>
-    <td class="text-muted small">New</td>
-    <td><input type="text" id="qa_name" placeholder="Name *" class="form-control form-control-sm" style="width:100px"></td>
-    <td><input type="text" id="qa_phone" placeholder="Phone" class="form-control form-control-sm" style="width:90px"></td>
-    <td><input type="email" id="qa_email" placeholder="Email" class="form-control form-control-sm" style="width:100px"></td>
-    <td><input type="text" id="qa_company" placeholder="Company" class="form-control form-control-sm" style="width:100px"></td>
-    <td><input type="text" id="qa_source" placeholder="Source" class="form-control form-control-sm" style="width:80px"></td>
-    <td>
+    <td data-label="ID" class="text-muted small">New</td>
+    <td data-label="Name"><input type="text" id="qa_name" placeholder="Name *" class="form-control form-control-sm" style="width:100%; min-width:90px;"></td>
+    <td data-label="Phone"><input type="text" id="qa_phone" placeholder="Phone" class="form-control form-control-sm" style="width:100%; min-width:90px;"></td>
+    <td data-label="Email"><input type="email" id="qa_email" placeholder="Email" class="form-control form-control-sm" style="width:100%; min-width:100px;"></td>
+    <td data-label="Company"><input type="text" id="qa_company" placeholder="Company" class="form-control form-control-sm" style="width:100%; min-width:90px;"></td>
+    <td data-label="Source"><input type="text" id="qa_source" placeholder="Source" class="form-control form-control-sm" style="width:100%; min-width:80px;"></td>
+    <td data-label="Status">
         <select id="qa_status_id" class="form-control form-control-sm">
             <?php foreach ($statuses as $s): ?><option value="<?= $s['id'] ?>"><?= e($s['name']) ?></option><?php endforeach; ?>
         </select>
     </td>
-    <td>
-        <?php if (Permission::has('leads.assign')): ?>
-        <select id="qa_assigned_user_id" class="form-control form-control-sm" style="width:90px">
-            <option value="">Self</option>
-            <?php foreach ($users as $u): ?><option value="<?= $u['id'] ?>"><?= e($u['name']) ?><?= $u['id'] === Auth::id() ? ' (YOU)' : '' ?></option><?php endforeach; ?>
+    <?php if (Permission::has('leads.assign')): ?>
+    <td data-label="Assigned">
+        <select id="qa_assigned_user_id" class="form-control form-control-sm" style="width:100%; min-width:100px;">
+            <option value="">Unassigned</option>
+            <?php foreach ($users as $u): ?><option value="<?= $u['id'] ?>"><?= e($u['name']) ?></option><?php endforeach; ?>
         </select>
-        <?php else: ?><span class="text-muted small">Self</span><?php endif; ?>
     </td>
-    <td><input type="date" id="qa_next_followup_date" class="form-control form-control-sm" style="width:110px"></td>
-    <td><input type="text" id="qa_next_step" placeholder="Next Step" class="form-control form-control-sm" style="width:100px"></td>
-    <td><input type="text" id="qa_notes" placeholder="Notes" class="form-control form-control-sm" style="width:120px"></td>
-    <td><button class="btn btn-sm btn-primary" onclick="quickAddLead()">+ Add</button></td>
+    <?php else: ?><td data-label="Assigned"></td><?php endif; ?>
+    <td data-label="Follow-up"><input type="date" id="qa_next_followup_date" class="form-control form-control-sm" style="width:100%; min-width:110px;"></td>
+    <td data-label="Next Step"><input type="text" id="qa_next_step" placeholder="Next step" class="form-control form-control-sm" style="width:100%; min-width:90px;"></td>
+    <td data-label="Notes"><input type="text" id="qa_notes" placeholder="Notes" class="form-control form-control-sm" style="width:100%; min-width:100px;"></td>
+    <td data-label="Actions"><button class="btn btn-sm btn-primary" onclick="quickAddLead()" style="width:100%; white-space:nowrap;">+ Add</button></td>
 </tr>
 <?php endif; ?>
 
@@ -125,50 +125,50 @@
         <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
             <td><input type="checkbox" class="lead-checkbox" value="<?= $r['id'] ?>" onchange="updateBulkDeleteBtn()"></td>
         <?php endif; ?>
-        <td>
+        <td data-label="ID">
             <a href="<?= url('leads', ['action' => 'view', 'id' => $r['id']]) ?>"><?= e($r['lead_code']) ?></a>
             <input type="hidden" class="edit-input" data-field="id" value="<?= $r['id'] ?>">
         </td>
-        <td>
+        <td data-label="Name">
             <span class="view-mode"><?= e($r['name']) ?></span>
-            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100px" data-field="name" value="<?= e($r['name']) ?>">
+            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="name" value="<?= e($r['name']) ?>">
         </td>
-        <td>
+        <td data-label="Phone">
             <span class="view-mode"><?= e($r['phone']) ?></span>
-            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:90px" data-field="phone" value="<?= e($r['phone']) ?>">
+            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:90px;" data-field="phone" value="<?= e($r['phone']) ?>">
         </td>
-        <td>
-            <span class="view-mode" style="max-width:100px;overflow:hidden;text-overflow:ellipsis;display:inline-block;" title="<?= e($r['email']) ?>"><?= e($r['email']) ?></span>
-            <input type="email" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100px" data-field="email" value="<?= e($r['email']) ?>">
+        <td data-label="Email">
+            <span class="view-mode" style="word-break:break-all;"><?= e($r['email']) ?></span>
+            <input type="email" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="email" value="<?= e($r['email']) ?>">
         </td>
-        <td>
+        <td data-label="Company">
             <span class="view-mode"><?= e($r['company']) ?></span>
-            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100px" data-field="company" value="<?= e($r['company']) ?>">
+            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="company" value="<?= e($r['company']) ?>">
         </td>
-        <td>
+        <td data-label="Source">
             <span class="view-mode"><?= e($r['source']) ?></span>
-            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:80px" data-field="source" value="<?= e($r['source']) ?>">
+            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:80px;" data-field="source" value="<?= e($r['source']) ?>">
         </td>
-        <td>
-            <span class="view-mode badge" style="background:<?= e($r['status_color']) ?>"><?= e($r['status_name']) ?></span>
-            <select class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100px" data-field="status_id">
+        <td data-label="Status">
+            <span class="view-mode badge" style="background:<?= e($r['status_color']) ?>; white-space:normal; text-align:center;"><?= e($r['status_name']) ?></span>
+            <select class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="status_id">
                 <?php foreach ($statuses as $s): ?><option value="<?= $s['id'] ?>" <?= $s['id']==$r['status_id']?'selected':'' ?>><?= e($s['name']) ?></option><?php endforeach; ?>
             </select>
         </td>
-        <td><?= e($r['assigned_name'] ?? 'Unassigned') ?></td>
-        <td>
+        <td data-label="Assigned"><?= e($r['assigned_name'] ?? 'Unassigned') ?></td>
+        <td data-label="Follow-up">
             <span class="view-mode"><?= format_date($r['next_followup_date']) ?></span>
-            <input type="date" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:110px" data-field="next_followup_date" value="<?= $r['next_followup_date'] ?>">
+            <input type="date" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:110px;" data-field="next_followup_date" value="<?= $r['next_followup_date'] ?>">
         </td>
-        <td>
+        <td data-label="Next Step">
             <span class="view-mode"><?= e($r['next_step'] ?? '') ?></span>
-            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100px" data-field="next_step" value="<?= e($r['next_step'] ?? '') ?>">
+            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="next_step" value="<?= e($r['next_step'] ?? '') ?>">
         </td>
-        <td>
-            <span class="view-mode" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;display:inline-block;" title="<?= e($r['notes'] ?? '') ?>"><?= e($r['notes'] ?? '') ?></span>
-            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:120px" data-field="notes" value="<?= e($r['notes'] ?? '') ?>">
+        <td data-label="Notes">
+            <span class="view-mode"><?= e($r['notes'] ?? '') ?></span>
+            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:120px;" data-field="notes" value="<?= e($r['notes'] ?? '') ?>">
         </td>
-        <td>
+        <td data-label="Actions" style="white-space:nowrap;">
             <button class="btn btn-sm btn-link view-mode" onclick="toggleEdit(<?= $r['id'] ?>)">Edit</button>
             <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
             <form method="post" action="<?= url('leads', ['action' => 'delete']) ?>" style="display:inline;" data-confirm="Delete this lead?">

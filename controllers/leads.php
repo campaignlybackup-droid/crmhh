@@ -165,6 +165,16 @@ switch ($action) {
         break;
     }
 
+    case 'clear_all': {
+        if (!Auth::hasRole('founder')) Permission::deny();
+        csrf_check_or_die();
+        $affected = Database::run('UPDATE leads SET deleted_at = NOW() WHERE deleted_at IS NULL');
+        AuditLog::record('bulk_clear', 'leads', 0, null, 'All leads soft-deleted by founder');
+        Flash::success('All leads have been cleared. You can recover them from the database if needed.');
+        redirect(url('leads'));
+        break;
+    }
+
     case 'import': {
         Permission::require('leads.import');
         cleanup_stale_imports();

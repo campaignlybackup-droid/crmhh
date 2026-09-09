@@ -52,7 +52,7 @@ $myAssignedServices = ClientModel::myAssignedServices($userId);
 $masterPendingActions = [];
 if (Auth::hasRole('founder')) {
     try {
-        $pendingLeads = Database::all("SELECT l.id, l.company as title, u.name as assignee, ls.slug as status FROM leads l LEFT JOIN users u ON u.id = l.assigned_user_id JOIN lead_statuses ls ON ls.id = l.status_id WHERE ls.slug IN ('new', 'follow_up') AND l.deleted_at IS NULL ORDER BY l.created_at ASC");
+        $pendingLeads = Database::all("SELECT l.id, l.company as title, u.name as assignee, ls.slug as status FROM leads l LEFT JOIN users u ON u.id = l.assigned_user_id JOIN lead_statuses ls ON ls.id = l.status_id WHERE ls.slug IN ('new', 'follow_up') AND l.deleted_at IS NULL ORDER BY l.created_at ASC LIMIT 50");
         foreach ($pendingLeads as $l) {
             $masterPendingActions[] = [
                 'type' => 'Lead',
@@ -82,7 +82,7 @@ if (Auth::hasRole('founder')) {
     } catch (Throwable $e) { /* ignore */ }
     
     try {
-        $pendingProposals = Database::all("SELECT p.id, p.title, c.name as context, u.name as assignee, p.status, p.deadline_at FROM proposals p LEFT JOIN clients c ON c.id = p.client_id LEFT JOIN users u ON u.id = p.assigned_user_id WHERE p.status IN ('pending', 'in_progress') ORDER BY p.deadline_at ASC");
+        $pendingProposals = Database::all("SELECT p.id, p.title, c.name as context, u.name as assignee, p.status, p.deadline_at FROM proposals p LEFT JOIN clients c ON c.id = p.client_id LEFT JOIN users u ON u.id = p.assigned_user_id WHERE p.status IN ('pending', 'in_progress') ORDER BY p.deadline_at ASC LIMIT 50");
         foreach ($pendingProposals as $p) {
             $masterPendingActions[] = [
                 'type' => 'Proposal',
@@ -97,7 +97,7 @@ if (Auth::hasRole('founder')) {
     } catch (Throwable $e) { /* ignore */ }
     
     try {
-        $pendingApprovals = Database::all("SELECT a.id, a.title, '' as context, u.name as assignee, a.status, a.created_at FROM approvals a LEFT JOIN users u ON u.id = a.user_id WHERE a.status = 'pending' ORDER BY a.created_at ASC");
+        $pendingApprovals = Database::all("SELECT a.id, a.title, '' as context, u.name as assignee, a.status, a.created_at FROM approvals a LEFT JOIN users u ON u.id = a.user_id WHERE a.status = 'pending' ORDER BY a.created_at ASC LIMIT 50");
         foreach ($pendingApprovals as $a) {
             $masterPendingActions[] = [
                 'type' => 'Approval',
@@ -112,7 +112,7 @@ if (Auth::hasRole('founder')) {
     } catch (Throwable $e) { /* ignore */ }
     
     try {
-        $pendingContent = Database::all("SELECT cc.id, cc.title, c.name as context, u.name as assignee, cc.status, cc.post_date FROM content_calendar cc LEFT JOIN clients c ON c.id = cc.client_id LEFT JOIN users u ON u.id = cc.assigned_to WHERE cc.status IN ('draft', 'pending_approval') ORDER BY cc.post_date ASC");
+        $pendingContent = Database::all("SELECT cc.id, cc.title, c.name as context, u.name as assignee, cc.status, cc.post_date FROM content_calendar cc LEFT JOIN clients c ON c.id = cc.client_id LEFT JOIN users u ON u.id = cc.assigned_to WHERE cc.status IN ('draft', 'pending_approval') ORDER BY cc.post_date ASC LIMIT 50");
         foreach ($pendingContent as $cc) {
             $masterPendingActions[] = [
                 'type' => 'Content',

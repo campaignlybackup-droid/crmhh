@@ -88,7 +88,7 @@ switch ($action) {
     case 'delete': {
         $id = (int)($_POST['id'] ?? 0);
         if (!LeadModel::canAccess($id)) Permission::deny();
-        Permission::require('leads.delete');
+        if (!Permission::has('leads.delete') && !Auth::hasRole('founder')) Permission::deny();
         csrf_check_or_die();
         LeadModel::softDelete($id);
         Flash::success('Lead deleted.');

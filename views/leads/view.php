@@ -2,7 +2,7 @@
     <h1><?= e($lead['name']) ?> <span class="text-muted small"><?= e($lead['lead_code']) ?></span></h1>
     <div class="btn-group">
         <?php if (Permission::has('leads.edit')): ?><a href="<?= url('leads', ['action' => 'edit', 'id' => $lead['id']]) ?>" class="btn">Edit</a><?php endif; ?>
-        <?php if (Permission::has('leads.delete')): ?>
+        <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
         <form method="post" action="<?= url('leads', ['action' => 'delete']) ?>" style="display:inline" data-confirm="Delete this lead? This can be recovered by an administrator.">
             <?= Csrf::field() ?><input type="hidden" name="id" value="<?= $lead['id'] ?>">
             <button class="btn btn-danger">Delete</button>

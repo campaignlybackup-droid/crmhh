@@ -170,6 +170,12 @@
         </td>
         <td>
             <button class="btn btn-sm btn-link view-mode" onclick="toggleEdit(<?= $r['id'] ?>)">Edit</button>
+            <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
+            <form method="post" action="<?= url('leads', ['action' => 'delete']) ?>" style="display:inline;" data-confirm="Delete this lead?">
+                <?= Csrf::field() ?><input type="hidden" name="id" value="<?= $r['id'] ?>">
+                <button type="submit" class="btn btn-sm btn-link text-danger view-mode">Delete</button>
+            </form>
+            <?php endif; ?>
             <button class="btn btn-sm btn-primary edit-mode" style="display:none;" onclick="saveEdit(<?= $r['id'] ?>)">Save</button>
             <button class="btn btn-sm btn-link text-muted edit-mode" style="display:none;" onclick="toggleEdit(<?= $r['id'] ?>)">Cancel</button>
         </td>

@@ -2,6 +2,13 @@
 
 $action = $_GET['action'] ?? 'index';
 
+if ($action === 'api_unread') {
+    // Lightweight endpoint for polling notification count
+    header('Content-Type: application/json');
+    echo json_encode(['count' => Notifier::unreadCount(Auth::id())]);
+    exit;
+}
+
 if ($action === 'mark_read') {
     csrf_check_or_die();
     Notifier::markAllRead(Auth::id());

@@ -271,3 +271,18 @@ hr{border:none;border-top:1px solid var(--border);margin:24px 0}
     flex-shrink: 0;
   }
 }
+
+/* ── Real-time notification pulse animation ── */
+@keyframes notifPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+  100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+}
+.notif-pulse { animation: notifPulse 1.2s ease; }
+
+/* ── Navigation progress bar ── */
+#nav-progress { pointer-events: none; }
+
+/* ── Refresh button spin on hover ── */
+.icon-btn[title="Refresh"] { font-size: 18px; transition: transform 0.4s ease; }
+.icon-btn[title="Refresh"]:hover { transform: rotate(360deg); }

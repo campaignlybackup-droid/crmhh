@@ -1,4 +1,4 @@
 </div><!-- /app-shell -->
-<script src="assets/js/app.js"></script>
+<script src="assets/js/app.js" defer></script>
 </body>
 </html>

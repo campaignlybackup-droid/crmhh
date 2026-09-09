@@ -73,10 +73,12 @@ class ProposalModel
         $total = (int)Database::scalar("SELECT COUNT(*) FROM proposals p WHERE $whereSql", $params);
         $p = paginate_params($total, $page, $perPage);
         $rows = Database::all(
-            "SELECT p.*, u.name AS assigned_name, c.name AS creator_name 
+            "SELECT p.*, u.name AS assigned_name, c.name AS creator_name, cl.name AS client_name, l.company_name AS lead_name 
              FROM proposals p
              LEFT JOIN users u ON u.id = p.assigned_user_id
              JOIN users c ON c.id = p.created_by
+             LEFT JOIN clients cl ON cl.id = p.client_id
+             LEFT JOIN leads l ON l.id = p.lead_id
              WHERE $whereSql
              ORDER BY p.deadline_at ASC
              LIMIT {$p['perPage']} OFFSET {$p['offset']}",

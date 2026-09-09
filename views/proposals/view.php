@@ -18,6 +18,18 @@
                 <div><?= e($proposal['assigned_name'] ?: 'Unassigned') ?></div>
             </div>
             <div>
+                <div class="text-muted small">Related Context</div>
+                <div>
+                    <?php if ($proposal['client_name']): ?>
+                        <a href="<?= url('clients', ['action' => 'view', 'id' => $proposal['client_id']]) ?>" class="badge badge-primary">Client: <?= e($proposal['client_name']) ?></a>
+                    <?php elseif ($proposal['lead_name']): ?>
+                        <a href="<?= url('leads', ['action' => 'view', 'id' => $proposal['lead_id']]) ?>" class="badge badge-secondary">Lead: <?= e($proposal['lead_name']) ?></a>
+                    <?php else: ?>
+                        <span class="text-muted">—</span>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div>
                 <div class="text-muted small">Priority</div>
                 <?php
                     $priBadge = 'secondary';

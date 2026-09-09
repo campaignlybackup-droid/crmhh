@@ -17,7 +17,8 @@ switch ($action) {
         $customFields = LeadModel::getCustomFields($folderId);
         $customValues = LeadModel::getCustomValues($id);
         $users = UserModel::activeSelectList();
-        render_page('leads/view', compact('lead', 'timeline', 'statuses', 'customFields', 'customValues', 'users'), 'Lead ' . $lead['lead_code']);
+        $proposals = Database::all("SELECT p.*, u.name AS assigned_name FROM proposals p LEFT JOIN users u ON u.id = p.assigned_user_id WHERE p.lead_id = ? ORDER BY p.deadline_at ASC", [$id]);
+        render_page('leads/view', compact('lead', 'timeline', 'statuses', 'customFields', 'customValues', 'users', 'proposals'), 'Lead ' . $lead['lead_code']);
         break;
     }
 

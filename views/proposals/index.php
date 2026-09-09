@@ -26,6 +26,7 @@
         <thead>
             <tr>
                 <th>Title</th>
+                <th>Context</th>
                 <th>Assigned To</th>
                 <th>Priority</th>
                 <th>Deadline</th>
@@ -52,6 +53,15 @@
             ?>
             <tr <?= $isOverdue ? 'style="background: #fff3f3;"' : '' ?>>
                 <td><strong><?= e($r['title']) ?></strong></td>
+                <td>
+                    <?php if ($r['client_name']): ?>
+                        <a href="<?= url('clients', ['action' => 'view', 'id' => $r['client_id']]) ?>" class="badge badge-primary">Client: <?= e($r['client_name']) ?></a>
+                    <?php elseif ($r['lead_name']): ?>
+                        <a href="<?= url('leads', ['action' => 'view', 'id' => $r['lead_id']]) ?>" class="badge badge-secondary">Lead: <?= e($r['lead_name']) ?></a>
+                    <?php else: ?>
+                        <span class="text-muted">—</span>
+                    <?php endif; ?>
+                </td>
                 <td><?= e($r['assigned_name'] ?: 'Unassigned') ?></td>
                 <td><span class="badge badge-<?= $priBadge ?>"><?= e($r['priority']) ?></span></td>
                 <td>

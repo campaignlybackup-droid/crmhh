@@ -11,6 +11,15 @@
     </div>
 </div>
 
+<div class="card" style="margin-bottom: 16px;">
+    <div class="flex-between">
+        <strong>Quick Actions</strong>
+        <div class="btn-group">
+            <a href="<?= url('proposals', ['action' => 'create', 'lead_id' => $lead['id']]) ?>" class="btn btn-sm btn-primary">+ Add Proposal</a>
+        </div>
+    </div>
+</div>
+
 <div class="grid grid-3">
     <div class="card" style="grid-column:span 2">
         <div class="card-title">Lead Details</div>
@@ -82,4 +91,23 @@
             <p><?= $lead['next_followup_date'] ? format_date($lead['next_followup_date']) : 'Not scheduled' ?></p>
         </div>
     </div>
+</div>
+
+<div class="card">
+    <div class="card-title">Related Proposals <a href="<?= url('proposals', ['action' => 'create', 'lead_id' => $lead['id']]) ?>" class="btn btn-sm" style="float:right;">+ Add</a></div>
+    <?php if (empty($proposals)): ?><p class="text-muted small">No proposals yet for this lead.</p><?php else: ?>
+    <div class="table-wrap"><table>
+        <thead><tr><th>Title</th><th>Assigned</th><th>Status</th><th>Deadline</th></tr></thead>
+        <tbody>
+        <?php foreach ($proposals as $p): ?>
+            <tr>
+                <td><a href="<?= url('proposals', ['action' => 'view', 'id' => $p['id']]) ?>"><?= e($p['title']) ?></a></td>
+                <td><?= e($p['assigned_name'] ?? '—') ?></td>
+                <td><span class="badge badge-<?= status_badge_class($p['status']) ?>"><?= e(humanize($p['status'])) ?></span></td>
+                <td><?= format_datetime($p['deadline_at']) ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table></div>
+    <?php endif; ?>
 </div>

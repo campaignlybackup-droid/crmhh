@@ -6,7 +6,7 @@ if (!Auth::hasRole('founder')) Permission::deny();
 $db = Database::pdo();
 $queries = [];
 
-$tables = ['leads', 'clients', 'tasks', 'proposals', 'services', 'client_services'];
+$tables = ['leads', 'clients', 'tasks', 'client_services'];
 
 foreach ($tables as $table) {
     $indexName = "idx_{$table}_deleted";

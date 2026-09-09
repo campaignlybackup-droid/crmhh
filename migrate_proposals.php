@@ -1,6 +1,6 @@
 <?php
 require __DIR__ . '/core/bootstrap.php';
-if (!Auth::isFounder()) {
+if (!Auth::hasRole('founder')) {
     die("Only founders can run migrations.\n");
 }
 

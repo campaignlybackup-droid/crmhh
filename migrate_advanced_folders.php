@@ -1,5 +1,5 @@
 <?php
-require 'core/init.php';
+require 'core/bootstrap.php';
 
 echo "Starting Advanced Folders Migration...\n";
 

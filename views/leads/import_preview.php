@@ -37,6 +37,16 @@
             </select>
         </div>
         <?php endif; ?>
+
+        <div class="form-group" style="max-width:300px">
+            <label>Import into Folder</label>
+            <select name="folder_id">
+                <option value="">— No Folder (Personal Leads) —</option>
+                <?php foreach ($folders as $f): ?>
+                <option value="<?= $f['id'] ?>" <?= (string)$folderId === (string)$f['id'] ? 'selected' : '' ?>><?= e($f['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
     </div>
 
     <div class="card">

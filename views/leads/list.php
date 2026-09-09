@@ -4,7 +4,7 @@
         <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
         <button id="bulk-delete-btn" class="btn btn-danger" style="display:none;" onclick="bulkDelete()">Delete Selected (<span id="bulk-count">0</span>)</button>
         <?php endif; ?>
-        <?php if (Permission::has('leads.import')): ?><a href="<?= url('leads', ['action' => 'import']) ?>" class="btn">Import CSV</a><?php endif; ?>
+        <?php if (Permission::has('leads.import')): ?><a href="<?= url('leads', ['action' => 'import'] + (isset($filters['folder_id']) && $filters['folder_id'] !== '' ? ['folder_id' => $filters['folder_id']] : [])) ?>" class="btn">Import CSV</a><?php endif; ?>
         <?php if (Permission::has('leads.export')): ?><a href="<?= url('leads', ['action' => 'export'] + $filters) ?>" class="btn">Export CSV</a><?php endif; ?>
         <?php if (Permission::has('leads.create')): ?><a href="<?= url('leads', ['action' => 'create']) ?>" class="btn btn-primary">+ New Lead</a><?php endif; ?>
     </div>

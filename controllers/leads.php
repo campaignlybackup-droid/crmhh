@@ -156,7 +156,8 @@ switch ($action) {
     case 'import': {
         Permission::require('leads.import');
         cleanup_stale_imports();
-        render_page('leads/import', [], 'Import Leads');
+        $folderId = $_GET['folder_id'] ?? '';
+        render_page('leads/import', ['folderId' => $folderId], 'Import Leads');
         break;
     }
 
@@ -205,8 +206,11 @@ switch ($action) {
 
         $_SESSION['_import'] = ['file' => $storedName, 'headers' => $headers, 'mapping' => $mapping, 'original_name' => basename($file['name'])];
 
+        $folders = LeadModel::getCustomFolders(Auth::id());
+        $folderId = $_POST['folder_id'] ?? $_GET['folder_id'] ?? '';
+
         $preview = build_import_preview($headers, $rows, $mapping);
-        render_page('leads/import_preview', compact('headers', 'mapping', 'preview', 'rows'), 'Confirm Import');
+        render_page('leads/import_preview', compact('headers', 'mapping', 'preview', 'rows', 'folders', 'folderId'), 'Confirm Import');
         break;
     }
 
@@ -238,6 +242,7 @@ switch ($action) {
 
         $result = ['total' => count($rows), 'new' => 0, 'duplicate' => 0, 'invalid' => 0];
         $batchAssignee = !empty($_POST['assign_to']) && Permission::has('leads.assign') ? (int)$_POST['assign_to'] : null;
+        $batchFolder = !empty($_POST['folder_id']) ? (int)$_POST['folder_id'] : null;
 
         Database::beginTransaction();
         try {
@@ -266,7 +271,7 @@ switch ($action) {
                 LeadModel::create([
                     'name' => $name, 'phone' => $phone, 'email' => $email, 'company' => $company,
                     'source' => $source, 'status_id' => $statusId, 'assigned_user_id' => $batchAssignee,
-                    'next_followup_date' => null, 'notes' => $notes,
+                    'next_followup_date' => null, 'notes' => $notes, 'folder_id' => $batchFolder
                 ]);
                 $result['new']++;
             }

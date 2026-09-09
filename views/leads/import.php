@@ -3,6 +3,7 @@
     <p class="text-muted small">Upload a CSV export from any source. Columns don't need to match exactly — we'll automatically detect Name, Phone, Email, Company, Source and Status columns, and you'll get a chance to review and correct the mapping before anything is imported.</p>
     <form method="post" action="<?= url('leads', ['action' => 'import_preview']) ?>" enctype="multipart/form-data">
         <?= Csrf::field() ?>
+        <input type="hidden" name="folder_id" value="<?= e($folderId ?? '') ?>">
         <div class="form-group">
             <label>CSV File</label>
             <input type="file" name="csv_file" accept=".csv,text/csv" required>

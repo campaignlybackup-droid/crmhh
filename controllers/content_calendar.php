@@ -60,7 +60,7 @@ if (!Permission::has('calendar.view_all')) {
 
 $posts = ContentCalendarModel::all($viewClientId, $viewAssignedTo);
 
-$clients = ClientModel::all();
+$clients = Database::all('SELECT id, name FROM clients WHERE deleted_at IS NULL ORDER BY name');
 $services = ServiceModel::all();
 $managers = UserModel::activeSelectList();
 

@@ -177,25 +177,25 @@
             <input type="hidden" class="edit-input" data-field="id" value="<?= $r['id'] ?>">
         </td>
         <td data-label="Folder">
-            <select class="edit-input" style="width:100%;min-width:100px;" data-field="folder_id">
+            <select class="edit-input" style="width:100%;min-width:100px;" data-field="folder_id" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)">
                 <option value="">Main</option>
                 <?php foreach ($allFolders ?? [] as $f): ?><option value="<?= $f['id'] ?>" <?= (string)$r['folder_id'] === (string)$f['id'] ? 'selected' : '' ?>><?= e($f['name']) ?></option><?php endforeach; ?>
             </select>
         </td>
         <td data-label="Name">
-            <input type="text" class="edit-input" style="width:100%;min-width:100px;" data-field="name" value="<?= e($r['name']) ?>">
+            <input type="text" class="edit-input" style="width:100%;min-width:100px;" data-field="name" value="<?= e($r['name']) ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
         </td>
         <td data-label="Phone">
-            <input type="text" class="edit-input" style="width:100%;min-width:100px;" data-field="phone" value="<?= e($r['phone']) ?>">
+            <input type="text" class="edit-input" style="width:100%;min-width:100px;" data-field="phone" value="<?= e($r['phone']) ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
         </td>
         <td data-label="Email">
-            <input type="email" class="edit-input" style="width:100%;min-width:110px;" data-field="email" value="<?= e($r['email']) ?>">
+            <input type="email" class="edit-input" style="width:100%;min-width:110px;" data-field="email" value="<?= e($r['email']) ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
         </td>
         <td data-label="Company">
-            <input type="text" class="edit-input" style="width:100%;min-width:100px;" data-field="company" value="<?= e($r['company'] ?? '') ?>">
+            <input type="text" class="edit-input" style="width:100%;min-width:100px;" data-field="company" value="<?= e($r['company'] ?? '') ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
         </td>
         <td data-label="Source">
-            <input type="text" class="edit-input" style="width:100%;min-width:90px;" data-field="source" value="<?= e($r['source'] ?? '') ?>">
+            <input type="text" class="edit-input" style="width:100%;min-width:90px;" data-field="source" value="<?= e($r['source'] ?? '') ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
         </td>
         
         <?php if (!empty($customFields)) foreach ($customFields as $cf): 
@@ -204,39 +204,39 @@
         <td data-label="<?= e($cf['field_name']) ?>">
             <?php if ($cf['field_type'] === 'select'): 
                 $opts = json_decode($cf['options'] ?: '[]', true) ?: []; ?>
-                <select class="edit-input" style="width:100%;min-width:100px;" data-cf-id="<?= $cf['id'] ?>">
+                <select class="edit-input" style="width:100%;min-width:100px;" data-cf-id="<?= $cf['id'] ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)">
                     <option value="">—</option>
                     <?php foreach ($opts as $opt): ?><option value="<?= e($opt) ?>" <?= $val===$opt?'selected':'' ?>><?= e($opt) ?></option><?php endforeach; ?>
                 </select>
             <?php elseif ($cf['field_type'] === 'date'): ?>
-                <input type="date" class="edit-input" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>">
+                <input type="date" class="edit-input" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
             <?php elseif ($cf['field_type'] === 'number'): ?>
-                <input type="number" step="any" class="edit-input" style="width:100%;min-width:80px;" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>">
+                <input type="number" step="any" class="edit-input" style="width:100%;min-width:80px;" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
             <?php else: ?>
-                <input type="text" class="edit-input" style="width:100%;min-width:90px;" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>">
+                <input type="text" class="edit-input" style="width:100%;min-width:90px;" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
             <?php endif; ?>
         </td>
         <?php endforeach; ?>
 
         <td data-label="Status">
-            <select class="edit-input" style="width:100%;min-width:100px;" data-field="status_id">
+            <select class="edit-input" style="width:100%;min-width:100px;" data-field="status_id" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)">
                 <?php foreach ($statuses as $s): ?><option value="<?= $s['id'] ?>" <?= $s['id']==$r['status_id']?'selected':'' ?>><?= e($s['name']) ?></option><?php endforeach; ?>
             </select>
         </td>
         <td data-label="Assigned">
-            <select class="edit-input" style="width:100%;min-width:100px;" data-field="assigned_user_id">
+            <select class="edit-input" style="width:100%;min-width:100px;" data-field="assigned_user_id" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)">
                 <option value="">Unassigned</option>
                 <?php foreach ($users as $u): ?><option value="<?= $u['id'] ?>" <?= $u['id']==$r['assigned_user_id']?'selected':'' ?>><?= e($u['name']) ?></option><?php endforeach; ?>
             </select>
         </td>
         <td data-label="Follow-up">
-            <input type="date" class="edit-input" style="width:100%;min-width:110px;" data-field="next_followup_date" value="<?= $r['next_followup_date'] ?>">
+            <input type="date" class="edit-input" style="width:100%;min-width:110px;" data-field="next_followup_date" value="<?= $r['next_followup_date'] ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
         </td>
         <td data-label="Next Step">
-            <input type="text" class="edit-input" style="width:100%;min-width:100px;" data-field="next_step" value="<?= e($r['next_step'] ?? '') ?>">
+            <input type="text" class="edit-input" style="width:100%;min-width:100px;" data-field="next_step" value="<?= e($r['next_step'] ?? '') ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
         </td>
         <td data-label="Notes">
-            <input type="text" class="edit-input" style="width:100%;min-width:120px;" data-field="notes" value="<?= e($r['notes'] ?? '') ?>">
+            <input type="text" class="edit-input" style="width:100%;min-width:120px;" data-field="notes" value="<?= e($r['notes'] ?? '') ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
         </td>
         <td data-label="Actions" style="white-space:nowrap;">
             <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
@@ -253,26 +253,18 @@
 </div>
 
 <script>
-document.addEventListener('change', function(e) {
-    if (e.target && e.target.classList && e.target.classList.contains('edit-input')) {
-        handleInlineEdit(e);
+function handleEnter(e, inp) {
+    if (e.keyCode === 13 || e.key === 'Enter') {
+        inp.blur();
     }
-});
+}
 
-document.addEventListener('keydown', function(e) {
-    if (e.target && e.target.classList && e.target.classList.contains('edit-input')) {
-        if (e.keyCode === 13 || e.key === 'Enter') {
-            e.target.blur();
-        }
+function setOriginalValue(inp) {
+    if (!inp.hasAttribute('data-original-value')) {
+        var val = inp.type === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
+        inp.setAttribute('data-original-value', val);
     }
-});
-
-document.addEventListener('focus', function(e) {
-    if (e.target && e.target.classList && e.target.classList.contains('edit-input')) {
-        var val = e.target.type === 'checkbox' ? (e.target.checked ? '1' : '0') : e.target.value;
-        e.target.setAttribute('data-original-value', val);
-    }
-}, true);
+}
 
 function getClosestRow(el) {
     while (el && el.tagName !== 'TR') {
@@ -281,8 +273,7 @@ function getClosestRow(el) {
     return el;
 }
 
-function handleInlineEdit(e) {
-    var inp = e.target || e.srcElement;
+function handleInlineEdit(inp) {
     var row = getClosestRow(inp);
     if (!row || !row.id || row.id.indexOf('row_') !== 0) return;
     

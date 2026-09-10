@@ -261,7 +261,7 @@ class LeadModel
         $normPhone = normalize_phone($phone);
         if ($normPhone !== '') {
             $row = Database::one(
-                "SELECT * FROM leads WHERE deleted_at IS NULL AND $folderSql AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) = ? LIMIT 1",
+                "SELECT * FROM leads WHERE deleted_at IS NULL AND $folderSql AND RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 10) = ? LIMIT 1",
                 [$normPhone]
             );
             if ($row) return $row;

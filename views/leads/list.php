@@ -381,7 +381,7 @@ function handleInlineEdit(inp) {
         var payload = 'id=' + encodeURIComponent(leadId) + 
                       '&field=' + encodeURIComponent(field) + 
                       '&new_value=' + encodeURIComponent(newValue) + 
-                      '&_csrf=' + encodeURIComponent('<?= e(csrf_token()) ?>');
+                      '&_csrf=' + encodeURIComponent('<?= e(Csrf::token()) ?>');
         logDebug('Payload built, sending XHR...');
         xhr.send(payload);
     } catch (fatalErr) {
@@ -476,7 +476,7 @@ function bulkDelete() {
     var csrf = document.createElement('input');
     csrf.type = 'hidden';
     csrf.name = 'csrf_token';
-    csrf.value = '<?= e(csrf_token()) ?>';
+    csrf.value = '<?= e(Csrf::token()) ?>';
     form.appendChild(csrf);
     
     for (var j = 0; j < checked.length; j++) {

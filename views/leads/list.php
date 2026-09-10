@@ -266,11 +266,11 @@ window.toggleEdit = function(id) {
     }
 };
 
-async function saveEdit(id) {
-    const row = document.getElementById('row_' + id);
-    const inputs = row.querySelectorAll('.edit-input');
-    const data = {};
-    const cf = {};
+function saveEdit(id) {
+    var row = document.getElementById('row_' + id);
+    var inputs = row.querySelectorAll('.edit-input');
+    var data = {};
+    var cf = {};
     for (var i = 0; i < inputs.length; i++) {
         var inp = inputs[i];
         if (inp.dataset.field) data[inp.dataset.field] = inp.value;
@@ -278,41 +278,36 @@ async function saveEdit(id) {
     }
     data.custom_fields = cf;
     
-    try {
-        const btn = row.querySelector('.btn-primary.edit-mode');
-        btn.innerText = '...'; btn.disabled = true;
-        
-        const res = await fetch('<?= url('leads', ['action' => 'api_update']) ?>', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+    var btn = row.querySelector('.btn-primary.edit-mode');
+    if (btn) { btn.innerText = '...'; btn.disabled = true; }
+    
+    fetch('<?= url('leads', ['action' => 'api_update']) ?>', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(function(res) {
+        return res.json().catch(function() {
+            throw new Error('Failed to parse response as JSON. The server might have returned an HTML error.');
         });
-        
-        let json;
-        try {
-            json = await res.json();
-        } catch (parseError) {
-            console.error('Failed to parse response as JSON. The server might have returned an HTML error.');
-            alert('Server error occurred while saving. Please check the console for details.');
-            btn.innerText = 'Save'; btn.disabled = false;
-            return;
-        }
-        
+    })
+    .then(function(json) {
         if (json.success) {
-            window.location.reload(); // Quickest way to reflect colors, statuses, sorting
+            window.location.reload();
         } else {
             alert('Error: ' + json.error);
-            btn.innerText = 'Save'; btn.disabled = false;
+            if (btn) { btn.innerText = 'Save'; btn.disabled = false; }
         }
-    } catch (e) {
-        console.error('Network Error:', e);
-        alert('Network error. Check console.');
-        const btn = row.querySelector('.btn-primary.edit-mode');
-        if(btn) { btn.innerText = 'Save'; btn.disabled = false; }
-    }
+    })
+    .catch(function(e) {
+        console.error('Error:', e);
+        alert(e.message || 'Network error. Check console.');
+        if (btn) { btn.innerText = 'Save'; btn.disabled = false; }
+    });
 }
 
-async function quickAddLead() {
-    const data = {
+function quickAddLead() {
+    var data = {
         name: document.getElementById('qa_name').value,
         phone: document.getElementById('qa_phone').value,
         email: document.getElementById('qa_email').value,
@@ -326,8 +321,8 @@ async function quickAddLead() {
         folder_id: '<?= e($filters['folder_id'] ?? '') ?>'
     };
     
-    const cfInputs = document.querySelectorAll('#quick-add-row .cf-input');
-    const cf = {};
+    var cfInputs = document.querySelectorAll('#quick-add-row .cf-input');
+    var cf = {};
     for (var i = 0; i < cfInputs.length; i++) {
         cf[cfInputs[i].dataset.cfId] = cfInputs[i].value;
     }
@@ -335,37 +330,32 @@ async function quickAddLead() {
 
     if (!data.name) return alert('Name is required');
     
-    try {
-        const btn = document.querySelector('#quick-add-row .btn-primary');
-        btn.innerText = '...'; btn.disabled = true;
-        
-        const res = await fetch('<?= url('leads', ['action' => 'api_create']) ?>', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+    var btn = document.querySelector('#quick-add-row .btn-primary');
+    if (btn) { btn.innerText = '...'; btn.disabled = true; }
+    
+    fetch('<?= url('leads', ['action' => 'api_create']) ?>', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(function(res) {
+        return res.json().catch(function() {
+            throw new Error('Failed to parse response as JSON. The server might have returned an HTML error.');
         });
-        
-        let json;
-        try {
-            json = await res.json();
-        } catch (parseError) {
-            console.error('Failed to parse response as JSON. The server might have returned an HTML error.');
-            alert('Server error occurred while saving. Please check the console for details.');
-            btn.innerText = '+ Add'; btn.disabled = false;
-            return;
-        }
-        
+    })
+    .then(function(json) {
         if (json.success) {
             window.location.reload();
         } else {
             alert('Error: ' + json.error);
-            btn.innerText = '+ Add'; btn.disabled = false;
+            if (btn) { btn.innerText = '+ Add'; btn.disabled = false; }
         }
-    } catch (e) {
-        console.error('Network Error:', e);
-        alert('Network error. Check console.');
-        const btn = document.querySelector('#quick-add-row .btn-primary');
-        if(btn) { btn.innerText = '+ Add'; btn.disabled = false; }
-    }
+    })
+    .catch(function(e) {
+        console.error('Error:', e);
+        alert(e.message || 'Network error. Check console.');
+        if (btn) { btn.innerText = '+ Add'; btn.disabled = false; }
+    });
 }
 
 function toggleAllLeads(source) {

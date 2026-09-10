@@ -302,7 +302,7 @@ function handleInlineEdit(inp) {
 
     var xhr = new XMLHttpRequest();
     xhr.open('POST', '<?= url('leads', ['action' => 'api_update_inline']) ?>', true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
     xhr.onreadystatechange = function() {
         if (xhr.readyState === 4) {
             inp.disabled = false;
@@ -338,7 +338,11 @@ function handleInlineEdit(inp) {
             }
         }
     };
-    xhr.send(JSON.stringify(data));
+    var payload = 'id=' + encodeURIComponent(leadId) + 
+                  '&field=' + encodeURIComponent(field) + 
+                  '&new_value=' + encodeURIComponent(newValue) + 
+                  '&_csrf=' + encodeURIComponent('<?= e(csrf_token()) ?>');
+    xhr.send(payload);
 }
 
 function quickAddLead() {

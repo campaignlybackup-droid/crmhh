@@ -421,15 +421,13 @@ switch ($action) {
     }
 
     case 'api_update_inline': {
-        $json = json_decode(file_get_contents('php://input'), true);
-        
-        if (($json['_csrf'] ?? '') !== Csrf::token()) {
+        if (($_POST['_csrf'] ?? '') !== Csrf::token()) {
             echo json_encode(['success' => false, 'error' => 'CSRF verification failed']); exit;
         }
 
-        $id = (int)($json['id'] ?? 0);
-        $field = trim($json['field'] ?? '');
-        $newValue = $json['new_value'] ?? null;
+        $id = (int)($_POST['id'] ?? 0);
+        $field = trim($_POST['field'] ?? '');
+        $newValue = $_POST['new_value'] ?? null;
         
         if (!$id || !$field) { echo json_encode(['success' => false, 'error' => 'Invalid parameters']); exit; }
         if (!LeadModel::canAccess($id)) { echo json_encode(['success' => false, 'error' => 'Access denied']); exit; }

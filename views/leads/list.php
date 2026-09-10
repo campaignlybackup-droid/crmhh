@@ -290,30 +290,32 @@ function saveEdit(id) {
     var btn = row.querySelector('.btn-primary');
     if (btn) { btn.innerText = '...'; btn.disabled = true; }
     
-    fetch('<?= url('leads', ['action' => 'api_update']) ?>', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(function(res) {
-        return res.json().catch(function() {
-            throw new Error('Failed to parse response as JSON. The server might have returned an HTML error.');
-        });
-    })
-    .then(function(json) {
-        if (json.success) {
-            alert('Lead saved successfully!');
-            if (btn) { btn.innerText = 'Saved!'; setTimeout(function(){ btn.innerText = 'Save'; btn.disabled = false; }, 2000); }
-        } else {
-            alert('Error: ' + json.error);
-            if (btn) { btn.innerText = 'Save'; btn.disabled = false; }
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '<?= url('leads', ['action' => 'api_update']) ?>', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+                try {
+                    var json = JSON.parse(xhr.responseText);
+                    if (json.success) {
+                        alert('Lead saved successfully!');
+                        if (btn) { btn.innerText = 'Saved!'; setTimeout(function(){ btn.innerText = 'Save'; btn.disabled = false; }, 2000); }
+                    } else {
+                        alert('Error: ' + json.error);
+                        if (btn) { btn.innerText = 'Save'; btn.disabled = false; }
+                    }
+                } catch(e) {
+                    alert('Error: Failed to parse response as JSON. The server might have returned an HTML error.');
+                    if (btn) { btn.innerText = 'Save'; btn.disabled = false; }
+                }
+            } else {
+                alert('Error: Network request failed with status ' + xhr.status);
+                if (btn) { btn.innerText = 'Save'; btn.disabled = false; }
+            }
         }
-    })
-    .catch(function(e) {
-        console.error('Error:', e);
-        alert(e.message || 'Network error. Check console.');
-        if (btn) { btn.innerText = 'Save'; btn.disabled = false; }
-    });
+    };
+    xhr.send(JSON.stringify(data));
 }
 
 function quickAddLead() {
@@ -343,29 +345,31 @@ function quickAddLead() {
     var btn = document.querySelector('#quick-add-row .btn-primary');
     if (btn) { btn.innerText = '...'; btn.disabled = true; }
     
-    fetch('<?= url('leads', ['action' => 'api_create']) ?>', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(function(res) {
-        return res.json().catch(function() {
-            throw new Error('Failed to parse response as JSON. The server might have returned an HTML error.');
-        });
-    })
-    .then(function(json) {
-        if (json.success) {
-            window.location.reload();
-        } else {
-            alert('Error: ' + json.error);
-            if (btn) { btn.innerText = '+ Add'; btn.disabled = false; }
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '<?= url('leads', ['action' => 'api_create']) ?>', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+                try {
+                    var json = JSON.parse(xhr.responseText);
+                    if (json.success) {
+                        window.location.reload();
+                    } else {
+                        alert('Error: ' + json.error);
+                        if (btn) { btn.innerText = '+ Add'; btn.disabled = false; }
+                    }
+                } catch(e) {
+                    alert('Error: Failed to parse response as JSON. The server might have returned an HTML error.');
+                    if (btn) { btn.innerText = '+ Add'; btn.disabled = false; }
+                }
+            } else {
+                alert('Error: Network request failed with status ' + xhr.status);
+                if (btn) { btn.innerText = '+ Add'; btn.disabled = false; }
+            }
         }
-    })
-    .catch(function(e) {
-        console.error('Error:', e);
-        alert(e.message || 'Network error. Check console.');
-        if (btn) { btn.innerText = '+ Add'; btn.disabled = false; }
-    });
+    };
+    xhr.send(JSON.stringify(data));
 }
 
 function toggleAllLeads(source) {

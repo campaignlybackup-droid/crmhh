@@ -169,10 +169,35 @@ switch ($action) {
     case 'clear_all': {
         if (!Auth::hasRole('founder')) Permission::deny();
         csrf_check_or_die();
-        $affected = Database::run('UPDATE leads SET deleted_at = NOW() WHERE deleted_at IS NULL');
+        Database::run('UPDATE leads SET deleted_at = NOW() WHERE deleted_at IS NULL');
         AuditLog::record('bulk_clear', 'leads', 0, null, 'All leads soft-deleted by founder');
         Flash::success('All leads have been cleared. You can recover them from the database if needed.');
         redirect(url('leads'));
+        break;
+    }
+
+    case 'clear_folder': {
+        if (!Auth::hasRole('founder')) Permission::deny();
+        csrf_check_or_die();
+        $folderId = (int)($_POST['folder_id'] ?? 0);
+        if (!$folderId) {
+            Flash::error('No folder specified.');
+            redirect(url('leads'));
+        }
+        // Verify the folder exists
+        $folder = Database::one('SELECT id, name FROM lead_folders WHERE id = ?', [$folderId]);
+        if (!$folder) {
+            Flash::error('Folder not found.');
+            redirect(url('leads'));
+        }
+        // Soft-delete ONLY leads that belong to this specific folder
+        $count = Database::run(
+            'UPDATE leads SET deleted_at = NOW() WHERE deleted_at IS NULL AND folder_id = ?',
+            [$folderId]
+        );
+        AuditLog::record('bulk_clear', 'leads', $folderId, null, "Cleared all leads in folder '{$folder['name']}' (ID: $folderId)");
+        Flash::success("All leads in the folder \"{$folder['name']}\" have been cleared. Other folders are unaffected.");
+        redirect(url('leads', ['folder_id' => $folderId]));
         break;
     }
 

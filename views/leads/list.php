@@ -17,10 +17,24 @@
         <?php if (Permission::has('leads.export')): ?><a href="<?= url('leads', ['action' => 'export'] + $filters) ?>" class="btn">Export CSV</a><?php endif; ?>
         <?php if (Permission::has('leads.create')): ?><a href="<?= url('leads', ['action' => 'create']) ?>" class="btn btn-primary">+ New Lead</a><?php endif; ?>
         <?php if (Auth::hasRole('founder')): ?>
-        <form method="post" action="<?= url('leads', ['action' => 'clear_all']) ?>" style="display:inline;" data-confirm="⚠️ This will soft-delete ALL leads. Are you absolutely sure? This action affects every lead in the system.">
+        <?php if (!empty($filters['folder_id'])): ?>
+        <?php
+            $folderName = '';
+            foreach ($allFolders as $af) {
+                if ((string)$af['id'] === (string)$filters['folder_id']) { $folderName = $af['name']; break; }
+            }
+        ?>
+        <form method="post" action="<?= url('leads', ['action' => 'clear_folder']) ?>" style="display:inline;" data-confirm="⚠️ This will delete ALL leads inside the folder '<?= e($folderName) ?>'. Leads in other folders will NOT be affected. Are you sure?">
+            <?= Csrf::field() ?>
+            <input type="hidden" name="folder_id" value="<?= e($filters['folder_id']) ?>">
+            <button type="submit" class="btn btn-danger">🗑 Clear Folder Leads</button>
+        </form>
+        <?php else: ?>
+        <form method="post" action="<?= url('leads', ['action' => 'clear_all']) ?>" style="display:inline;" data-confirm="⚠️ This will soft-delete ALL leads in the ENTIRE system. Are you absolutely sure?">
             <?= Csrf::field() ?>
             <button type="submit" class="btn btn-danger">🗑 Clear All Leads</button>
         </form>
+        <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>

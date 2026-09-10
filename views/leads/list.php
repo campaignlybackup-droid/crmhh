@@ -252,142 +252,120 @@
 </table>
 </div>
 
-<div id="inline-debug-console" style="position:fixed;bottom:10px;right:10px;width:350px;max-height:200px;background:#111;color:#0f0;font-family:monospace;font-size:11px;overflow-y:auto;z-index:9999;padding:10px;border:1px solid #333;border-radius:4px;opacity:0.9;">
-    <strong>Inline Edit Debugger (Long Term Fix)</strong><br>
-    <a href="#" onclick="document.getElementById('inline-debug-console').style.display='none';return false;" style="color:#ff5555;float:right;text-decoration:none;">[Close]</a>
-    <div id="inline-debug-log">Waiting for edit...</div>
-</div>
+<!-- inline-edit toast -->
+<style>
+#inline-toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(60px);
+    background: #1a1a2e; color: #fff;
+    padding: 10px 24px; border-radius: 8px; font-size: 14px;
+    z-index: 9999; transition: transform 0.3s ease, opacity 0.3s ease;
+    opacity: 0; pointer-events: none;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+#inline-toast.show  { transform: translateX(-50%) translateY(0); opacity: 1; }
+#inline-toast.ok    { border-left: 4px solid #22c55e; }
+#inline-toast.error { border-left: 4px solid #ef4444; }
+</style>
+<div id="inline-toast"></div>
 
 <script>
-function logDebug(msg) {
-    var log = document.getElementById('inline-debug-log');
-    if (log) {
-        log.innerHTML += '<br>&gt; ' + msg;
-        log.parentElement.scrollTop = log.parentElement.scrollHeight;
-    }
+var _inlineToastTimer = null;
+function showToast(msg, type) {
+    var el = document.getElementById('inline-toast');
+    el.textContent = msg;
+    el.className = 'show ' + (type || 'ok');
+    if (_inlineToastTimer) clearTimeout(_inlineToastTimer);
+    _inlineToastTimer = setTimeout(function() { el.className = ''; }, 2500);
 }
 
-document.addEventListener('click', function(e) {
-    var tag = e.target ? e.target.tagName : 'unknown';
-    var cls = (e.target && e.target.className) ? e.target.className : '';
-    logDebug('Global Click detected on: &lt;' + tag + ' class="' + cls + '"&gt;');
-}, true);
-
-document.addEventListener('focusin', function(e) {
-    var tag = e.target ? e.target.tagName : 'unknown';
-    logDebug('Global Focus detected on: ' + tag);
-}, true);
-
 function handleEnter(e, inp) {
-    if (e.keyCode === 13 || e.key === 'Enter') {
-        inp.blur();
-    }
+    if (e.keyCode === 13 || e.key === 'Enter') { inp.blur(); }
 }
 
 function setOriginalValue(inp) {
     if (!inp.hasAttribute('data-original-value')) {
         var val = inp.type === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
         inp.setAttribute('data-original-value', val);
-        logDebug('Focus: Captured original value for ' + (inp.getAttribute('data-field') || inp.getAttribute('data-cf-id')) + ' = ' + val);
     }
 }
 
 function getClosestRow(el) {
-    while (el && el.tagName !== 'TR') {
-        el = el.parentNode;
-    }
+    while (el && el.tagName !== 'TR') { el = el.parentNode; }
     return el;
 }
 
 function handleInlineEdit(inp) {
     try {
-        logDebug('Edit triggered for element ' + inp.tagName);
         var row = getClosestRow(inp);
-        if (!row || !row.id || row.id.indexOf('row_') !== 0) {
-            logDebug('Failed: Could not find parent row starting with row_');
-            return;
-        }
-        
+        if (!row || !row.id || row.id.indexOf('row_') !== 0) return;
+
         var leadId = row.id.replace('row_', '');
         var field = inp.getAttribute('data-field');
-        var cfId = inp.getAttribute('data-cf-id');
+        var cfId  = inp.getAttribute('data-cf-id');
         if (!field && cfId) field = 'custom_field_' + cfId;
-        if (!field || field === 'id') {
-            logDebug('Failed: Missing data-field attribute');
-            return;
-        }
+        if (!field || field === 'id') return;
 
-        var newValue = inp.type === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
+        var newValue      = inp.type === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
         var originalValue = inp.getAttribute('data-original-value');
         if (originalValue === null) originalValue = inp.defaultValue;
-        
-        logDebug('Comparing: "' + newValue + '" vs "' + originalValue + '"');
-        if (newValue === originalValue) {
-            logDebug('No change detected, aborting save.');
-            return;
-        }
-        
-        logDebug('Proceeding to save ' + field + ' = ' + newValue);
+        if (newValue === originalValue) return; // no change
+
         inp.disabled = true;
         var originalBg = inp.style.backgroundColor || '';
-        inp.style.backgroundColor = '#f8f9fa';
+        inp.style.backgroundColor = '#f0f0f0';
 
         var xhr = new XMLHttpRequest();
-        var url = '<?= url('leads', ['action' => 'api_update_inline']) ?>';
-        logDebug('Opening POST to ' + url);
-        xhr.open('POST', url, true);
+        xhr.open('POST', '<?= url('leads', ['action' => 'api_update_inline']) ?>', true);
         xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
         xhr.onreadystatechange = function() {
-            if (xhr.readyState === 4) {
-                inp.disabled = false;
-                logDebug('Server responded with Status: ' + xhr.status);
-                if (xhr.status === 200) {
-                    try {
-                        logDebug('Raw response: ' + xhr.responseText.substring(0, 100));
-                        var json = JSON.parse(xhr.responseText);
-                        if (json.success) {
-                            var finalVal = json.new_value !== null ? json.new_value : '';
-                            inp.setAttribute('data-original-value', finalVal);
-                            if (inp.type !== 'checkbox') inp.value = finalVal;
-                            inp.style.backgroundColor = '#d4edda';
-                            setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
-                            logDebug('Success! Value updated visually.');
-                        } else {
-                            logDebug('Server Error: ' + json.error);
-                            alert('Error: ' + json.error);
-                            if (inp.type === 'checkbox') inp.checked = originalValue === '1';
-                            else inp.value = originalValue;
-                            inp.style.backgroundColor = '#f8d7da';
-                            setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
-                        }
-                    } catch(err) {
-                        logDebug('JSON Parse Error: ' + err.message);
-                        alert('Error: Invalid server response.');
+            if (xhr.readyState !== 4) return;
+            inp.disabled = false;
+            if (xhr.status === 200) {
+                try {
+                    var json = JSON.parse(xhr.responseText);
+                    if (json.success) {
+                        var finalVal = (json.new_value !== null && json.new_value !== undefined) ? json.new_value : newValue;
+                        inp.setAttribute('data-original-value', finalVal);
+                        if (inp.type !== 'checkbox') inp.value = finalVal;
+                        inp.style.backgroundColor = '#d4edda';
+                        setTimeout(function() { inp.style.backgroundColor = originalBg; }, 800);
+                        showToast('✅ Saved', 'ok');
+                    } else {
+                        showToast('❌ ' + (json.error || 'Save failed'), 'error');
                         if (inp.type === 'checkbox') inp.checked = originalValue === '1';
                         else inp.value = originalValue;
+                        inp.setAttribute('data-original-value', originalValue);
                         inp.style.backgroundColor = '#f8d7da';
-                        setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
+                        setTimeout(function() { inp.style.backgroundColor = originalBg; }, 800);
                     }
-                } else {
-                    logDebug('HTTP Request Failed (Status ' + xhr.status + ')');
-                    alert('Error: Network request failed.');
+                } catch(err) {
+                    showToast('❌ Server error — change reverted', 'error');
                     if (inp.type === 'checkbox') inp.checked = originalValue === '1';
                     else inp.value = originalValue;
+                    inp.setAttribute('data-original-value', originalValue);
                     inp.style.backgroundColor = '#f8d7da';
-                    setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
+                    setTimeout(function() { inp.style.backgroundColor = originalBg; }, 800);
                 }
+            } else {
+                showToast('❌ Network error (HTTP ' + xhr.status + ')', 'error');
+                if (inp.type === 'checkbox') inp.checked = originalValue === '1';
+                else inp.value = originalValue;
+                inp.setAttribute('data-original-value', originalValue);
+                inp.style.backgroundColor = '#f8d7da';
+                setTimeout(function() { inp.style.backgroundColor = originalBg; }, 800);
             }
         };
-        var payload = 'id=' + encodeURIComponent(leadId) + 
-                      '&field=' + encodeURIComponent(field) + 
-                      '&new_value=' + encodeURIComponent(newValue) + 
-                      '&_csrf=' + encodeURIComponent('<?= e(Csrf::token()) ?>');
-        logDebug('Payload built, sending XHR...');
+        var payload = 'id='       + encodeURIComponent(leadId)   +
+                      '&field='   + encodeURIComponent(field)     +
+                      '&new_value=' + encodeURIComponent(newValue) +
+                      '&_csrf='   + encodeURIComponent('<?= e(Csrf::token()) ?>');
         xhr.send(payload);
     } catch (fatalErr) {
-        logDebug('FATAL JS ERROR: ' + fatalErr.message);
+        showToast('❌ JS Error: ' + fatalErr.message, 'error');
     }
 }
+
 
 function quickAddLead() {
     var data = {

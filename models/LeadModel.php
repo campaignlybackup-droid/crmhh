@@ -213,7 +213,9 @@ class LeadModel
         } else {
             $where[] = "l.folder_id IS NULL";
             if ($assignedUserId === 'all') {
-                 $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+                 if (!$isFounder) {
+                     $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+                 }
             } elseif ($assignedUserId !== '') {
                  $where[] = 'l.assigned_user_id = ?'; 
                  $params[] = $assignedUserId; 
@@ -226,7 +228,7 @@ class LeadModel
         }
 
         if (!empty($filters['status_id'])) { $where[] = 'l.status_id = ?'; $params[] = $filters['status_id']; }
-        if (!empty($filters['assigned_user_id'])) { $where[] = 'l.assigned_user_id = ?'; $params[] = $filters['assigned_user_id']; }
+        if (!empty($filters['assigned_user_id']) && $filters['assigned_user_id'] !== 'all') { $where[] = 'l.assigned_user_id = ?'; $params[] = $filters['assigned_user_id']; }
         if (!empty($filters['source'])) { $where[] = 'l.source = ?'; $params[] = $filters['source']; }
         if (!empty($filters['followup']) && $filters['followup'] === 'today') { $where[] = 'l.next_followup_date = CURDATE()'; }
         if (!empty($filters['followup']) && $filters['followup'] === 'overdue') { $where[] = 'l.next_followup_date < CURDATE()'; }

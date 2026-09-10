@@ -253,22 +253,36 @@
 </div>
 
 <script>
-(function() {
-    var inputs = document.querySelectorAll('.edit-input');
-    for (var i = 0; i < inputs.length; i++) {
-        var inp = inputs[i];
-        inp.setAttribute('data-original-value', inp.value);
-        
-        if (inp.tagName === 'SELECT' || inp.type === 'date' || inp.type === 'number' || inp.type === 'checkbox') {
-            inp.addEventListener('change', handleInlineEdit);
-        } else {
-            inp.addEventListener('blur', handleInlineEdit);
-            inp.addEventListener('keydown', function(e) {
-                if (e.keyCode === 13 || e.key === 'Enter') this.blur();
-            });
+document.addEventListener('change', function(e) {
+    if (e.target && typeof e.target.className === 'string' && e.target.className.indexOf('edit-input') !== -1) {
+        if (e.target.tagName === 'SELECT' || e.target.type === 'date' || e.target.type === 'number' || e.target.type === 'checkbox') {
+            handleInlineEdit(e);
         }
     }
-})();
+});
+
+document.addEventListener('blur', function(e) {
+    if (e.target && typeof e.target.className === 'string' && e.target.className.indexOf('edit-input') !== -1) {
+        if (e.target.tagName !== 'SELECT' && e.target.type !== 'date' && e.target.type !== 'number' && e.target.type !== 'checkbox') {
+            handleInlineEdit(e);
+        }
+    }
+}, true);
+
+document.addEventListener('keydown', function(e) {
+    if (e.target && typeof e.target.className === 'string' && e.target.className.indexOf('edit-input') !== -1) {
+        if (e.keyCode === 13 || e.key === 'Enter') {
+            e.target.blur();
+        }
+    }
+});
+
+document.addEventListener('focus', function(e) {
+    if (e.target && typeof e.target.className === 'string' && e.target.className.indexOf('edit-input') !== -1) {
+        var val = e.target.type === 'checkbox' ? (e.target.checked ? '1' : '0') : e.target.value;
+        e.target.setAttribute('data-original-value', val);
+    }
+}, true);
 
 function getClosestRow(el) {
     while (el && el.tagName !== 'TR') {
@@ -290,6 +304,11 @@ function handleInlineEdit(e) {
 
     var newValue = inp.type === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
     var originalValue = inp.getAttribute('data-original-value');
+    
+    // If it hasn't been set by focus yet (e.g. checkbox click without focus), fallback
+    if (originalValue === null) {
+        originalValue = inp.defaultValue;
+    }
     
     if (newValue === originalValue) return;
 
@@ -315,23 +334,26 @@ function handleInlineEdit(e) {
                     var json = JSON.parse(xhr.responseText);
                     if (json.success) {
                         inp.setAttribute('data-original-value', json.new_value !== null ? json.new_value : '');
-                        inp.style.backgroundColor = '#d4edda'; // success green
+                        inp.style.backgroundColor = '#d4edda';
                         setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
                     } else {
                         alert('Error: ' + json.error);
-                        inp.value = originalValue;
-                        inp.style.backgroundColor = '#f8d7da'; // error red
+                        if (inp.type === 'checkbox') inp.checked = originalValue === '1';
+                        else inp.value = originalValue;
+                        inp.style.backgroundColor = '#f8d7da';
                         setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
                     }
                 } catch(err) {
                     alert('Error: Invalid server response.');
-                    inp.value = originalValue;
+                    if (inp.type === 'checkbox') inp.checked = originalValue === '1';
+                    else inp.value = originalValue;
                     inp.style.backgroundColor = '#f8d7da';
                     setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
                 }
             } else {
                 alert('Error: Network request failed.');
-                inp.value = originalValue;
+                if (inp.type === 'checkbox') inp.checked = originalValue === '1';
+                else inp.value = originalValue;
                 inp.style.backgroundColor = '#f8d7da';
                 setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
             }

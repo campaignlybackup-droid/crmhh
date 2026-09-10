@@ -325,15 +325,17 @@ class LeadModel
         AuditLog::record('status_change', 'lead', $id, $oldName, $newName);
     }
 
-    public static function assign(int $id, int $newUserId, ?string $note = null): void
+    public static function assign(int $id, ?int $newUserId, ?string $note = null): void
     {
         $before = Database::one('SELECT assigned_user_id FROM leads WHERE id = ?', [$id]);
         Database::run('UPDATE leads SET assigned_user_id = ? WHERE id = ?', [$newUserId, $id]);
         $oldName = $before['assigned_user_id'] ? Database::scalar('SELECT name FROM users WHERE id=?', [$before['assigned_user_id']]) : 'Unassigned';
-        $newName = Database::scalar('SELECT name FROM users WHERE id=?', [$newUserId]);
+        $newName = $newUserId ? Database::scalar('SELECT name FROM users WHERE id=?', [$newUserId]) : 'Unassigned';
         ActivityModel::log('lead', $id, 'reassigned', $note, $oldName, $newName);
-        $lead = Database::one('SELECT lead_code, name FROM leads WHERE id=?', [$id]);
-        Notifier::send($newUserId, 'lead_assigned', 'Lead assigned: ' . $lead['name'], "Lead {$lead['lead_code']} has been assigned to you.", 'lead', $id);
+        if ($newUserId) {
+            $lead = Database::one('SELECT lead_code, name FROM leads WHERE id=?', [$id]);
+            Notifier::send($newUserId, 'lead_assigned', 'Lead assigned: ' . $lead['name'], "Lead {$lead['lead_code']} has been assigned to you.", 'lead', $id);
+        }
         AuditLog::record('assign', 'lead', $id, $oldName, $newName);
     }
 

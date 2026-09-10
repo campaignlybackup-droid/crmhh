@@ -384,11 +384,11 @@ function bulkDelete() {
     if (checked.length === 0) return;
     if (!confirm('Are you sure you want to delete ' + checked.length + ' selected leads?')) return;
     
-    const form = document.createElement('form');
+    var form = document.createElement('form');
     form.method = 'POST';
     form.action = '<?= url('leads', ['action' => 'bulk_delete']) ?>';
     
-    const csrf = document.createElement('input');
+    var csrf = document.createElement('input');
     csrf.type = 'hidden';
     csrf.name = 'csrf_token';
     csrf.value = '<?= e(csrf_token()) ?>';

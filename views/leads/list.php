@@ -252,7 +252,21 @@
 </table>
 </div>
 
+<div id="inline-debug-console" style="position:fixed;bottom:10px;right:10px;width:350px;max-height:200px;background:#111;color:#0f0;font-family:monospace;font-size:11px;overflow-y:auto;z-index:9999;padding:10px;border:1px solid #333;border-radius:4px;opacity:0.9;">
+    <strong>Inline Edit Debugger (Long Term Fix)</strong><br>
+    <a href="#" onclick="document.getElementById('inline-debug-console').style.display='none';return false;" style="color:#ff5555;float:right;text-decoration:none;">[Close]</a>
+    <div id="inline-debug-log">Waiting for edit...</div>
+</div>
+
 <script>
+function logDebug(msg) {
+    var log = document.getElementById('inline-debug-log');
+    if (log) {
+        log.innerHTML += '<br>&gt; ' + msg;
+        log.parentElement.scrollTop = log.parentElement.scrollHeight;
+    }
+}
+
 function handleEnter(e, inp) {
     if (e.keyCode === 13 || e.key === 'Enter') {
         inp.blur();
@@ -263,6 +277,7 @@ function setOriginalValue(inp) {
     if (!inp.hasAttribute('data-original-value')) {
         var val = inp.type === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
         inp.setAttribute('data-original-value', val);
+        logDebug('Focus: Captured original value for ' + (inp.getAttribute('data-field') || inp.getAttribute('data-cf-id')) + ' = ' + val);
     }
 }
 
@@ -274,75 +289,93 @@ function getClosestRow(el) {
 }
 
 function handleInlineEdit(inp) {
-    var row = getClosestRow(inp);
-    if (!row || !row.id || row.id.indexOf('row_') !== 0) return;
-    
-    var leadId = row.id.replace('row_', '');
-    var field = inp.getAttribute('data-field');
-    var cfId = inp.getAttribute('data-cf-id');
-    if (!field && cfId) field = 'custom_field_' + cfId;
-    if (!field || field === 'id') return;
+    try {
+        logDebug('Edit triggered for element ' + inp.tagName);
+        var row = getClosestRow(inp);
+        if (!row || !row.id || row.id.indexOf('row_') !== 0) {
+            logDebug('Failed: Could not find parent row starting with row_');
+            return;
+        }
+        
+        var leadId = row.id.replace('row_', '');
+        var field = inp.getAttribute('data-field');
+        var cfId = inp.getAttribute('data-cf-id');
+        if (!field && cfId) field = 'custom_field_' + cfId;
+        if (!field || field === 'id') {
+            logDebug('Failed: Missing data-field attribute');
+            return;
+        }
 
-    var newValue = inp.type === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
-    var originalValue = inp.getAttribute('data-original-value');
-    if (originalValue === null) originalValue = inp.defaultValue;
-    
-    if (newValue === originalValue) return;
-    
-    inp.disabled = true;
-    var originalBg = inp.style.backgroundColor || '';
-    inp.style.backgroundColor = '#f8f9fa';
+        var newValue = inp.type === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
+        var originalValue = inp.getAttribute('data-original-value');
+        if (originalValue === null) originalValue = inp.defaultValue;
+        
+        logDebug('Comparing: "' + newValue + '" vs "' + originalValue + '"');
+        if (newValue === originalValue) {
+            logDebug('No change detected, aborting save.');
+            return;
+        }
+        
+        logDebug('Proceeding to save ' + field + ' = ' + newValue);
+        inp.disabled = true;
+        var originalBg = inp.style.backgroundColor || '';
+        inp.style.backgroundColor = '#f8f9fa';
 
-    var data = {
-        id: leadId,
-        field: field,
-        new_value: newValue,
-        _csrf: '<?= e(csrf_token()) ?>'
-    };
-
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '<?= url('leads', ['action' => 'api_update_inline']) ?>', true);
-    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4) {
-            inp.disabled = false;
-            if (xhr.status === 200) {
-                try {
-                    var json = JSON.parse(xhr.responseText);
-                    if (json.success) {
-                        var finalVal = json.new_value !== null ? json.new_value : '';
-                        inp.setAttribute('data-original-value', finalVal);
-                        if (inp.type !== 'checkbox') inp.value = finalVal;
-                        inp.style.backgroundColor = '#d4edda';
-                        setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
-                    } else {
-                        alert('Error: ' + json.error);
+        var xhr = new XMLHttpRequest();
+        var url = '<?= url('leads', ['action' => 'api_update_inline']) ?>';
+        logDebug('Opening POST to ' + url);
+        xhr.open('POST', url, true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                inp.disabled = false;
+                logDebug('Server responded with Status: ' + xhr.status);
+                if (xhr.status === 200) {
+                    try {
+                        logDebug('Raw response: ' + xhr.responseText.substring(0, 100));
+                        var json = JSON.parse(xhr.responseText);
+                        if (json.success) {
+                            var finalVal = json.new_value !== null ? json.new_value : '';
+                            inp.setAttribute('data-original-value', finalVal);
+                            if (inp.type !== 'checkbox') inp.value = finalVal;
+                            inp.style.backgroundColor = '#d4edda';
+                            setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
+                            logDebug('Success! Value updated visually.');
+                        } else {
+                            logDebug('Server Error: ' + json.error);
+                            alert('Error: ' + json.error);
+                            if (inp.type === 'checkbox') inp.checked = originalValue === '1';
+                            else inp.value = originalValue;
+                            inp.style.backgroundColor = '#f8d7da';
+                            setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
+                        }
+                    } catch(err) {
+                        logDebug('JSON Parse Error: ' + err.message);
+                        alert('Error: Invalid server response.');
                         if (inp.type === 'checkbox') inp.checked = originalValue === '1';
                         else inp.value = originalValue;
                         inp.style.backgroundColor = '#f8d7da';
                         setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
                     }
-                } catch(err) {
-                    alert('Error: Invalid server response.');
+                } else {
+                    logDebug('HTTP Request Failed (Status ' + xhr.status + ')');
+                    alert('Error: Network request failed.');
                     if (inp.type === 'checkbox') inp.checked = originalValue === '1';
                     else inp.value = originalValue;
                     inp.style.backgroundColor = '#f8d7da';
                     setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
                 }
-            } else {
-                alert('Error: Network request failed.');
-                if (inp.type === 'checkbox') inp.checked = originalValue === '1';
-                else inp.value = originalValue;
-                inp.style.backgroundColor = '#f8d7da';
-                setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
             }
-        }
-    };
-    var payload = 'id=' + encodeURIComponent(leadId) + 
-                  '&field=' + encodeURIComponent(field) + 
-                  '&new_value=' + encodeURIComponent(newValue) + 
-                  '&_csrf=' + encodeURIComponent('<?= e(csrf_token()) ?>');
-    xhr.send(payload);
+        };
+        var payload = 'id=' + encodeURIComponent(leadId) + 
+                      '&field=' + encodeURIComponent(field) + 
+                      '&new_value=' + encodeURIComponent(newValue) + 
+                      '&_csrf=' + encodeURIComponent('<?= e(csrf_token()) ?>');
+        logDebug('Payload built, sending XHR...');
+        xhr.send(payload);
+    } catch (fatalErr) {
+        logDebug('FATAL JS ERROR: ' + fatalErr.message);
+    }
 }
 
 function quickAddLead() {

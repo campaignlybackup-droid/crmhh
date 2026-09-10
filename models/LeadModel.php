@@ -335,7 +335,7 @@ class LeadModel
             $before = self::find($id);
             if (!$before) throw new \Exception("Lead not found");
 
-            if (str_starts_with($field, 'custom_field_')) {
+            if (strpos($field, 'custom_field_') === 0) {
                 $cfId = (int)str_replace('custom_field_', '', $field);
                 $oldValue = Database::scalar('SELECT field_value FROM lead_custom_values WHERE lead_id = ? AND field_id = ?', [$id, $cfId]);
                 

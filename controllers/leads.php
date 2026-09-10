@@ -337,14 +337,25 @@ switch ($action) {
 
     case 'api_update_status': {
         Permission::require('leads.edit');
+        // Support both JSON (legacy) and form-encoded POST
         $json = json_decode(file_get_contents('php://input'), true);
-        $id = (int)($json['id'] ?? 0);
-        $statusId = (int)($json['status_id'] ?? 0);
-        if ($id > 0 && $statusId > 0) {
-            Database::run('UPDATE leads SET status_id = ? WHERE id = ?', [$statusId, $id]);
-            echo json_encode(['success' => true]);
-        } else {
-            echo json_encode(['success' => false]);
+        $isJson = is_array($json);
+        
+        $id = (int)($isJson ? ($json['id'] ?? 0) : ($_POST['id'] ?? 0));
+        $statusId = (int)($isJson ? ($json['status_id'] ?? 0) : ($_POST['status_id'] ?? 0));
+        
+        if (!$id || !$statusId) {
+            echo json_encode(['success' => false, 'error' => 'Missing id or status_id']); exit;
+        }
+        if (!LeadModel::canAccess($id)) {
+            echo json_encode(['success' => false, 'error' => 'Access denied']); exit;
+        }
+        
+        try {
+            $result = LeadModel::updateField($id, 'status_id', (string)$statusId, Auth::id());
+            echo json_encode(['success' => true, 'new_value' => $statusId]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         }
         exit;
     }

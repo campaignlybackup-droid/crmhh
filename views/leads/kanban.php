@@ -112,10 +112,50 @@ if (empty($kanbanColumns['unassigned']['leads'])) {
 .kanban-board::-webkit-scrollbar-track { background: var(--border); border-radius: 4px; }
 .kanban-board::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 4px; }
 .kanban-card:active { cursor: grabbing; }
-.kanban-column.drag-over { background: var(--border) !important; }
+.kanban-column.drag-over { background: var(--border) !important; outline: 2px dashed var(--primary); }
+.kanban-card.saving { opacity: 0.6; pointer-events: none; }
+
+/* Sync toast */
+#kanban-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(60px);
+    background: #1a1a2e;
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    z-index: 9999;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    opacity: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+#kanban-toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+#kanban-toast.success { border-left: 4px solid #22c55e; }
+#kanban-toast.error   { border-left: 4px solid #ef4444; }
 </style>
 
+<div id="kanban-toast"></div>
+
 <script>
+var _kanbanCsrf = '<?= e(Csrf::token()) ?>';
+var _kanbanToastTimer = null;
+
+function kanbanToast(msg, type) {
+    var el = document.getElementById('kanban-toast');
+    el.textContent = msg;
+    el.className = 'show ' + (type || 'success');
+    if (_kanbanToastTimer) clearTimeout(_kanbanToastTimer);
+    _kanbanToastTimer = setTimeout(function() {
+        el.className = '';
+    }, 2800);
+}
+
 function allowDrop(ev) {
     ev.preventDefault();
     ev.currentTarget.classList.add('drag-over');
@@ -125,73 +165,99 @@ function drag(ev) {
     ev.dataTransfer.setData("text/plain", ev.currentTarget.id);
 }
 
-document.querySelectorAll('.kanban-column').forEach(col => {
-    col.addEventListener('dragleave', e => {
-        if (e.target === col) {
+document.querySelectorAll('.kanban-column').forEach(function(col) {
+    col.addEventListener('dragleave', function(e) {
+        // Only remove if leaving the column itself, not a child
+        if (!col.contains(e.relatedTarget)) {
             col.classList.remove('drag-over');
         }
     });
 });
 
-async function drop(ev) {
+function drop(ev) {
     ev.preventDefault();
-    let col = ev.currentTarget;
+    var col = ev.currentTarget;
     col.classList.remove('drag-over');
     
-    let leadElId = ev.dataTransfer.getData("text/plain");
-    let leadEl = document.getElementById(leadElId);
-    let cardsContainer = col.querySelector('.kanban-cards');
+    var leadElId = ev.dataTransfer.getData("text/plain");
+    var leadEl = document.getElementById(leadElId);
+    if (!leadEl) return;
+    
+    var cardsContainer = col.querySelector('.kanban-cards');
     
     // Prevent dropping in same column
     if (leadEl.closest('.kanban-column') === col) return;
     
-    // Move DOM element
-    cardsContainer.appendChild(leadEl);
+    // Remember original column for rollback
+    var originalCol = leadEl.closest('.kanban-column');
+    var originalContainer = originalCol ? originalCol.querySelector('.kanban-cards') : null;
     
-    // Update count badges
+    // Move DOM element optimistically
+    cardsContainer.appendChild(leadEl);
     updateBadges();
     
-    // Save to DB
-    let leadId = leadEl.getAttribute('data-lead-id');
-    let statusId = col.getAttribute('data-status-id');
+    // Update border color optimistically
+    var color = col.querySelector('h3').style.borderBottomColor;
+    var prevColor = leadEl.style.borderLeftColor;
+    leadEl.style.borderLeftColor = color;
+    leadEl.classList.add('saving');
     
-    if (statusId === 'unassigned') return; // Cannot explicitly unassign via kanban yet
+    var leadId = leadEl.getAttribute('data-lead-id');
+    var statusId = col.getAttribute('data-status-id');
     
-    try {
-        let res = await fetch('<?= url('leads', ['action' => 'api_update_status']) ?>', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id: leadId, status_id: statusId})
-        });
-        
-        let json;
-        try {
-            json = await res.json();
-        } catch (parseError) {
-            console.error('Failed to parse response as JSON. Server might have returned an error page.');
-            alert('Server error occurred while updating status. See console.');
-            window.location.reload();
-            return;
-        }
-        
-        if (!json.success) {
-            alert('Failed to update status: ' + (json.error || 'Unknown error'));
-            window.location.reload();
-        } else {
-            // Update border color of the card to match the new column
-            let color = col.querySelector('h3').style.borderBottomColor;
-            leadEl.style.borderLeftColor = color;
-        }
-    } catch (e) {
-        console.error('Network Error:', e);
-        alert('Network error occurred.');
-        window.location.reload();
+    if (statusId === 'unassigned') {
+        leadEl.classList.remove('saving');
+        kanbanToast('⚠️ Cannot set status to "unassigned" via drag.', 'error');
+        // Rollback
+        if (originalContainer) { originalContainer.appendChild(leadEl); }
+        leadEl.style.borderLeftColor = prevColor;
+        updateBadges();
+        return;
     }
+    
+    // POST with CSRF token
+    var payload = 'id=' + encodeURIComponent(leadId) + 
+                  '&status_id=' + encodeURIComponent(statusId) +
+                  '&_csrf=' + encodeURIComponent(_kanbanCsrf);
+    
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '<?= url('leads', ['action' => 'api_update_status']) ?>', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState !== 4) return;
+        leadEl.classList.remove('saving');
+        
+        if (xhr.status === 200) {
+            try {
+                var json = JSON.parse(xhr.responseText);
+                if (json.success) {
+                    kanbanToast('✅ Status updated & synced', 'success');
+                } else {
+                    kanbanToast('❌ Failed: ' + (json.error || 'Unknown error'), 'error');
+                    // Rollback
+                    if (originalContainer) { originalContainer.appendChild(leadEl); }
+                    leadEl.style.borderLeftColor = prevColor;
+                    updateBadges();
+                }
+            } catch(e) {
+                kanbanToast('❌ Server error — change rolled back', 'error');
+                if (originalContainer) { originalContainer.appendChild(leadEl); }
+                leadEl.style.borderLeftColor = prevColor;
+                updateBadges();
+            }
+        } else {
+            kanbanToast('❌ Network error (HTTP ' + xhr.status + ') — change rolled back', 'error');
+            if (originalContainer) { originalContainer.appendChild(leadEl); }
+            leadEl.style.borderLeftColor = prevColor;
+            updateBadges();
+        }
+    };
+    xhr.send(payload);
 }
 
 function updateBadges() {
-    document.querySelectorAll('.kanban-column').forEach(col => {
-        let count = col.querySelectorAll('.kanban-card').length;
+    document.querySelectorAll('.kanban-column').forEach(function(col) {
+        var count = col.querySelectorAll('.kanban-card').length;
         col.querySelector('.badge').textContent = count;
     });
 }

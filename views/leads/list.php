@@ -282,8 +282,10 @@ function saveEdit(id) {
     var cf = {};
     for (var i = 0; i < inputs.length; i++) {
         var inp = inputs[i];
-        if (inp.dataset.field) data[inp.dataset.field] = inp.value;
-        if (inp.dataset.cfId) cf[inp.dataset.cfId] = inp.value;
+        var field = inp.getAttribute('data-field');
+        var cfId = inp.getAttribute('data-cf-id');
+        if (field) data[field] = inp.value;
+        if (cfId) cf[cfId] = inp.value;
     }
     data.custom_fields = cf;
     
@@ -299,8 +301,7 @@ function saveEdit(id) {
                 try {
                     var json = JSON.parse(xhr.responseText);
                     if (json.success) {
-                        alert('Lead saved successfully!');
-                        if (btn) { btn.innerText = 'Saved!'; setTimeout(function(){ btn.innerText = 'Save'; btn.disabled = false; }, 2000); }
+                        window.location.reload();
                     } else {
                         alert('Error: ' + json.error);
                         if (btn) { btn.innerText = 'Save'; btn.disabled = false; }

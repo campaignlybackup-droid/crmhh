@@ -422,6 +422,11 @@ switch ($action) {
 
     case 'api_update_inline': {
         $json = json_decode(file_get_contents('php://input'), true);
+        
+        if (($json['_csrf'] ?? '') !== Csrf::token()) {
+            echo json_encode(['success' => false, 'error' => 'CSRF verification failed']); exit;
+        }
+
         $id = (int)($json['id'] ?? 0);
         $field = trim($json['field'] ?? '');
         $newValue = $json['new_value'] ?? null;

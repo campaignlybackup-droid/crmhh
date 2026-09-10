@@ -253,27 +253,34 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
     var inputs = document.querySelectorAll('.edit-input');
     for (var i = 0; i < inputs.length; i++) {
         var inp = inputs[i];
         inp.setAttribute('data-original-value', inp.value);
         
-        if (inp.tagName === 'SELECT' || inp.type === 'date' || inp.type === 'number') {
+        if (inp.tagName === 'SELECT' || inp.type === 'date' || inp.type === 'number' || inp.type === 'checkbox') {
             inp.addEventListener('change', handleInlineEdit);
         } else {
             inp.addEventListener('blur', handleInlineEdit);
             inp.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') this.blur();
+                if (e.keyCode === 13 || e.key === 'Enter') this.blur();
             });
         }
     }
-});
+})();
+
+function getClosestRow(el) {
+    while (el && el.tagName !== 'TR') {
+        el = el.parentNode;
+    }
+    return el;
+}
 
 function handleInlineEdit(e) {
-    var inp = e.target;
-    var row = inp.closest('tr');
-    if (!row || !row.id.startsWith('row_')) return;
+    var inp = e.target || e.srcElement;
+    var row = getClosestRow(inp);
+    if (!row || !row.id || row.id.indexOf('row_') !== 0) return;
     
     var leadId = row.id.replace('row_', '');
     var field = inp.getAttribute('data-field');
@@ -281,7 +288,7 @@ function handleInlineEdit(e) {
     if (!field && cfId) field = 'custom_field_' + cfId;
     if (!field || field === 'id') return;
 
-    var newValue = inp.value;
+    var newValue = inp.type === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
     var originalValue = inp.getAttribute('data-original-value');
     
     if (newValue === originalValue) return;
@@ -293,7 +300,8 @@ function handleInlineEdit(e) {
     var data = {
         id: leadId,
         field: field,
-        new_value: newValue
+        new_value: newValue,
+        _csrf: '<?= e(csrf_token()) ?>'
     };
 
     var xhr = new XMLHttpRequest();

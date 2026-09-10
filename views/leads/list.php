@@ -245,32 +245,37 @@
 </div>
 
 <script>
-function toggleEdit(id) {
-    const row = document.getElementById('row_' + id);
-    const viewModes = row.querySelectorAll('.view-mode');
-    const editModes = row.querySelectorAll('.edit-mode');
-    const isEditing = row.classList.contains('is-editing');
+window.toggleEdit = function(id) {
+    var row = document.getElementById('row_' + id);
+    if (!row) return;
+    var viewModes = row.querySelectorAll('.view-mode');
+    var editModes = row.querySelectorAll('.edit-mode');
+    var isEditing = row.classList.contains('is-editing');
+    
+    for (var i = 0; i < viewModes.length; i++) {
+        viewModes[i].style.display = isEditing ? '' : 'none';
+    }
+    for (var i = 0; i < editModes.length; i++) {
+        editModes[i].style.display = isEditing ? 'none' : '';
+    }
     
     if (isEditing) {
-        viewModes.forEach(el => el.style.display = '');
-        editModes.forEach(el => el.style.display = 'none');
         row.classList.remove('is-editing');
     } else {
-        viewModes.forEach(el => el.style.display = 'none');
-        editModes.forEach(el => el.style.display = '');
         row.classList.add('is-editing');
     }
-}
+};
 
 async function saveEdit(id) {
     const row = document.getElementById('row_' + id);
     const inputs = row.querySelectorAll('.edit-input');
     const data = {};
     const cf = {};
-    inputs.forEach(inp => {
+    for (var i = 0; i < inputs.length; i++) {
+        var inp = inputs[i];
         if (inp.dataset.field) data[inp.dataset.field] = inp.value;
         if (inp.dataset.cfId) cf[inp.dataset.cfId] = inp.value;
-    });
+    }
     data.custom_fields = cf;
     
     try {
@@ -323,7 +328,9 @@ async function quickAddLead() {
     
     const cfInputs = document.querySelectorAll('#quick-add-row .cf-input');
     const cf = {};
-    cfInputs.forEach(inp => cf[inp.dataset.cfId] = inp.value);
+    for (var i = 0; i < cfInputs.length; i++) {
+        cf[cfInputs[i].dataset.cfId] = cfInputs[i].value;
+    }
     data.custom_fields = cf;
 
     if (!data.name) return alert('Name is required');
@@ -362,14 +369,16 @@ async function quickAddLead() {
 }
 
 function toggleAllLeads(source) {
-    const checkboxes = document.querySelectorAll('.lead-checkbox');
-    checkboxes.forEach(cb => cb.checked = source.checked);
+    var checkboxes = document.querySelectorAll('.lead-checkbox');
+    for (var i = 0; i < checkboxes.length; i++) {
+        checkboxes[i].checked = source.checked;
+    }
     updateBulkDeleteBtn();
 }
 
 function updateBulkDeleteBtn() {
-    const checked = document.querySelectorAll('.lead-checkbox:checked').length;
-    const btn = document.getElementById('bulk-delete-btn');
+    var checked = document.querySelectorAll('.lead-checkbox:checked').length;
+    var btn = document.getElementById('bulk-delete-btn');
     if (btn) {
         btn.style.display = checked > 0 ? 'inline-flex' : 'none';
         document.getElementById('bulk-count').innerText = checked;
@@ -377,7 +386,11 @@ function updateBulkDeleteBtn() {
 }
 
 function bulkDelete() {
-    const checked = Array.from(document.querySelectorAll('.lead-checkbox:checked')).map(cb => cb.value);
+    var checkedNodes = document.querySelectorAll('.lead-checkbox:checked');
+    var checked = [];
+    for (var i = 0; i < checkedNodes.length; i++) {
+        checked.push(checkedNodes[i].value);
+    }
     if (checked.length === 0) return;
     if (!confirm('Are you sure you want to delete ' + checked.length + ' selected leads?')) return;
     
@@ -391,13 +404,13 @@ function bulkDelete() {
     csrf.value = '<?= e(csrf_token()) ?>';
     form.appendChild(csrf);
     
-    checked.forEach(id => {
-        const input = document.createElement('input');
+    for (var j = 0; j < checked.length; j++) {
+        var input = document.createElement('input');
         input.type = 'hidden';
         input.name = 'ids[]';
-        input.value = id;
+        input.value = checked[j];
         form.appendChild(input);
-    });
+    }
     
     document.body.appendChild(form);
     form.submit();

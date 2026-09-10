@@ -267,6 +267,17 @@ function logDebug(msg) {
     }
 }
 
+document.addEventListener('click', function(e) {
+    var tag = e.target ? e.target.tagName : 'unknown';
+    var cls = (e.target && e.target.className) ? e.target.className : '';
+    logDebug('Global Click detected on: &lt;' + tag + ' class="' + cls + '"&gt;');
+}, true);
+
+document.addEventListener('focusin', function(e) {
+    var tag = e.target ? e.target.tagName : 'unknown';
+    logDebug('Global Focus detected on: ' + tag);
+}, true);
+
 function handleEnter(e, inp) {
     if (e.keyCode === 13 || e.key === 'Enter') {
         inp.blur();

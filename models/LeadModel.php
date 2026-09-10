@@ -203,7 +203,12 @@ class LeadModel
         $assignedUserId = $filters['assigned_user_id'] ?? '';
         $folderId = $filters['folder_id'] ?? '';
         
-        if ($folderId !== '') {
+        if ($folderId === 'all') {
+            if (!$isFounder) {
+                $where[] = "(l.folder_id IS NULL OR EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id = ?))";
+                $params[] = $userId;
+            }
+        } elseif ($folderId !== '') {
             $where[] = "l.folder_id = ?";
             $params[] = $folderId;
             if (!$isFounder) {
@@ -310,6 +315,12 @@ class LeadModel
             $newAssignee = $data['assigned_user_id'] ? (int)$data['assigned_user_id'] : null;
             if ($newAssignee !== (int)$before['assigned_user_id']) {
                 self::assign($id, $newAssignee);
+            }
+        }
+        if (array_key_exists('folder_id', $data)) {
+            $newFolder = $data['folder_id'] ? (int)$data['folder_id'] : null;
+            if ($newFolder !== $before['folder_id']) {
+                Database::run('UPDATE leads SET folder_id = ? WHERE id = ?', [$newFolder, $id]);
             }
         }
         AuditLog::record('update', 'lead', $id);

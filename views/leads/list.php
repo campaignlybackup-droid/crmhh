@@ -46,6 +46,14 @@
     </div>
     <?php endif; ?>
     <div class="form-group">
+        <label>Folder</label>
+        <select name="folder_id" data-autosubmit="true">
+            <option value="all" <?= ($filters['folder_id'] ?? '') === 'all' ? 'selected' : '' ?>>All Folders</option>
+            <option value="" <?= ($filters['folder_id'] ?? '') === '' ? 'selected' : '' ?>>Main / Uncategorized</option>
+            <?php foreach ($allFolders ?? [] as $f): ?><option value="<?= $f['id'] ?>" <?= (string)($filters['folder_id'] ?? '') === (string)$f['id'] ? 'selected' : '' ?>><?= e($f['name']) ?></option><?php endforeach; ?>
+        </select>
+    </div>
+    <div class="form-group">
         <label>Source</label>
         <select name="source"><option value="">All</option>
             <?php foreach ($sources as $s): ?><option value="<?= e($s) ?>" <?= $filters['source'] === $s ? 'selected' : '' ?>><?= e($s) ?></option><?php endforeach; ?>
@@ -97,7 +105,7 @@
 <table>
 <thead><tr>
     <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?><th class="checkbox-col" style="width:40px;"><input type="checkbox" onclick="toggleAllLeads(this)" title="Select All"></th><?php endif; ?>
-    <th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th>
+    <th>ID</th><th>Folder</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th>
     <?php if (!empty($customFields)) foreach ($customFields as $cf): ?><th><?= e($cf['field_name']) ?></th><?php endforeach; ?>
     <th>Status</th><th>Assigned</th><th>Follow-up</th><th>Next Step</th><th>Notes</th><th>Actions</th>
 </tr></thead>
@@ -106,6 +114,12 @@
 <tr id="quick-add-row" style="background:var(--bg-hover)">
     <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?><td class="checkbox-col"></td><?php endif; ?>
     <td data-label="ID" class="text-muted small">New</td>
+    <td data-label="Folder">
+        <select id="qa_folder_id" class="form-control form-control-sm" style="width:100%;min-width:100px;">
+            <option value="">Main</option>
+            <?php foreach ($allFolders ?? [] as $f): ?><option value="<?= $f['id'] ?>" <?= (string)($filters['folder_id'] ?? '') === (string)$f['id'] ? 'selected' : '' ?>><?= e($f['name']) ?></option><?php endforeach; ?>
+        </select>
+    </td>
     <td data-label="Name"><input type="text" id="qa_name" placeholder="Name *" class="form-control form-control-sm" style="width:100%; min-width:90px;"></td>
     <td data-label="Phone"><input type="text" id="qa_phone" placeholder="Phone" class="form-control form-control-sm" style="width:100%; min-width:90px;"></td>
     <td data-label="Email"><input type="email" id="qa_email" placeholder="Email" class="form-control form-control-sm" style="width:100%; min-width:100px;"></td>
@@ -162,81 +176,76 @@
             <a href="<?= url('leads', ['action' => 'view', 'id' => $r['id']]) ?>"><?= e($r['lead_code']) ?></a>
             <input type="hidden" class="edit-input" data-field="id" value="<?= $r['id'] ?>">
         </td>
+        <td data-label="Folder">
+            <select class="edit-input form-control form-control-sm" style="width:100%;min-width:100px;" data-field="folder_id">
+                <option value="">Main</option>
+                <?php foreach ($allFolders ?? [] as $f): ?><option value="<?= $f['id'] ?>" <?= (string)$r['folder_id'] === (string)$f['id'] ? 'selected' : '' ?>><?= e($f['name']) ?></option><?php endforeach; ?>
+            </select>
+        </td>
         <td data-label="Name">
-            <span class="view-mode"><?= e($r['name']) ?></span>
-            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="name" value="<?= e($r['name']) ?>">
+            <input type="text" class="edit-input form-control form-control-sm" style="width:100%;min-width:100px;" data-field="name" value="<?= e($r['name']) ?>">
         </td>
         <td data-label="Phone">
-            <span class="view-mode"><?= e($r['phone']) ?></span>
-            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:90px;" data-field="phone" value="<?= e($r['phone']) ?>">
+            <input type="text" class="edit-input form-control form-control-sm" style="width:100%;min-width:100px;" data-field="phone" value="<?= e($r['phone']) ?>">
         </td>
         <td data-label="Email">
-            <span class="view-mode" style="word-break:break-all;"><?= e($r['email']) ?></span>
-            <input type="email" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="email" value="<?= e($r['email']) ?>">
+            <input type="email" class="edit-input form-control form-control-sm" style="width:100%;min-width:110px;" data-field="email" value="<?= e($r['email']) ?>">
         </td>
         <td data-label="Company">
-            <span class="view-mode"><?= e($r['company']) ?></span>
-            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="company" value="<?= e($r['company']) ?>">
+            <input type="text" class="edit-input form-control form-control-sm" style="width:100%;min-width:100px;" data-field="company" value="<?= e($r['company'] ?? '') ?>">
         </td>
         <td data-label="Source">
-            <span class="view-mode"><?= e($r['source']) ?></span>
-            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:80px;" data-field="source" value="<?= e($r['source']) ?>">
+            <input type="text" class="edit-input form-control form-control-sm" style="width:100%;min-width:90px;" data-field="source" value="<?= e($r['source'] ?? '') ?>">
         </td>
         
-        <?php if (!empty($customFields)) foreach ($customFields as $cf): $val = $customValuesMap[$r['id']][$cf['id']] ?? ''; ?>
+        <?php if (!empty($customFields)) foreach ($customFields as $cf): 
+            $val = $customValuesMap[$r['id']][$cf['id']] ?? '';
+        ?>
         <td data-label="<?= e($cf['field_name']) ?>">
-            <span class="view-mode"><?= e($val) ?></span>
             <?php if ($cf['field_type'] === 'select'): 
                 $opts = json_decode($cf['options'] ?: '[]', true) ?: []; ?>
-                <select class="edit-input edit-mode form-control form-control-sm" style="display:none;" data-cf-id="<?= $cf['id'] ?>">
+                <select class="edit-input form-control form-control-sm" style="width:100%;min-width:100px;" data-cf-id="<?= $cf['id'] ?>">
                     <option value="">—</option>
-                    <?php foreach ($opts as $opt): ?><option value="<?= e($opt) ?>" <?= $val === $opt ? 'selected' : '' ?>><?= e($opt) ?></option><?php endforeach; ?>
+                    <?php foreach ($opts as $opt): ?><option value="<?= e($opt) ?>" <?= $val===$opt?'selected':'' ?>><?= e($opt) ?></option><?php endforeach; ?>
                 </select>
             <?php elseif ($cf['field_type'] === 'date'): ?>
-                <input type="date" class="edit-input edit-mode form-control form-control-sm" style="display:none;" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>">
+                <input type="date" class="edit-input form-control form-control-sm" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>">
             <?php elseif ($cf['field_type'] === 'number'): ?>
-                <input type="number" step="any" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:80px;" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>">
+                <input type="number" step="any" class="edit-input form-control form-control-sm" style="width:100%;min-width:80px;" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>">
             <?php else: ?>
-                <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:90px;" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>">
+                <input type="text" class="edit-input form-control form-control-sm" style="width:100%;min-width:90px;" data-cf-id="<?= $cf['id'] ?>" value="<?= e($val) ?>">
             <?php endif; ?>
         </td>
         <?php endforeach; ?>
 
         <td data-label="Status">
-            <span class="view-mode badge" style="background:<?= e($r['status_color']) ?>; white-space:normal; text-align:center;"><?= e($r['status_name']) ?></span>
-            <select class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="status_id">
+            <select class="edit-input form-control form-control-sm" style="width:100%;min-width:100px;" data-field="status_id">
                 <?php foreach ($statuses as $s): ?><option value="<?= $s['id'] ?>" <?= $s['id']==$r['status_id']?'selected':'' ?>><?= e($s['name']) ?></option><?php endforeach; ?>
             </select>
         </td>
         <td data-label="Assigned">
-            <span class="view-mode"><?= e($r['assigned_name'] ?? 'Unassigned') ?></span>
-            <select class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="assigned_user_id">
+            <select class="edit-input form-control form-control-sm" style="width:100%;min-width:100px;" data-field="assigned_user_id">
                 <option value="">Unassigned</option>
                 <?php foreach ($users as $u): ?><option value="<?= $u['id'] ?>" <?= $u['id']==$r['assigned_user_id']?'selected':'' ?>><?= e($u['name']) ?></option><?php endforeach; ?>
             </select>
         </td>
         <td data-label="Follow-up">
-            <span class="view-mode"><?= format_date($r['next_followup_date']) ?></span>
-            <input type="date" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:110px;" data-field="next_followup_date" value="<?= $r['next_followup_date'] ?>">
+            <input type="date" class="edit-input form-control form-control-sm" style="width:100%;min-width:110px;" data-field="next_followup_date" value="<?= $r['next_followup_date'] ?>">
         </td>
         <td data-label="Next Step">
-            <span class="view-mode"><?= e($r['next_step'] ?? '') ?></span>
-            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="next_step" value="<?= e($r['next_step'] ?? '') ?>">
+            <input type="text" class="edit-input form-control form-control-sm" style="width:100%;min-width:100px;" data-field="next_step" value="<?= e($r['next_step'] ?? '') ?>">
         </td>
         <td data-label="Notes">
-            <span class="view-mode"><?= e($r['notes'] ?? '') ?></span>
-            <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:120px;" data-field="notes" value="<?= e($r['notes'] ?? '') ?>">
+            <input type="text" class="edit-input form-control form-control-sm" style="width:100%;min-width:120px;" data-field="notes" value="<?= e($r['notes'] ?? '') ?>">
         </td>
         <td data-label="Actions" style="white-space:nowrap;">
-            <button type="button" class="btn btn-sm btn-link view-mode" onclick="toggleEdit(<?= $r['id'] ?>)">Edit</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="saveEdit(<?= $r['id'] ?>)">Save</button>
             <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
             <form method="post" action="<?= url('leads', ['action' => 'delete']) ?>" style="display:inline;" data-confirm="Delete this lead?">
                 <?= Csrf::field() ?><input type="hidden" name="id" value="<?= $r['id'] ?>">
-                <button type="submit" class="btn btn-sm btn-link text-danger view-mode">Delete</button>
+                <button type="submit" class="btn btn-sm btn-link text-danger">Delete</button>
             </form>
             <?php endif; ?>
-            <button type="button" class="btn btn-sm btn-primary edit-mode" style="display:none;" onclick="saveEdit(<?= $r['id'] ?>)">Save</button>
-            <button type="button" class="btn btn-sm btn-link text-muted edit-mode" style="display:none;" onclick="toggleEdit(<?= $r['id'] ?>)">Cancel</button>
         </td>
     </tr>
 <?php endforeach; ?>
@@ -293,7 +302,7 @@ function saveEdit(id) {
     })
     .then(function(json) {
         if (json.success) {
-            window.location.reload();
+            if (btn) { btn.innerText = 'Saved!'; setTimeout(function(){ btn.innerText = 'Save'; btn.disabled = false; }, 2000); }
         } else {
             alert('Error: ' + json.error);
             if (btn) { btn.innerText = 'Save'; btn.disabled = false; }
@@ -318,7 +327,7 @@ function quickAddLead() {
         next_followup_date: document.getElementById('qa_next_followup_date').value,
         next_step: document.getElementById('qa_next_step').value,
         notes: document.getElementById('qa_notes').value,
-        folder_id: '<?= e($filters['folder_id'] ?? '') ?>'
+        folder_id: document.getElementById('qa_folder_id') ? document.getElementById('qa_folder_id').value : ''
     };
     
     var cfInputs = document.querySelectorAll('#quick-add-row .cf-input');

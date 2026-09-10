@@ -407,7 +407,8 @@ switch ($action) {
             'company' => trim($json['company'] ?? ''), 'source' => trim($json['source'] ?? ''),
             'status_id' => $json['status_id'] ?? null, 'next_followup_date' => $json['next_followup_date'] ?: null,
             'next_step' => $json['next_step'] ?? null, 'notes' => $json['notes'] ?? null,
-            'assigned_user_id' => $json['assigned_user_id'] ?? null
+            'assigned_user_id' => $json['assigned_user_id'] ?? null,
+            'folder_id' => $json['folder_id'] !== '' ? $json['folder_id'] : null
         ]);
         
         if (isset($json['custom_fields']) && is_array($json['custom_fields'])) {
@@ -471,9 +472,10 @@ switch ($action) {
         $users = UserModel::activeSelectList();
         $sources = LeadModel::distinctSources();
         $dashboardStats = LeadModel::getDashboardStats($filters);
+        $allFolders = LeadModel::getCustomFolders(Auth::id());
         
         $viewName = $isKanban ? 'leads/kanban' : 'leads/list';
-        render_page($viewName, compact('rows', 'p', 'statuses', 'users', 'sources', 'filters', 'dashboardStats', 'customFields', 'customValuesMap'), 'Leads');
+        render_page($viewName, compact('rows', 'p', 'statuses', 'users', 'sources', 'filters', 'dashboardStats', 'customFields', 'customValuesMap', 'allFolders'), 'Leads');
         break;
     }
 }

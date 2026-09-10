@@ -287,7 +287,7 @@ function saveEdit(id) {
     }
     data.custom_fields = cf;
     
-    var btn = row.querySelector('.btn-primary.edit-mode');
+    var btn = row.querySelector('.btn-primary');
     if (btn) { btn.innerText = '...'; btn.disabled = true; }
     
     fetch('<?= url('leads', ['action' => 'api_update']) ?>', {

@@ -302,6 +302,7 @@ function saveEdit(id) {
     })
     .then(function(json) {
         if (json.success) {
+            alert('Lead saved successfully!');
             if (btn) { btn.innerText = 'Saved!'; setTimeout(function(){ btn.innerText = 'Save'; btn.disabled = false; }, 2000); }
         } else {
             alert('Error: ' + json.error);

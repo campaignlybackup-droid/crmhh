@@ -40,14 +40,14 @@ switch ($action) {
             Flash::error($v->firstError());
             redirect(url('leads', ['action' => 'create']));
         }
-        $dup = LeadModel::findByPhoneOrEmail($_POST['phone'] ?? null, $_POST['email'] ?? null);
+        $folderId = !empty($_POST['folder_id']) ? (int)$_POST['folder_id'] : null;
+        $dup = LeadModel::findByPhoneOrEmail($_POST['phone'] ?? null, $_POST['email'] ?? null, $folderId);
         if ($dup) {
             Flash::error('A lead with this phone or email already exists: ' . $dup['lead_code'] . ' (' . $dup['name'] . ')');
             redirect(url('leads', ['action' => 'create']));
         }
         $assignedUserId = $_POST['assigned_user_id'] ?? null;
         if ($assignedUserId && !Permission::has('leads.assign')) $assignedUserId = null;
-        $folderId = isset($_POST['folder_id']) && $_POST['folder_id'] !== '' ? (int)$_POST['folder_id'] : null;
         $id = LeadModel::create([
             'name' => trim($_POST['name']), 'phone' => trim($_POST['phone'] ?? ''), 'email' => trim($_POST['email'] ?? ''),
             'company' => trim($_POST['company'] ?? ''), 'source' => trim($_POST['source'] ?? ''),
@@ -282,7 +282,7 @@ switch ($action) {
                     $result['invalid']++;
                     continue;
                 }
-                $dup = LeadModel::findByPhoneOrEmail($phone, $email);
+                $dup = LeadModel::findByPhoneOrEmail($phone, $email, $batchFolder);
                 if ($dup) {
                     $result['duplicate']++;
                     continue;
@@ -357,7 +357,8 @@ switch ($action) {
         $v = Validator::make($json)->required('name', 'Name')->email('email', 'Email');
         if ($v->fails()) { echo json_encode(['success' => false, 'error' => $v->firstError()]); exit; }
         
-        $dup = LeadModel::findByPhoneOrEmail($json['phone'] ?? null, $json['email'] ?? null);
+        $folderId = !empty($json['folder_id']) ? (int)$json['folder_id'] : null;
+        $dup = LeadModel::findByPhoneOrEmail($json['phone'] ?? null, $json['email'] ?? null, $folderId);
         if ($dup) { echo json_encode(['success' => false, 'error' => 'Lead with this phone/email already exists.']); exit; }
         
         $assignedUserId = Auth::id(); // Default to self
@@ -396,7 +397,9 @@ switch ($action) {
         $v = Validator::make($json)->required('name', 'Name')->email('email', 'Email');
         if ($v->fails()) { echo json_encode(['success' => false, 'error' => $v->firstError()]); exit; }
         
-        $dup = LeadModel::findByPhoneOrEmail($json['phone'] ?? null, $json['email'] ?? null);
+        $existingLead = LeadModel::find($id);
+        $folderId = $existingLead['folder_id'];
+        $dup = LeadModel::findByPhoneOrEmail($json['phone'] ?? null, $json['email'] ?? null, $folderId);
         if ($dup && (int)$dup['id'] !== $id) { echo json_encode(['success' => false, 'error' => 'Phone/email belongs to another lead.']); exit; }
         
         LeadModel::update($id, [
@@ -511,7 +514,8 @@ function build_import_preview(array $headers, array $rows, array $mapping): arra
         $phone = CsvImporter::value($row, $mapping['phone']);
         $email = CsvImporter::value($row, $mapping['email']);
         if (!$name || (!$phone && !valid_email($email))) { $invalid++; continue; }
-        if (LeadModel::findByPhoneOrEmail($phone, $email)) $duplicates++;
+        $folderId = !empty($_POST['folder_id']) ? (int)$_POST['folder_id'] : (!empty($_GET['folder_id']) ? (int)$_GET['folder_id'] : null);
+        if (LeadModel::findByPhoneOrEmail($phone, $email, $folderId)) $duplicates++;
     }
     return [
         'total' => $total,

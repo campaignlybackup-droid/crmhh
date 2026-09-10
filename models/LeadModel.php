@@ -253,18 +253,19 @@ class LeadModel
         return [$rows, $p];
     }
 
-    public static function findByPhoneOrEmail(?string $phone, ?string $email): ?array
+    public static function findByPhoneOrEmail(?string $phone, ?string $email, ?int $folderId = null): ?array
     {
+        $folderSql = $folderId === null ? "folder_id IS NULL" : "folder_id = " . (int)$folderId;
         $normPhone = normalize_phone($phone);
         if ($normPhone !== '') {
             $row = Database::one(
-                "SELECT * FROM leads WHERE deleted_at IS NULL AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) = ? LIMIT 1",
+                "SELECT * FROM leads WHERE deleted_at IS NULL AND $folderSql AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) = ? LIMIT 1",
                 [$normPhone]
             );
             if ($row) return $row;
         }
         if (valid_email($email)) {
-            $row = Database::one('SELECT * FROM leads WHERE deleted_at IS NULL AND LOWER(email) = ? LIMIT 1', [strtolower(trim($email))]);
+            $row = Database::one("SELECT * FROM leads WHERE deleted_at IS NULL AND $folderSql AND LOWER(email) = ? LIMIT 1", [strtolower(trim($email))]);
             if ($row) return $row;
         }
         return null;

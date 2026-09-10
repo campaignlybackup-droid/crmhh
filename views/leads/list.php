@@ -239,7 +239,6 @@
             <input type="text" class="edit-input" style="width:100%;min-width:120px;" data-field="notes" value="<?= e($r['notes'] ?? '') ?>">
         </td>
         <td data-label="Actions" style="white-space:nowrap;">
-            <button type="button" class="btn btn-sm btn-primary" onclick="saveEdit(<?= $r['id'] ?>)">Save</button>
             <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
             <form method="post" action="<?= url('leads', ['action' => 'delete']) ?>" style="display:inline;" data-confirm="Delete this lead?">
                 <?= Csrf::field() ?><input type="hidden" name="id" value="<?= $r['id'] ?>">
@@ -254,65 +253,79 @@
 </div>
 
 <script>
-window.toggleEdit = function(id) {
-    var row = document.getElementById('row_' + id);
-    if (!row) return;
-    var viewModes = row.querySelectorAll('.view-mode');
-    var editModes = row.querySelectorAll('.edit-mode');
-    var isEditing = row.classList.contains('is-editing');
-    
-    for (var i = 0; i < viewModes.length; i++) {
-        viewModes[i].style.display = isEditing ? '' : 'none';
-    }
-    for (var i = 0; i < editModes.length; i++) {
-        editModes[i].style.display = isEditing ? 'none' : '';
-    }
-    
-    if (isEditing) {
-        row.classList.remove('is-editing');
-    } else {
-        row.classList.add('is-editing');
-    }
-};
-
-function saveEdit(id) {
-    var row = document.getElementById('row_' + id);
-    var inputs = row.querySelectorAll('.edit-input');
-    var data = {};
-    var cf = {};
+document.addEventListener('DOMContentLoaded', function() {
+    var inputs = document.querySelectorAll('.edit-input');
     for (var i = 0; i < inputs.length; i++) {
         var inp = inputs[i];
-        var field = inp.getAttribute('data-field');
-        var cfId = inp.getAttribute('data-cf-id');
-        if (field) data[field] = inp.value;
-        if (cfId) cf[cfId] = inp.value;
+        inp.setAttribute('data-original-value', inp.value);
+        
+        if (inp.tagName === 'SELECT' || inp.type === 'date' || inp.type === 'number') {
+            inp.addEventListener('change', handleInlineEdit);
+        } else {
+            inp.addEventListener('blur', handleInlineEdit);
+            inp.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') this.blur();
+            });
+        }
     }
-    data.custom_fields = cf;
+});
+
+function handleInlineEdit(e) {
+    var inp = e.target;
+    var row = inp.closest('tr');
+    if (!row || !row.id.startsWith('row_')) return;
     
-    var btn = row.querySelector('.btn-primary');
-    if (btn) { btn.innerText = '...'; btn.disabled = true; }
+    var leadId = row.id.replace('row_', '');
+    var field = inp.getAttribute('data-field');
+    var cfId = inp.getAttribute('data-cf-id');
+    if (!field && cfId) field = 'custom_field_' + cfId;
+    if (!field || field === 'id') return;
+
+    var newValue = inp.value;
+    var originalValue = inp.getAttribute('data-original-value');
     
+    if (newValue === originalValue) return;
+
+    inp.disabled = true;
+    var originalBg = inp.style.backgroundColor || '';
+    inp.style.backgroundColor = '#f8f9fa';
+
+    var data = {
+        id: leadId,
+        field: field,
+        new_value: newValue
+    };
+
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', '<?= url('leads', ['action' => 'api_update']) ?>', true);
+    xhr.open('POST', '<?= url('leads', ['action' => 'api_update_inline']) ?>', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.onreadystatechange = function() {
         if (xhr.readyState === 4) {
+            inp.disabled = false;
             if (xhr.status === 200) {
                 try {
                     var json = JSON.parse(xhr.responseText);
                     if (json.success) {
-                        window.location.reload();
+                        inp.setAttribute('data-original-value', json.new_value !== null ? json.new_value : '');
+                        inp.style.backgroundColor = '#d4edda'; // success green
+                        setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
                     } else {
                         alert('Error: ' + json.error);
-                        if (btn) { btn.innerText = 'Save'; btn.disabled = false; }
+                        inp.value = originalValue;
+                        inp.style.backgroundColor = '#f8d7da'; // error red
+                        setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
                     }
-                } catch(e) {
-                    alert('Error: Failed to parse response as JSON. The server might have returned an HTML error.');
-                    if (btn) { btn.innerText = 'Save'; btn.disabled = false; }
+                } catch(err) {
+                    alert('Error: Invalid server response.');
+                    inp.value = originalValue;
+                    inp.style.backgroundColor = '#f8d7da';
+                    setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
                 }
             } else {
-                alert('Error: Network request failed with status ' + xhr.status);
-                if (btn) { btn.innerText = 'Save'; btn.disabled = false; }
+                alert('Error: Network request failed.');
+                inp.value = originalValue;
+                inp.style.backgroundColor = '#f8d7da';
+                setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
             }
         }
     };

@@ -326,6 +326,87 @@ class LeadModel
         AuditLog::record('update', 'lead', $id);
     }
 
+    public static function updateField(int $id, string $field, $newValue, int $userId): array
+    {
+        $allowedFields = ['name', 'phone', 'email', 'company', 'source', 'status_id', 'assigned_user_id', 'next_followup_date', 'next_step', 'notes', 'folder_id'];
+        
+        Database::beginTransaction();
+        try {
+            $before = self::find($id);
+            if (!$before) throw new \Exception("Lead not found");
+
+            if (str_starts_with($field, 'custom_field_')) {
+                $cfId = (int)str_replace('custom_field_', '', $field);
+                $oldValue = Database::scalar('SELECT field_value FROM lead_custom_values WHERE lead_id = ? AND field_id = ?', [$id, $cfId]);
+                
+                if ((string)$oldValue === (string)$newValue) {
+                    Database::commit();
+                    return ['success' => true, 'old_value' => $oldValue, 'new_value' => $newValue];
+                }
+
+                if ($newValue === '' || $newValue === null) {
+                    Database::run('DELETE FROM lead_custom_values WHERE lead_id = ? AND field_id = ?', [$id, $cfId]);
+                } else {
+                    Database::run(
+                        'INSERT INTO lead_custom_values (lead_id, field_id, field_value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE field_value = ?',
+                        [$id, $cfId, $newValue, $newValue]
+                    );
+                }
+                
+                $cfName = Database::scalar('SELECT field_name FROM folder_custom_fields WHERE id = ?', [$cfId]) ?: 'Custom Field';
+                ActivityModel::log('lead', $id, 'updated', "Changed $cfName", (string)$oldValue, (string)$newValue);
+                
+                Database::run('UPDATE leads SET updated_at = NOW() WHERE id = ?', [$id]);
+                Database::commit();
+                return ['success' => true, 'old_value' => $oldValue, 'new_value' => $newValue];
+            }
+
+            if (!in_array($field, $allowedFields, true)) {
+                throw new \Exception("Invalid field");
+            }
+
+            $oldValue = $before[$field];
+
+            if ((string)$oldValue === (string)$newValue) {
+                Database::commit();
+                return ['success' => true, 'old_value' => $oldValue, 'new_value' => $newValue];
+            }
+
+            if ($field === 'status_id') {
+                $oldName = Database::scalar('SELECT name FROM lead_statuses WHERE id = ?', [(int)$oldValue]);
+                $newName = Database::scalar('SELECT name FROM lead_statuses WHERE id = ?', [(int)$newValue]);
+                Database::run('UPDATE leads SET status_id = ? WHERE id = ?', [$newValue, $id]);
+                ActivityModel::log('lead', $id, 'status_changed', "Changed Status", (string)$oldName, (string)$newName);
+            } elseif ($field === 'assigned_user_id') {
+                $oldName = $oldValue ? Database::scalar('SELECT name FROM users WHERE id=?', [$oldValue]) : 'Unassigned';
+                $newName = $newValue ? Database::scalar('SELECT name FROM users WHERE id=?', [$newValue]) : 'Unassigned';
+                Database::run('UPDATE leads SET assigned_user_id = ? WHERE id = ?', [$newValue ?: null, $id]);
+                ActivityModel::log('lead', $id, 'reassigned', "Reassigned Lead", (string)$oldName, (string)$newName);
+                if ($newValue) {
+                    $lead = Database::one('SELECT lead_code, name FROM leads WHERE id=?', [$id]);
+                    Notifier::send((int)$newValue, 'lead_assigned', 'Lead assigned: ' . $lead['name'], "Lead {$lead['lead_code']} has been assigned to you.", 'lead', $id);
+                }
+            } elseif ($field === 'folder_id') {
+                $oldName = $oldValue ? Database::scalar('SELECT name FROM lead_folders WHERE id=?', [$oldValue]) : 'Main';
+                $newName = $newValue ? Database::scalar('SELECT name FROM lead_folders WHERE id=?', [$newValue]) : 'Main';
+                Database::run('UPDATE leads SET folder_id = ? WHERE id = ?', [$newValue ?: null, $id]);
+                ActivityModel::log('lead', $id, 'updated', "Changed Folder", (string)$oldName, (string)$newName);
+            } else {
+                Database::run("UPDATE leads SET $field = ? WHERE id = ?", [$newValue !== '' ? $newValue : null, $id]);
+                $humanField = ucwords(str_replace('_', ' ', $field));
+                ActivityModel::log('lead', $id, 'updated', "Changed $humanField", (string)$oldValue, (string)$newValue);
+            }
+
+            Database::run('UPDATE leads SET updated_at = NOW() WHERE id = ?', [$id]);
+            Database::commit();
+            return ['success' => true, 'old_value' => $oldValue, 'new_value' => $newValue];
+
+        } catch (\Exception $e) {
+            Database::rollBack();
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
     public static function changeStatus(int $id, int $statusId, ?string $note = null): void
     {
         $before = Database::one('SELECT status_id FROM leads WHERE id = ?', [$id]);

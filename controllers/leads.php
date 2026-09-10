@@ -419,6 +419,34 @@ switch ($action) {
         echo json_encode(['success' => true, 'lead' => $lead]);
         exit;
     }
+
+    case 'api_update_inline': {
+        $json = json_decode(file_get_contents('php://input'), true);
+        $id = (int)($json['id'] ?? 0);
+        $field = trim($json['field'] ?? '');
+        $newValue = $json['new_value'] ?? null;
+        
+        if (!$id || !$field) { echo json_encode(['success' => false, 'error' => 'Invalid parameters']); exit; }
+        if (!LeadModel::canAccess($id)) { echo json_encode(['success' => false, 'error' => 'Access denied']); exit; }
+        Permission::require('leads.edit');
+        
+        if ($field === 'email' && $newValue !== '' && !valid_email($newValue)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid email address']); exit;
+        }
+        if ($field === 'name' && trim((string)$newValue) === '') {
+            echo json_encode(['success' => false, 'error' => 'Name is required']); exit;
+        }
+        
+        if ($field === 'email' || $field === 'phone') {
+            $existingLead = LeadModel::find($id);
+            $dup = LeadModel::findByPhoneOrEmail($field === 'phone' ? $newValue : null, $field === 'email' ? $newValue : null, $existingLead['folder_id']);
+            if ($dup && (int)$dup['id'] !== $id) { echo json_encode(['success' => false, 'error' => 'Phone/email belongs to another lead.']); exit; }
+        }
+
+        $result = LeadModel::updateField($id, $field, $newValue, Auth::id());
+        echo json_encode($result);
+        exit;
+    }
     
     case 'api_create_folder': {
         Permission::require('leads.assign'); // Only founder

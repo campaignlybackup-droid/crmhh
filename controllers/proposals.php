@@ -42,6 +42,39 @@ switch ($action) {
         break;
     }
 
+    case 'edit': {
+        $id = (int)($_GET['id'] ?? 0);
+        $proposal = ProposalModel::find($id);
+        if (!$proposal) fatal_error('Proposal not found.');
+        
+        $canManage = Permission::has('proposals.manage');
+        if (!$canManage) Permission::deny();
+        
+        $clients = Database::all('SELECT id, name FROM clients WHERE deleted_at IS NULL ORDER BY name');
+        $leads = Database::all('SELECT id, company FROM leads WHERE deleted_at IS NULL ORDER BY company');
+        $users = UserModel::activeSelectList();
+        
+        render_page('proposals/form', ['proposal' => $proposal, 'clients' => $clients, 'leads' => $leads, 'users' => $users], 'Edit Proposal');
+        break;
+    }
+
+    case 'update': {
+        Permission::require('proposals.manage');
+        csrf_check_or_die();
+        
+        $v = Validator::make($_POST)->required('title', 'Business Name / Title')->required('business_details', 'Business Details');
+        if ($v->fails()) {
+            Flash::error($v->firstError());
+            redirect(url('proposals', ['action' => 'edit', 'id' => $_POST['id']]));
+        }
+        
+        $id = (int)$_POST['id'];
+        ProposalModel::update($id, $_POST);
+        Flash::success('Proposal updated successfully.');
+        redirect(url('proposals', ['action' => 'view', 'id' => $id]));
+        break;
+    }
+
     case 'view': {
         $id = (int)($_GET['id'] ?? 0);
         $proposal = ProposalModel::find($id);

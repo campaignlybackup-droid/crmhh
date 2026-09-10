@@ -4,7 +4,7 @@
 </div>
 
 <div class="card">
-    <div class="table-wrap">
+    <div class="table-wrap responsive-table">
     <table class="table">
         <thead>
             <tr>
@@ -21,9 +21,9 @@
             <?php endif; ?>
             <?php foreach ($rows as $r): ?>
             <tr>
-                <td><?= e($r['title']) ?></td>
-                <td><?= e($r['sender_name']) ?></td>
-                <td>
+                <td data-label="Title"><?= e($r['title']) ?></td>
+                <td data-label="Sender"><?= e($r['sender_name']) ?></td>
+                <td data-label="Status">
                     <?php
                         $badge = 'secondary';
                         if ($r['status'] === 'approved') $badge = 'success';
@@ -32,8 +32,8 @@
                     ?>
                     <span class="badge badge-<?= $badge ?>"><?= ucfirst(e($r['status'])) ?></span>
                 </td>
-                <td><?= format_date($r['created_at']) ?></td>
-                <td><a href="<?= url('approvals', ['action' => 'view', 'id' => $r['id']]) ?>" class="btn btn-sm">View</a></td>
+                <td data-label="Date"><?= format_date($r['created_at']) ?></td>
+                <td data-label="Actions"><a href="<?= url('approvals', ['action' => 'view', 'id' => $r['id']]) ?>" class="btn btn-sm">View</a></td>
             </tr>
             <?php endforeach; ?>
         </tbody>

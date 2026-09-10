@@ -46,6 +46,25 @@ class ProposalModel
             [$status, $notes, $id]
         );
     }
+    
+    public static function update(int $id, array $data): void
+    {
+        $deadlineHours = (int)($data['deadline_hours'] ?? 24);
+        Database::run(
+            'UPDATE proposals SET title = ?, business_details = ?, priority = ?, deadline_hours = ?, deadline_at = DATE_ADD(created_at, INTERVAL ? HOUR), client_id = ?, lead_id = ?, assigned_user_id = ? WHERE id = ?',
+            [
+                $data['title'],
+                $data['business_details'],
+                $data['priority'] ?? 'Medium',
+                $deadlineHours,
+                $deadlineHours,
+                $data['client_id'] ?: null,
+                $data['lead_id'] ?: null,
+                $data['assigned_user_id'] ?: null,
+                $id
+            ]
+        );
+    }
 
     public static function paginate(int $page, int $perPage, array $filters = [], ?int $userId = null): array
     {

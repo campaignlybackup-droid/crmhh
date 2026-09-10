@@ -34,6 +34,23 @@ if ($action === 'create' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect(url('announcements'));
 }
 
+if ($action === 'update' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check_or_die();
+    Permission::require('announcements.manage');
+    
+    $id = (int)($_POST['id'] ?? 0);
+    $title = trim($_POST['title'] ?? '');
+    $content = trim($_POST['content'] ?? '');
+    
+    if (!$id || !$title || !$content) {
+        Flash::set('error', 'Title and content are required.');
+    } else {
+        AnnouncementModel::update($id, $title, $content);
+        Flash::set('success', 'Announcement updated successfully.');
+    }
+    redirect(url('announcements'));
+}
+
 if ($action === 'delete') {
     csrf_check_or_die();
     Permission::require('announcements.manage');

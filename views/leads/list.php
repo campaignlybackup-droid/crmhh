@@ -208,7 +208,13 @@
                 <?php foreach ($statuses as $s): ?><option value="<?= $s['id'] ?>" <?= $s['id']==$r['status_id']?'selected':'' ?>><?= e($s['name']) ?></option><?php endforeach; ?>
             </select>
         </td>
-        <td data-label="Assigned"><?= e($r['assigned_name'] ?? 'Unassigned') ?></td>
+        <td data-label="Assigned">
+            <span class="view-mode"><?= e($r['assigned_name'] ?? 'Unassigned') ?></span>
+            <select class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:100px;" data-field="assigned_user_id">
+                <option value="">Unassigned</option>
+                <?php foreach ($users as $u): ?><option value="<?= $u['id'] ?>" <?= $u['id']==$r['assigned_user_id']?'selected':'' ?>><?= e($u['name']) ?></option><?php endforeach; ?>
+            </select>
+        </td>
         <td data-label="Follow-up">
             <span class="view-mode"><?= format_date($r['next_followup_date']) ?></span>
             <input type="date" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:110px;" data-field="next_followup_date" value="<?= $r['next_followup_date'] ?>">
@@ -222,15 +228,15 @@
             <input type="text" class="edit-input edit-mode form-control form-control-sm" style="display:none;width:100%;min-width:120px;" data-field="notes" value="<?= e($r['notes'] ?? '') ?>">
         </td>
         <td data-label="Actions" style="white-space:nowrap;">
-            <button class="btn btn-sm btn-link view-mode" onclick="toggleEdit(<?= $r['id'] ?>)">Edit</button>
+            <button type="button" class="btn btn-sm btn-link view-mode" onclick="toggleEdit(<?= $r['id'] ?>)">Edit</button>
             <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
             <form method="post" action="<?= url('leads', ['action' => 'delete']) ?>" style="display:inline;" data-confirm="Delete this lead?">
                 <?= Csrf::field() ?><input type="hidden" name="id" value="<?= $r['id'] ?>">
                 <button type="submit" class="btn btn-sm btn-link text-danger view-mode">Delete</button>
             </form>
             <?php endif; ?>
-            <button class="btn btn-sm btn-primary edit-mode" style="display:none;" onclick="saveEdit(<?= $r['id'] ?>)">Save</button>
-            <button class="btn btn-sm btn-link text-muted edit-mode" style="display:none;" onclick="toggleEdit(<?= $r['id'] ?>)">Cancel</button>
+            <button type="button" class="btn btn-sm btn-primary edit-mode" style="display:none;" onclick="saveEdit(<?= $r['id'] ?>)">Save</button>
+            <button type="button" class="btn btn-sm btn-link text-muted edit-mode" style="display:none;" onclick="toggleEdit(<?= $r['id'] ?>)">Cancel</button>
         </td>
     </tr>
 <?php endforeach; ?>
@@ -275,7 +281,16 @@ async function saveEdit(id) {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        const json = await res.json();
+        
+        let json;
+        try {
+            json = await res.json();
+        } catch (parseError) {
+            console.error('Failed to parse response as JSON. The server might have returned an HTML error.');
+            alert('Server error occurred while saving. Please check the console for details.');
+            btn.innerText = 'Save'; btn.disabled = false;
+            return;
+        }
         
         if (json.success) {
             window.location.reload(); // Quickest way to reflect colors, statuses, sorting
@@ -284,8 +299,10 @@ async function saveEdit(id) {
             btn.innerText = 'Save'; btn.disabled = false;
         }
     } catch (e) {
-        alert('Network error.');
-        window.location.reload();
+        console.error('Network Error:', e);
+        alert('Network error. Check console.');
+        const btn = row.querySelector('.btn-primary.edit-mode');
+        if(btn) { btn.innerText = 'Save'; btn.disabled = false; }
     }
 }
 
@@ -319,7 +336,16 @@ async function quickAddLead() {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        const json = await res.json();
+        
+        let json;
+        try {
+            json = await res.json();
+        } catch (parseError) {
+            console.error('Failed to parse response as JSON. The server might have returned an HTML error.');
+            alert('Server error occurred while saving. Please check the console for details.');
+            btn.innerText = '+ Add'; btn.disabled = false;
+            return;
+        }
         
         if (json.success) {
             window.location.reload();
@@ -328,8 +354,10 @@ async function quickAddLead() {
             btn.innerText = '+ Add'; btn.disabled = false;
         }
     } catch (e) {
-        alert('Network error.');
-        window.location.reload();
+        console.error('Network Error:', e);
+        alert('Network error. Check console.');
+        const btn = document.querySelector('#quick-add-row .btn-primary');
+        if(btn) { btn.innerText = '+ Add'; btn.disabled = false; }
     }
 }
 

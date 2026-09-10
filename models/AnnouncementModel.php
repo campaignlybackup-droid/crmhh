@@ -22,4 +22,9 @@ class AnnouncementModel
     {
         Database::run("DELETE FROM announcements WHERE id = ?", [$id]);
     }
+    
+    public static function update(int $id, string $title, string $content): void
+    {
+        Database::run("UPDATE announcements SET title = ?, content = ? WHERE id = ?", [$title, $content, $id]);
+    }
 }

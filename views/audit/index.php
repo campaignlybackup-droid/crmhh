@@ -13,18 +13,18 @@
     </div>
 </form>
 
-<div class="table-wrap"><table>
+<div class="table-wrap responsive-table"><table>
 <thead><tr><th>When</th><th>User</th><th>Action</th><th>Entity</th><th>ID</th><th>Old &rarr; New</th></tr></thead>
 <tbody>
 <?php if (empty($rows)): ?><tr><td colspan="6" class="text-muted">No audit entries.</td></tr><?php endif; ?>
 <?php foreach ($rows as $r): ?>
     <tr>
-        <td><?= format_datetime($r['created_at']) ?></td>
-        <td><?= e($r['user_name'] ?? 'System') ?></td>
-        <td><?= e(humanize($r['action'])) ?></td>
-        <td><?= e(humanize($r['entity_type'])) ?></td>
-        <td>#<?= (int)$r['entity_id'] ?></td>
-        <td class="wrap"><?= e($r['old_value']) ?> <?= $r['new_value'] ? ' &rarr; '.e($r['new_value']) : '' ?></td>
+        <td data-label="When"><?= format_datetime($r['created_at']) ?></td>
+        <td data-label="User"><?= e($r['user_name'] ?? 'System') ?></td>
+        <td data-label="Action"><?= e(humanize($r['action'])) ?></td>
+        <td data-label="Entity"><?= e(humanize($r['entity_type'])) ?></td>
+        <td data-label="ID">#<?= (int)$r['entity_id'] ?></td>
+        <td data-label="Old &rarr; New" class="wrap"><?= e($r['old_value']) ?> <?= $r['new_value'] ? ' &rarr; '.e($r['new_value']) : '' ?></td>
     </tr>
 <?php endforeach; ?>
 </tbody>

@@ -403,7 +403,8 @@ switch ($action) {
             'name' => trim($json['name']), 'phone' => trim($json['phone'] ?? ''), 'email' => trim($json['email'] ?? ''),
             'company' => trim($json['company'] ?? ''), 'source' => trim($json['source'] ?? ''),
             'status_id' => $json['status_id'] ?? null, 'next_followup_date' => $json['next_followup_date'] ?: null,
-            'next_step' => $json['next_step'] ?? null, 'notes' => $json['notes'] ?? null
+            'next_step' => $json['next_step'] ?? null, 'notes' => $json['notes'] ?? null,
+            'assigned_user_id' => $json['assigned_user_id'] ?? null
         ]);
         
         if (isset($json['custom_fields']) && is_array($json['custom_fields'])) {

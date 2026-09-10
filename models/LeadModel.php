@@ -303,6 +303,12 @@ class LeadModel
         if (!empty($data['status_id']) && (int)$data['status_id'] !== (int)$before['status_id']) {
             self::changeStatus($id, (int)$data['status_id']);
         }
+        if (array_key_exists('assigned_user_id', $data)) {
+            $newAssignee = $data['assigned_user_id'] ? (int)$data['assigned_user_id'] : null;
+            if ($newAssignee !== (int)$before['assigned_user_id']) {
+                self::assign($id, $newAssignee);
+            }
+        }
         AuditLog::record('update', 'lead', $id);
     }
 

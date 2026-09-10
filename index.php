@@ -1,6 +1,8 @@
 <?php
 require __DIR__ . '/core/bootstrap.php';
 
+Database::autoMigrate();
+
 $allowedPages = [
     'login', 'dashboard', 'users', 'teams', 'roles', 'leads', 'clients',
     'services', 'tasks', 'calendar', 'availability', 'reports', 'leave',

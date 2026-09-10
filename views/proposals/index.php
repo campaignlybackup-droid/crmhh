@@ -21,14 +21,14 @@
 </form>
 
 <div class="card">
-    <div class="table-wrap">
+    <div class="table-wrap responsive-table">
     <table class="table">
         <thead>
             <tr>
                 <th>Title</th>
-                <th>Context</th>
-                <th>Assigned To</th>
+                <th>Client/Lead</th>
                 <th>Priority</th>
+                <th>Assigned To</th>
                 <th>Deadline</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -36,24 +36,28 @@
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="6" class="text-muted text-center">No proposals found.</td></tr>
+            <tr><td colspan="7" class="text-muted text-center">No proposals found.</td></tr>
             <?php endif; ?>
             <?php foreach ($rows as $r): ?>
             <?php
-                $isOverdue = (strtotime($r['deadline_at']) < time() && !in_array($r['status'], ['ready', 'sent']));
+                $isOverdue = (strtotime($r['deadline_at']) < time() && !in_array($r['status'], ['won', 'lost', 'delivered']));
                 
-                $priBadge = 'secondary';
-                if ($r['priority'] === 'High') $priBadge = 'warning';
-                if ($r['priority'] === 'Urgent') $priBadge = 'danger';
-                
-                $statBadge = 'secondary';
-                if ($r['status'] === 'in_progress') $statBadge = 'primary';
-                if ($r['status'] === 'ready') $statBadge = 'success';
-                if ($r['status'] === 'sent') $statBadge = 'success';
+                $badge = match($r['status']) {
+                    'won' => 'success',
+                    'lost' => 'danger',
+                    'delivered' => 'primary',
+                    'sent' => 'info',
+                    default => 'secondary'
+                };
+                $priBadge = match($r['priority']) {
+                    'High' => 'warning',
+                    'Urgent' => 'danger',
+                    default => 'secondary'
+                };
             ?>
             <tr <?= $isOverdue ? 'style="background: #fff3f3;"' : '' ?>>
-                <td><strong><?= e($r['title']) ?></strong></td>
-                <td>
+                <td data-label="Title"><strong><?= e($r['title']) ?></strong></td>
+                <td data-label="Client/Lead">
                     <?php if ($r['client_name']): ?>
                         <a href="<?= url('clients', ['action' => 'view', 'id' => $r['client_id']]) ?>" class="badge badge-primary">Client: <?= e($r['client_name']) ?></a>
                     <?php elseif ($r['lead_name']): ?>
@@ -62,15 +66,15 @@
                         <span class="text-muted">—</span>
                     <?php endif; ?>
                 </td>
-                <td><?= e($r['assigned_name'] ?: 'Unassigned') ?></td>
-                <td><span class="badge badge-<?= $priBadge ?>"><?= e($r['priority']) ?></span></td>
-                <td>
+                <td data-label="Priority"><span class="badge badge-<?= $priBadge ?>"><?= e($r['priority']) ?></span></td>
+                <td data-label="Assigned To"><?= e($r['assigned_name'] ?: 'Unassigned') ?></td>
+                <td data-label="Deadline">
                     <span class="<?= $isOverdue ? 'text-danger' : '' ?>">
-                        <?= format_date($r['deadline_at'], true) ?>
+                        <?= format_datetime($r['deadline_at']) ?>
                     </span>
                 </td>
-                <td><span class="badge badge-<?= $statBadge ?>"><?= ucfirst(str_replace('_', ' ', e($r['status']))) ?></span></td>
-                <td><a href="<?= url('proposals', ['action' => 'view', 'id' => $r['id']]) ?>" class="btn btn-sm">View</a></td>
+                <td data-label="Status"><span class="badge badge-<?= $badge ?>"><?= ucfirst(str_replace('_', ' ', e($r['status']))) ?></span></td>
+                <td data-label="Actions"><a href="<?= url('proposals', ['action' => 'view', 'id' => $r['id']]) ?>" class="btn btn-sm">View</a></td>
             </tr>
             <?php endforeach; ?>
         </tbody>

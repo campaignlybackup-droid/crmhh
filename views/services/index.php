@@ -2,12 +2,12 @@
 <div class="grid grid-2">
     <div class="card">
         <div class="card-title">Existing Services</div>
-        <div class="table-wrap"><table>
+        <div class="table-wrap responsive-table"><table>
             <thead><tr><th>Name</th><th>Unit</th><th>Status</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($services as $s): ?>
                 <tr>
-                    <td>
+                    <td data-label="Name">
                         <strong><?= e($s['name']) ?></strong>
                         <?php if (!empty($s['subcategories'])): ?>
                             <div class="mt-2" style="display:flex; flex-wrap:wrap; gap:4px">
@@ -29,9 +29,9 @@
                             <button class="btn btn-sm btn-primary">Add</button>
                         </form>
                     </td>
-                    <td style="vertical-align:top"><?= e($s['unit_label']) ?></td>
-                    <td style="vertical-align:top"><span class="badge badge-<?= $s['is_active']?'success':'secondary' ?>"><?= $s['is_active']?'Active':'Inactive' ?></span></td>
-                    <td style="vertical-align:top">
+                    <td data-label="Unit"><?= e($s['unit_label']) ?></td>
+                    <td data-label="Status"><span class="badge badge-<?= $s['is_active']?'success':'secondary' ?>"><?= $s['is_active']?'Active':'Inactive' ?></span></td>
+                    <td data-label="Actions">
                         <form method="post" action="<?= url('services', ['action' => 'toggle']) ?>">
                             <?= Csrf::field() ?><input type="hidden" name="id" value="<?= $s['id'] ?>">
                             <button class="btn btn-sm"><?= $s['is_active']?'Deactivate':'Activate' ?></button>

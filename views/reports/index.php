@@ -114,7 +114,7 @@
     <div class="modal-content" style="max-width: 800px; max-height: 80vh; overflow-y: auto;">
         <div class="flex-between" style="position: sticky; top: 0; background: var(--bg); padding-bottom: 15px; border-bottom: 1px solid var(--border); margin-bottom: 20px; z-index: 10;">
             <h2 style="margin: 0;" id="modalDateTitle">Reports for ...</h2>
-            <button class="btn btn-sm" data-modal-close>&times;</button>
+            <button type="button" class="btn btn-sm" data-modal-close>&times;</button>
         </div>
         <div id="modalReportsContainer">
             <p class="text-muted">Loading...</p>
@@ -136,7 +136,18 @@ function openReportsModal(dateStr) {
     document.getElementById('reportsModalOverlay').classList.add('show');
     
     fetch('?page=reports&action=ajax_day&date=' + dateStr)
-        .then(res => res.json())
+        .then(res => {
+            if (!res.ok) throw new Error('Network response was not ok');
+            return res.text();
+        })
+        .then(text => {
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('Failed to parse JSON', text);
+                throw new Error('Invalid JSON response from server');
+            }
+        })
         .then(data => {
             if (data.length === 0) {
                 container.innerHTML = '<p class="text-muted">No reports submitted on this day.</p>';
@@ -159,7 +170,8 @@ function openReportsModal(dateStr) {
             container.innerHTML = html;
         })
         .catch(err => {
-            container.innerHTML = '<p class="text-danger">Failed to load reports.</p>';
+            console.error('Fetch error:', err);
+            container.innerHTML = '<p class="text-danger">Failed to load reports. Please try again.</p>';
         });
 }
 

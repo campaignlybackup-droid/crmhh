@@ -46,7 +46,8 @@ switch ($action) {
         if (!$task) fatal_error('Task not found.');
         $clients = Database::all('SELECT id, name FROM clients WHERE deleted_at IS NULL ORDER BY name');
         $services = ServiceModel::all();
-        render_page('tasks/form', compact('task', 'clients', 'services'), 'Edit Task');
+        $users = UserModel::activeSelectList();
+        render_page('tasks/form', compact('task', 'clients', 'services', 'users'), 'Edit Task');
         break;
     }
 

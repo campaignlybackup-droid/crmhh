@@ -22,7 +22,7 @@
                         <?php if($s['is_lost']): ?><span class="badge badge-danger">Lost</span><?php endif; ?>
                     </td>
                     <td>
-                        <button class="btn btn-sm btn-link" onclick="editStatus(<?= htmlspecialchars(json_encode($s)) ?>)">Edit</button>
+                        <button type="button" class="btn btn-sm btn-link" onclick="editStatus(<?= htmlspecialchars(json_encode($s)) ?>)">Edit</button>
                         <form method="post" action="<?= url('folder_settings', ['action' => 'delete_status', 'folder_id' => $folder['id']]) ?>" style="display:inline;" data-confirm="Delete this status?">
                             <?= Csrf::field() ?>
                             <input type="hidden" name="id" value="<?= $s['id'] ?>">
@@ -35,7 +35,7 @@
             </tbody>
         </table>
 
-        <button class="btn btn-primary btn-sm" onclick="editStatus()">+ Add Status</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="editStatus()">+ Add Status</button>
     </div>
 
     <!-- CUSTOM FIELDS -->
@@ -51,7 +51,7 @@
                     <td><?= e($f['field_name']) ?></td>
                     <td><span class="badge badge-secondary"><?= e(strtoupper($f['field_type'])) ?></span></td>
                     <td>
-                        <button class="btn btn-sm btn-link" onclick="editField(<?= htmlspecialchars(json_encode($f)) ?>)">Edit</button>
+                        <button type="button" class="btn btn-sm btn-link" onclick="editField(<?= htmlspecialchars(json_encode($f)) ?>)">Edit</button>
                         <form method="post" action="<?= url('folder_settings', ['action' => 'delete_field', 'folder_id' => $folder['id']]) ?>" style="display:inline;" data-confirm="Delete this custom field? Data for existing leads will be lost!">
                             <?= Csrf::field() ?>
                             <input type="hidden" name="id" value="<?= $f['id'] ?>">
@@ -64,7 +64,7 @@
             </tbody>
         </table>
 
-        <button class="btn btn-primary btn-sm" onclick="editField()">+ Add Custom Field</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="editField()">+ Add Custom Field</button>
     </div>
 </div>
 

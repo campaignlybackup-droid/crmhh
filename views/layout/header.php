@@ -15,17 +15,17 @@
 </head>
 <body>
 <header class="topbar">
-    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle menu">&#9776;</button>
+    <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle menu">&#9776;</button>
     <a href="<?= url('dashboard') ?>" class="brand"><?= $appName ?></a>
     <form class="global-search" method="get" action="<?= url('search') ?>">
         <input type="hidden" name="page" value="search">
         <input type="text" name="q" placeholder="Search leads, clients, tasks, people&hellip;" value="<?= old('q') ?>">
     </form>
     <div class="topbar-right">
-        <button class="icon-btn" onclick="window.location.reload()" title="Refresh">&#8635;</button>
+        <button type="button" class="icon-btn" onclick="window.location.reload()" title="Refresh">&#8635;</button>
         <a href="<?= url('search') ?>" class="icon-btn search-btn-mobile">&#128269;</a>
         <div class="dropdown" id="notifDropdown">
-            <button class="icon-btn" id="notifBtn">&#128276;<?php $uc = Notifier::unreadCount(Auth::id()); if ($uc): ?><span class="badge-dot"><?= $uc > 9 ? '9+' : $uc ?></span><?php endif; ?></button>
+            <button type="button" class="icon-btn" id="notifBtn">&#128276;<?php $uc = Notifier::unreadCount(Auth::id()); if ($uc): ?><span class="badge-dot"><?= $uc > 9 ? '9+' : $uc ?></span><?php endif; ?></button>
             <div class="dropdown-menu" id="notifMenu">
                 <div class="dropdown-header">Notifications</div>
                 <?php $notifs = Notifier::recent(Auth::id(), 8); if (empty($notifs)): ?>
@@ -41,7 +41,7 @@
             </div>
         </div>
         <div class="dropdown" id="userDropdown">
-            <button class="user-btn" id="userBtn"><?= e($currentUser['name']) ?> <span class="caret">&#9662;</span></button>
+            <button type="button" class="user-btn" id="userBtn"><?= e($currentUser['name']) ?> <span class="caret">&#9662;</span></button>
             <div class="dropdown-menu" id="userMenu">
                 <a href="<?= url('profile') ?>" class="dropdown-item-link">My Profile</a>
                 <a href="<?= url('login', ['action'=>'logout']) ?>" class="dropdown-item-link">Logout</a>

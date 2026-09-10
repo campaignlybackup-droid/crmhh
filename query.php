@@ -1,4 +1,7 @@
 <?php
 require __DIR__ . '/core/bootstrap.php';
-$p = Database::all('SELECT * FROM permissions WHERE `group` = "proposals"');
-print_r($p);
+$stmt = Database::pdo()->query("DESCRIBE leads;");
+$cols = $stmt->fetchAll(PDO::FETCH_ASSOC);
+foreach ($cols as $col) {
+    echo $col['Field'] . "\n";
+}

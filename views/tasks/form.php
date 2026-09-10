@@ -18,13 +18,11 @@
         </div>
     </div>
     <div class="form-row">
-        <?php if (!$task): ?>
         <div class="form-group"><label>Assign To</label>
             <select name="assigned_user_id"><option value="">— Unassigned —</option>
-                <?php foreach ($users as $u): ?><option value="<?= $u['id'] ?>"><?= e($u['name']) ?></option><?php endforeach; ?>
+                <?php foreach ($users as $u): ?><option value="<?= $u['id'] ?>" <?= ($task['assigned_user_id'] ?? null) == $u['id'] ? 'selected' : '' ?>><?= e($u['name']) ?></option><?php endforeach; ?>
             </select>
         </div>
-        <?php endif; ?>
         <div class="form-group"><label>Priority</label>
             <select name="priority">
                 <?php foreach (['low','medium','high','urgent'] as $p): ?><option value="<?= $p ?>" <?= ($task['priority'] ?? 'medium')===$p?'selected':'' ?>><?= e(humanize($p)) ?></option><?php endforeach; ?>
@@ -35,8 +33,8 @@
         <div class="form-group"><label>Start Date</label><input type="date" name="start_date" value="<?= e($task['start_date'] ?? '') ?>"></div>
         <div class="form-group"><label>Deadline</label><input type="datetime-local" name="deadline" value="<?= $task['deadline'] ?? '' ? date('Y-m-d\TH:i', strtotime($task['deadline'])) : '' ?>"></div>
     </div>
-    <?php if (!$task && Auth::hasRole('founder')): ?>
-    <div class="form-group checkbox-group"><label><input type="checkbox" name="is_private" value="1"> Private task (only visible to me and the assignee)</label></div>
+    <?php if (Auth::hasRole('founder')): ?>
+    <div class="form-group checkbox-group"><label><input type="checkbox" name="is_private" value="1" <?= !empty($task['is_private']) ? 'checked' : '' ?>> Private task (only visible to me and the assignee)</label></div>
     <?php endif; ?>
     <div class="form-group"><label>Notes</label><textarea name="notes"><?= e($task['notes'] ?? '') ?></textarea></div>
     <button class="btn btn-primary"><?= $task ? 'Save Changes' : 'Create Task' ?></button>

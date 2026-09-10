@@ -164,17 +164,27 @@ async function drop(ev) {
             body: JSON.stringify({id: leadId, status_id: statusId})
         });
         
-        let json = await res.json();
+        let json;
+        try {
+            json = await res.json();
+        } catch (parseError) {
+            console.error('Failed to parse response as JSON. Server might have returned an error page.');
+            alert('Server error occurred while updating status. See console.');
+            window.location.reload();
+            return;
+        }
+        
         if (!json.success) {
-            alert('Failed to update status.');
+            alert('Failed to update status: ' + (json.error || 'Unknown error'));
             window.location.reload();
         } else {
             // Update border color of the card to match the new column
             let color = col.querySelector('h3').style.borderBottomColor;
             leadEl.style.borderLeftColor = color;
         }
-    } catch(e) {
-        alert('Network error.');
+    } catch (e) {
+        console.error('Network Error:', e);
+        alert('Network error occurred.');
         window.location.reload();
     }
 }

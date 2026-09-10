@@ -26,18 +26,18 @@
     </div>
 </form>
 
-<div class="table-wrap"><table>
+<div class="table-wrap responsive-table"><table>
 <thead><tr><th>Employee</th><th>From</th><th>To</th><th>Reason</th><th>Status</th><th></th></tr></thead>
 <tbody>
 <?php if (empty($rows)): ?><tr><td colspan="6" class="text-muted">No leave requests.</td></tr><?php endif; ?>
 <?php foreach ($rows as $r): ?>
     <tr>
-        <td><?= e($r['user_name']) ?></td>
-        <td><?= format_date($r['start_date']) ?></td>
-        <td><?= format_date($r['end_date']) ?></td>
-        <td class="wrap"><?= e($r['reason']) ?></td>
-        <td><span class="badge badge-<?= status_badge_class($r['status']) ?>"><?= e(humanize($r['status'])) ?></span></td>
-        <td><a href="<?= url('leave', ['action' => 'view', 'id' => $r['id']]) ?>" class="btn btn-sm">View</a></td>
+        <td data-label="Employee"><?= e($r['user_name']) ?></td>
+        <td data-label="From"><?= format_date($r['start_date']) ?></td>
+        <td data-label="To"><?= format_date($r['end_date']) ?></td>
+        <td data-label="Reason" class="wrap"><?= e($r['reason']) ?></td>
+        <td data-label="Status"><span class="badge badge-<?= status_badge_class($r['status']) ?>"><?= e(humanize($r['status'])) ?></span></td>
+        <td data-label="Actions"><a href="<?= url('leave', ['action' => 'view', 'id' => $r['id']]) ?>" class="btn btn-sm">View</a></td>
     </tr>
 <?php endforeach; ?>
 </tbody>

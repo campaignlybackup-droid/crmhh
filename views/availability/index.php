@@ -41,7 +41,7 @@ $statusColors = ['available' => 'success', 'busy' => 'warning', 'meeting' => 'pr
             <?php if ($entry['note']): ?><div class="small text-muted"><?= e($entry['note']) ?></div><?php endif; ?>
         <?php endif; ?>
         <?php if (Permission::has('availability.manage')): ?>
-            <button class="btn btn-sm" style="margin-top:4px;padding:2px 6px" data-modal-open="setAvail<?= $dateStr ?>">Set</button>
+            <button type="button" class="btn btn-sm" style="margin-top:4px;padding:2px 6px" data-modal-open="setAvail<?= $dateStr ?>">Set</button>
             <div class="modal-overlay" id="setAvail<?= $dateStr ?>">
                 <div class="modal" style="max-width:360px">
                     <span class="modal-close" data-modal-close>&times;</span>

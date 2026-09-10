@@ -1,6 +1,9 @@
 <div class="flex-between">
     <h1>Proposal Details</h1>
-    <a href="<?= url('proposals') ?>" class="btn">Back</a>
+    <div>
+        <?php if ($canManage): ?><a href="<?= url('proposals', ['action' => 'edit', 'id' => $proposal['id']]) ?>" class="btn">Edit</a><?php endif; ?>
+        <a href="<?= url('proposals') ?>" class="btn">Back</a>
+    </div>
 </div>
 
 <div class="grid grid-2">

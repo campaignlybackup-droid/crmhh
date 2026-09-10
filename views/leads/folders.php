@@ -93,15 +93,29 @@ async function createFolder() {
     
     if (!name) return alert('Name is required');
     
-    const res = await fetch('<?= url('leads', ['action' => 'api_create_folder']) ?>', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ name, users })
-    });
-    const json = await res.json();
-    if (json.success) {
-        window.location.reload();
-    } else {
-        alert(json.error);
+    try {
+        const res = await fetch('<?= url('leads', ['action' => 'api_create_folder']) ?>', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ name, users })
+        });
+        
+        let json;
+        try {
+            json = await res.json();
+        } catch(parseError) {
+            console.error('Failed to parse response. Server might have returned HTML.');
+            alert('Server error occurred while creating folder. Check console.');
+            return;
+        }
+        
+        if (json.success) {
+            window.location.reload();
+        } else {
+            alert(json.error);
+        }
+    } catch(e) {
+        console.error('Network Error:', e);
+        alert('Network error occurred.');
     }
 }
 </script>

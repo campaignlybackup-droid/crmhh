@@ -13,15 +13,15 @@
     </div>
     <button class="btn btn-primary btn-sm">Filter</button>
 </form>
-<div class="table-wrap"><table>
+<div class="table-wrap responsive-table"><table>
 <thead><tr><th>Code</th><th>Name</th><th>Email</th><th>Status</th></tr></thead>
 <tbody>
 <?php foreach ($rows as $u): ?>
     <tr>
-        <td><?= e($u['employee_code']) ?></td>
-        <td><a href="<?= url('users', ['action' => 'view', 'id' => $u['id']]) ?>"><?= e($u['name']) ?></a><?php if ($u['is_founder']): ?> <span class="badge badge-primary">Founder</span><?php endif; ?></td>
-        <td><?= e($u['email']) ?></td>
-        <td><span class="badge badge-<?= $u['status']==='active'?'success':'secondary' ?>"><?= e(humanize($u['status'])) ?></span></td>
+        <td data-label="Code"><?= e($u['employee_code']) ?></td>
+        <td data-label="Name"><a href="<?= url('users', ['action' => 'view', 'id' => $u['id']]) ?>"><?= e($u['name']) ?></a><?php if ($u['is_founder']): ?> <span class="badge badge-primary">Founder</span><?php endif; ?></td>
+        <td data-label="Email"><?= e($u['email']) ?></td>
+        <td data-label="Status"><span class="badge badge-<?= $u['status']==='active'?'success':'secondary' ?>"><?= e(humanize($u['status'])) ?></span></td>
     </tr>
 <?php endforeach; ?>
 </tbody>

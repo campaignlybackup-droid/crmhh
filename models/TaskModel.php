@@ -105,14 +105,39 @@ class TaskModel
 
     public static function update(int $id, array $data): void
     {
+        $before = self::find($id);
+        
+        $isPrivate = isset($data['is_private']) ? 1 : 0;
+        // If the user doesn't have the founder role and isn't sending is_private, we shouldn't overwrite it to 0 implicitly if we don't know they have access.
+        // However, the simplest way is to check if it's explicitly set. Actually, HTML checkboxes don't send anything if unchecked.
+        // We'll only update is_private if Auth::hasRole('founder') because that's the only role that sees the checkbox.
+        $privateSql = '';
+        $params = [
+            $data['title'], $data['description'] ?: null, $data['client_id'] ?: null, $data['client_service_id'] ?: null,
+            $data['service_id'] ?: null, $data['priority'] ?: 'medium', $data['start_date'] ?: null, $data['deadline'] ?: null,
+            $data['notes'] ?: null
+        ];
+        
+        if (Auth::hasRole('founder')) {
+            $privateSql = ', is_private=?';
+            $params[] = $isPrivate;
+        }
+        
+        $params[] = $id;
+
         Database::run(
-            'UPDATE tasks SET title=?, description=?, client_id=?, client_service_id=?, service_id=?, priority=?, start_date=?, deadline=?, notes=? WHERE id=?',
-            [
-                $data['title'], $data['description'] ?: null, $data['client_id'] ?: null, $data['client_service_id'] ?: null,
-                $data['service_id'] ?: null, $data['priority'] ?: 'medium', $data['start_date'] ?: null, $data['deadline'] ?: null,
-                $data['notes'] ?: null, $id,
-            ]
+            "UPDATE tasks SET title=?, description=?, client_id=?, client_service_id=?, service_id=?, priority=?, start_date=?, deadline=?, notes=?$privateSql WHERE id=?",
+            $params
         );
+        
+        if (isset($data['assigned_user_id']) && (int)$data['assigned_user_id'] !== (int)$before['assigned_user_id']) {
+            if (empty($data['assigned_user_id'])) {
+                Database::run('UPDATE tasks SET assigned_user_id = NULL WHERE id = ?', [$id]);
+            } else {
+                self::reassign($id, (int)$data['assigned_user_id'], 'Reassigned via edit form');
+            }
+        }
+        
         ActivityModel::log('task', $id, 'updated', 'Task details updated');
         AuditLog::record('update', 'task', $id);
     }

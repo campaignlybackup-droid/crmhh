@@ -33,19 +33,19 @@
     <a href="<?= url('tasks') ?>" class="btn btn-sm">Reset</a>
 </form>
 
-<div class="table-wrap">
+<div class="table-wrap responsive-table">
 <table>
 <thead><tr><th>Task</th><th>Client</th><th>Assigned</th><th>Priority</th><th>Status</th><th>Deadline</th></tr></thead>
 <tbody>
 <?php if (empty($rows)): ?><tr><td colspan="6" class="text-muted">No tasks found.</td></tr><?php endif; ?>
 <?php foreach ($rows as $t): $overdue = is_overdue($t['deadline'], $t['status']); ?>
     <tr>
-        <td><a href="<?= url('tasks', ['action' => 'view', 'id' => $t['id']]) ?>"><?= e($t['title']) ?></a></td>
-        <td><?= e($t['client_name'] ?? '—') ?></td>
-        <td><?= e($t['assigned_name'] ?? 'Unassigned') ?></td>
-        <td><span class="badge badge-secondary"><?= e(humanize($t['priority'])) ?></span></td>
-        <td><span class="badge badge-<?= status_badge_class($overdue ? 'overdue' : $t['status']) ?>"><?= $overdue ? 'Overdue' : e(humanize($t['status'])) ?></span></td>
-        <td><?= $t['deadline'] ? format_datetime($t['deadline']) : '—' ?></td>
+        <td data-label="Task"><a href="<?= url('tasks', ['action' => 'view', 'id' => $t['id']]) ?>"><?= e($t['title']) ?></a></td>
+        <td data-label="Client"><?= e($t['client_name'] ?? '—') ?></td>
+        <td data-label="Assigned"><?= e($t['assigned_name'] ?? 'Unassigned') ?></td>
+        <td data-label="Priority"><span class="badge badge-secondary"><?= e(humanize($t['priority'])) ?></span></td>
+        <td data-label="Status"><span class="badge badge-<?= status_badge_class($overdue ? 'overdue' : $t['status']) ?>"><?= $overdue ? 'Overdue' : e(humanize($t['status'])) ?></span></td>
+        <td data-label="Deadline"><?= $t['deadline'] ? format_datetime($t['deadline']) : '—' ?></td>
     </tr>
 <?php endforeach; ?>
 </tbody>

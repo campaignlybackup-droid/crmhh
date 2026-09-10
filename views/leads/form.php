@@ -21,10 +21,10 @@
         </div>
     </div>
     <div class="form-row">
-        <?php if (!$lead && Permission::has('leads.assign')): ?>
+        <?php if (Permission::has('leads.assign')): ?>
         <div class="form-group"><label>Assign To</label>
             <select name="assigned_user_id"><option value="">— Unassigned —</option>
-                <?php foreach ($users as $u): ?><option value="<?= $u['id'] ?>"><?= e($u['name']) ?></option><?php endforeach; ?>
+                <?php foreach ($users as $u): ?><option value="<?= $u['id'] ?>" <?= ($lead['assigned_user_id'] ?? null) == $u['id'] ? 'selected' : '' ?>><?= e($u['name']) ?></option><?php endforeach; ?>
             </select>
         </div>
         <?php endif; ?>

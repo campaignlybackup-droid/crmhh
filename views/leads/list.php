@@ -96,7 +96,7 @@
 <div class="table-wrap responsive-table" style="position:relative;">
 <table>
 <thead><tr>
-    <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?><th style="width:30px;"><input type="checkbox" onclick="toggleAllLeads(this)" title="Select All"></th><?php endif; ?>
+    <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?><th class="checkbox-col" style="width:40px;"><input type="checkbox" onclick="toggleAllLeads(this)" title="Select All"></th><?php endif; ?>
     <th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th>
     <?php if (!empty($customFields)) foreach ($customFields as $cf): ?><th><?= e($cf['field_name']) ?></th><?php endforeach; ?>
     <th>Status</th><th>Assigned</th><th>Follow-up</th><th>Next Step</th><th>Notes</th><th>Actions</th>
@@ -104,7 +104,7 @@
 <tbody>
 <?php if (Permission::has('leads.create')): ?>
 <tr id="quick-add-row" style="background:var(--bg-hover)">
-    <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?><td></td><?php endif; ?>
+    <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?><td class="checkbox-col"></td><?php endif; ?>
     <td data-label="ID" class="text-muted small">New</td>
     <td data-label="Name"><input type="text" id="qa_name" placeholder="Name *" class="form-control form-control-sm" style="width:100%; min-width:90px;"></td>
     <td data-label="Phone"><input type="text" id="qa_phone" placeholder="Phone" class="form-control form-control-sm" style="width:100%; min-width:90px;"></td>
@@ -156,7 +156,7 @@
 <?php foreach ($rows as $r): ?>
     <tr id="row_<?= $r['id'] ?>">
         <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
-            <td><input type="checkbox" class="lead-checkbox" value="<?= $r['id'] ?>" onchange="updateBulkDeleteBtn()"></td>
+            <td class="checkbox-col"><input type="checkbox" class="lead-checkbox" value="<?= $r['id'] ?>" onchange="updateBulkDeleteBtn()"></td>
         <?php endif; ?>
         <td data-label="ID">
             <a href="<?= url('leads', ['action' => 'view', 'id' => $r['id']]) ?>"><?= e($r['lead_code']) ?></a>

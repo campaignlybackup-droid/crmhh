@@ -254,23 +254,13 @@
 
 <script>
 document.addEventListener('change', function(e) {
-    if (e.target && typeof e.target.className === 'string' && e.target.className.indexOf('edit-input') !== -1) {
-        if (e.target.tagName === 'SELECT' || e.target.type === 'date' || e.target.type === 'number' || e.target.type === 'checkbox') {
-            handleInlineEdit(e);
-        }
+    if (e.target && e.target.classList && e.target.classList.contains('edit-input')) {
+        handleInlineEdit(e);
     }
 });
 
-document.addEventListener('blur', function(e) {
-    if (e.target && typeof e.target.className === 'string' && e.target.className.indexOf('edit-input') !== -1) {
-        if (e.target.tagName !== 'SELECT' && e.target.type !== 'date' && e.target.type !== 'number' && e.target.type !== 'checkbox') {
-            handleInlineEdit(e);
-        }
-    }
-}, true);
-
 document.addEventListener('keydown', function(e) {
-    if (e.target && typeof e.target.className === 'string' && e.target.className.indexOf('edit-input') !== -1) {
+    if (e.target && e.target.classList && e.target.classList.contains('edit-input')) {
         if (e.keyCode === 13 || e.key === 'Enter') {
             e.target.blur();
         }
@@ -278,7 +268,7 @@ document.addEventListener('keydown', function(e) {
 });
 
 document.addEventListener('focus', function(e) {
-    if (e.target && typeof e.target.className === 'string' && e.target.className.indexOf('edit-input') !== -1) {
+    if (e.target && e.target.classList && e.target.classList.contains('edit-input')) {
         var val = e.target.type === 'checkbox' ? (e.target.checked ? '1' : '0') : e.target.value;
         e.target.setAttribute('data-original-value', val);
     }
@@ -304,14 +294,10 @@ function handleInlineEdit(e) {
 
     var newValue = inp.type === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
     var originalValue = inp.getAttribute('data-original-value');
-    
-    // If it hasn't been set by focus yet (e.g. checkbox click without focus), fallback
-    if (originalValue === null) {
-        originalValue = inp.defaultValue;
-    }
+    if (originalValue === null) originalValue = inp.defaultValue;
     
     if (newValue === originalValue) return;
-
+    
     inp.disabled = true;
     var originalBg = inp.style.backgroundColor || '';
     inp.style.backgroundColor = '#f8f9fa';
@@ -333,7 +319,9 @@ function handleInlineEdit(e) {
                 try {
                     var json = JSON.parse(xhr.responseText);
                     if (json.success) {
-                        inp.setAttribute('data-original-value', json.new_value !== null ? json.new_value : '');
+                        var finalVal = json.new_value !== null ? json.new_value : '';
+                        inp.setAttribute('data-original-value', finalVal);
+                        if (inp.type !== 'checkbox') inp.value = finalVal;
                         inp.style.backgroundColor = '#d4edda';
                         setTimeout(function() { inp.style.backgroundColor = originalBg; }, 1000);
                     } else {

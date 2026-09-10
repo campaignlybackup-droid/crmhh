@@ -486,7 +486,7 @@ switch ($action) {
 
         $page = current_page_int();
         $isKanban = ($_GET['view'] ?? 'table') === 'kanban';
-        $perPage = $isKanban ? 1000 : 25; // Load heavily for kanban
+        $perPage = ($isKanban || !empty($filters['folder_id'])) ? 10000 : 25; // Load heavily for kanban or folder view
         [$rows, $p] = LeadModel::paginate($page, $perPage, $filters);
         
         $folderId = isset($filters['folder_id']) && $filters['folder_id'] !== '' ? (int)$filters['folder_id'] : null;

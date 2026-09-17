@@ -198,8 +198,9 @@ switch ($action) {
     case 'update_progress': {
         $assignmentId = (int)($_POST['assignment_id'] ?? 0);
         $clientId = (int)($_POST['client_id'] ?? 0);
+        if ($clientId && !Permission::canAccessClient($clientId)) Permission::deny();
         csrf_check_or_die();
-        ClientModel::updateProgress($assignmentId, (int)$_POST['quantity_completed'], Auth::id());
+        ClientModel::updateProgress($assignmentId, (int)($_POST['quantity_completed'] ?? 0), Auth::id());
         Flash::success('Progress updated.');
         redirect(url('clients', ['action' => 'view', 'id' => $clientId]));
         break;

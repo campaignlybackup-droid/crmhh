@@ -221,20 +221,36 @@ class ClientModel
         }
     }
 
-    /** Employee updates their own progress on an assignment; rolls up into client_services.quantity_completed. */
+    /** Update progress on an assignment; rolls up into client_services.quantity_completed.
+     * Allowed for: the assigned employee, the service manager, or managers/founders with service management permissions.
+     */
     public static function updateProgress(int $assignmentId, int $completed, int $userId): void
     {
-        $a = Database::one('SELECT * FROM client_service_assignments WHERE id = ? AND user_id = ?', [$assignmentId, $userId]);
+        $a = Database::one(
+            'SELECT csa.*, cs.client_id, cs.manager_id, s.name AS service_name
+             FROM client_service_assignments csa
+             JOIN client_services cs ON cs.id = csa.client_service_id
+             JOIN services s ON s.id = cs.service_id
+             WHERE csa.id = ?',
+            [$assignmentId]
+        );
         if (!$a) {
             Permission::deny();
         }
+
+        $canUpdate = ((int)$a['user_id'] === $userId)
+            || ((int)$a['manager_id'] === $userId)
+            || Permission::hasAny(['clients.manage_services', 'clients.edit', 'clients.assign'], $userId);
+
+        if (!$canUpdate) {
+            Permission::deny();
+        }
+
+        $completed = max(0, $completed);
         Database::run('UPDATE client_service_assignments SET quantity_completed = ? WHERE id = ?', [$completed, $assignmentId]);
         $sum = (int)Database::scalar('SELECT COALESCE(SUM(quantity_completed),0) FROM client_service_assignments WHERE client_service_id = ?', [$a['client_service_id']]);
         Database::run('UPDATE client_services SET quantity_completed = ? WHERE id = ?', [$sum, $a['client_service_id']]);
-        $cs = Database::one('SELECT cs.client_id, s.name AS service_name FROM client_services cs JOIN services s ON s.id = cs.service_id WHERE cs.id = ?', [$a['client_service_id']]);
-        if ($cs) {
-            ActivityModel::log('client', (int)$cs['client_id'], 'progress_updated', "{$cs['service_name']} progress updated to $completed");
-        }
+        ActivityModel::log('client', (int)$a['client_id'], 'progress_updated', "{$a['service_name']} ({$a['requirement_name']}) progress updated to $completed");
     }
 
     public static function upcomingRenewals(int $days = 30, ?int $userId = null): array

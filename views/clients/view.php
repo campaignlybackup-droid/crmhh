@@ -109,7 +109,19 @@
                             <td><?= e($a['user_name']) ?></td>
                             <td><?= $a['quantity_assigned'] !== null ? (int)$a['quantity_assigned'] : '—' ?></td>
                             <td><?= format_date($a['deadline']) ?: '—' ?></td>
-                            <td><?= (int)$a['quantity_completed'] ?></td>
+                            <td>
+                                <?php if (Permission::hasAny(['clients.manage_services', 'clients.edit', 'clients.assign']) || (int)$svc['manager_id'] === Auth::id() || (int)$a['user_id'] === Auth::id()): ?>
+                                <form method="post" action="<?= url('clients', ['action' => 'update_progress']) ?>" style="display:inline-flex;align-items:center;gap:4px;margin:0">
+                                    <?= Csrf::field() ?>
+                                    <input type="hidden" name="assignment_id" value="<?= $a['id'] ?>">
+                                    <input type="hidden" name="client_id" value="<?= $client['id'] ?>">
+                                    <input type="number" name="quantity_completed" value="<?= (int)$a['quantity_completed'] ?>" min="0" style="width:65px;padding:3px 6px;font-size:12px;height:28px">
+                                    <button class="btn btn-sm btn-primary" style="padding:2px 8px;font-size:11px;height:28px" title="Save progress">Save</button>
+                                </form>
+                                <?php else: ?>
+                                <?= (int)$a['quantity_completed'] ?>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <?php if (Permission::hasAny(['clients.manage_services','clients.assign'])): ?>
                                 <form method="post" action="<?= url('clients', ['action' => 'remove_assignment']) ?>" style="display:inline" data-confirm="Remove this assignment?">

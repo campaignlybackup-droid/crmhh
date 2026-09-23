@@ -670,7 +670,7 @@ CREATE TABLE operations_issues (
     client_id INT UNSIGNED DEFAULT NULL,
     task_id INT UNSIGNED DEFAULT NULL,
     content_id INT UNSIGNED DEFAULT NULL,
-    severity ENUM('minor', 'major', 'critical') NOT NULL DEFAULT 'medium',
+    severity ENUM('minor', 'medium', 'major', 'critical') NOT NULL DEFAULT 'medium',
     status ENUM('open', 'assigned', 'rectifying', 'corrected', 'escalated_to_founder') NOT NULL DEFAULT 'assigned',
     due_date DATE DEFAULT NULL,
     is_delayed TINYINT(1) NOT NULL DEFAULT 0,

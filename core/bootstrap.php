@@ -48,7 +48,10 @@ if (file_exists($configFile)) {
     }
 
     set_exception_handler(function (Throwable $e) {
-        app_log('Uncaught exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+        app_log('Uncaught exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() . "\n" . $e->getTraceAsString());
+        if ((bool)(config('app')['debug'] ?? false) || isset($_GET['debug'])) {
+            fatal_error('<b>Exception:</b> ' . htmlspecialchars($e->getMessage()) . '<br><br><b>File:</b> ' . htmlspecialchars($e->getFile()) . ':' . $e->getLine() . '<br><br><pre style="text-align:left;font-size:12px;background:#f8f9fa;padding:12px;border-radius:4px;overflow:auto;max-height:300px;">' . htmlspecialchars($e->getTraceAsString()) . '</pre>');
+        }
         fatal_error('An unexpected error occurred. The technical team has been notified.');
     });
 

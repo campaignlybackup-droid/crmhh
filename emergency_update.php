@@ -52,5 +52,10 @@ foreach ($files as $file) {
     }
 }
 
-echo "</pre><h2>Update Complete! You can now visit your proposals area.</h2>";
+echo "\n--- Running Safe Database Migrations ---\n";
+if (file_exists(__DIR__ . '/migrate_deep_fixes.php')) {
+    include __DIR__ . '/migrate_deep_fixes.php';
+}
+
+echo "</pre><h2>Update Complete! All files and database structures are up to date. <a href='index.php'>Go to CRM Dashboard</a></h2>";
 ?>

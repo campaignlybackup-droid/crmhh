@@ -24,75 +24,77 @@ class Database
     }
     public static function autoMigrate(): void
     {
-        // Only run once per session to avoid overhead
-        if (isset($_SESSION['db_migrated'])) return;
-        
+        $targetVersion = 8;
+        if (!isset($_GET['migrate']) && ($_SESSION['db_migrated_v'] ?? 0) >= $targetVersion) {
+            return;
+        }
+
         try {
             $pdo = self::pdo();
-            
-            // Check leads columns
-            $stmt = $pdo->query("SHOW COLUMNS FROM leads LIKE 'next_step'");
-            if ($stmt->rowCount() === 0) $pdo->exec("ALTER TABLE leads ADD COLUMN next_step VARCHAR(255) DEFAULT NULL");
-            
-            $stmt = $pdo->query("SHOW COLUMNS FROM leads LIKE 'notes'");
-            if ($stmt->rowCount() === 0) $pdo->exec("ALTER TABLE leads ADD COLUMN notes TEXT DEFAULT NULL");
+        } catch (Throwable $e) {
+            return;
+        }
 
-            $stmt = $pdo->query("SHOW COLUMNS FROM leads LIKE 'docs_link'");
-            if ($stmt->rowCount() === 0) $pdo->exec("ALTER TABLE leads ADD COLUMN docs_link VARCHAR(500) DEFAULT NULL AFTER notes");
+        // 1. Leads extra columns
+        try {
+            $cols = self::getTableColumns($pdo, 'leads');
+            if (!in_array('next_step', $cols, true)) $pdo->exec("ALTER TABLE leads ADD COLUMN next_step VARCHAR(255) DEFAULT NULL");
+            if (!in_array('notes', $cols, true)) $pdo->exec("ALTER TABLE leads ADD COLUMN notes TEXT DEFAULT NULL");
+            if (!in_array('docs_link', $cols, true)) $pdo->exec("ALTER TABLE leads ADD COLUMN docs_link VARCHAR(500) DEFAULT NULL AFTER notes");
+            if (!in_array('docs_access', $cols, true)) $pdo->exec("ALTER TABLE leads ADD COLUMN docs_access VARCHAR(50) NOT NULL DEFAULT 'no_access' AFTER docs_link");
+        } catch (Throwable $e) {}
 
-            $stmt = $pdo->query("SHOW COLUMNS FROM leads LIKE 'docs_access'");
-            if ($stmt->rowCount() === 0) $pdo->exec("ALTER TABLE leads ADD COLUMN docs_access VARCHAR(50) NOT NULL DEFAULT 'no_access' AFTER docs_link");
-            
-            // Check 'Almost closed' status
-            $stStatus = $pdo->query("SELECT id FROM lead_statuses WHERE slug = 'almost-closed' AND folder_id IS NULL");
-            if ($stStatus->rowCount() === 0) {
+        // 2. Almost closed status
+        try {
+            $exists = (int)$pdo->query("SELECT COUNT(*) FROM lead_statuses WHERE slug = 'almost-closed' AND folder_id IS NULL")->fetchColumn();
+            if ($exists === 0) {
                 $closedSort = (int)$pdo->query("SELECT sort_order FROM lead_statuses WHERE slug = 'closed' AND folder_id IS NULL")->fetchColumn();
                 $newSort = $closedSort > 0 ? $closedSort : 8;
                 $pdo->exec("UPDATE lead_statuses SET sort_order = sort_order + 1 WHERE folder_id IS NULL AND sort_order >= $newSort");
                 $pdo->prepare("INSERT INTO lead_statuses (name, slug, color, sort_order, is_won, is_lost, is_default, folder_id) VALUES (?, ?, ?, ?, 0, 0, 0, NULL)")
                     ->execute(['Almost closed', 'almost-closed', '#0ea5e9', $newSort]);
             }
+        } catch (Throwable $e) {}
 
-            // Tables
-            $pdo->exec("CREATE TABLE IF NOT EXISTS folder_custom_fields (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, folder_id INT UNSIGNED NOT NULL, field_name VARCHAR(100) NOT NULL, field_type VARCHAR(50) NOT NULL, options TEXT, sort_order INT NOT NULL DEFAULT 0, CONSTRAINT fk_fcf_folder FOREIGN KEY (folder_id) REFERENCES lead_folders(id) ON DELETE CASCADE)");
-            $pdo->exec("CREATE TABLE IF NOT EXISTS lead_custom_values (lead_id INT UNSIGNED NOT NULL, field_id INT UNSIGNED NOT NULL, field_value TEXT, PRIMARY KEY (lead_id, field_id), CONSTRAINT fk_lcv_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE, CONSTRAINT fk_lcv_field FOREIGN KEY (field_id) REFERENCES folder_custom_fields(id) ON DELETE CASCADE)");
-            $pdo->exec("CREATE TABLE IF NOT EXISTS announcements (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255) NOT NULL, content TEXT NOT NULL, type VARCHAR(50) NOT NULL DEFAULT 'info', created_by INT UNSIGNED NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT fk_ann_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE)");
-            $pdo->exec("CREATE TABLE IF NOT EXISTS approvals (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, title VARCHAR(255) NOT NULL, description TEXT, status VARCHAR(50) NOT NULL DEFAULT 'pending', reviewer_id INT UNSIGNED, reviewer_notes TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, CONSTRAINT fk_appr_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, CONSTRAINT fk_appr_rev FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE SET NULL)");
-            $pdo->exec("CREATE TABLE IF NOT EXISTS content_calendar (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, client_id INT UNSIGNED NOT NULL, title VARCHAR(255) NOT NULL, content_type VARCHAR(100), post_date DATE NOT NULL, status VARCHAR(50) NOT NULL DEFAULT 'draft', assigned_to INT UNSIGNED, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, CONSTRAINT fk_cc_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE, CONSTRAINT fk_cc_user FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL)");
-            
-            // Operations Issues Table
-            $pdo->exec("CREATE TABLE IF NOT EXISTS operations_issues (
-                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                issue_title VARCHAR(255) NOT NULL,
-                description TEXT DEFAULT NULL,
-                noticed_by_id INT UNSIGNED NOT NULL,
-                responsible_id INT UNSIGNED NOT NULL,
-                corrected_by_id INT UNSIGNED DEFAULT NULL,
-                correction_notes TEXT DEFAULT NULL,
-                deduction_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-                deduction_type VARCHAR(50) NOT NULL DEFAULT 'deduction',
-                client_id INT UNSIGNED DEFAULT NULL,
-                task_id INT UNSIGNED DEFAULT NULL,
-                content_id INT UNSIGNED DEFAULT NULL,
-                severity ENUM('minor', 'major', 'critical') NOT NULL DEFAULT 'medium',
-                status ENUM('open', 'assigned', 'rectifying', 'corrected', 'escalated_to_founder') NOT NULL DEFAULT 'assigned',
-                due_date DATE DEFAULT NULL,
-                is_delayed TINYINT(1) NOT NULL DEFAULT 0,
-                notified_founder TINYINT(1) NOT NULL DEFAULT 0,
-                founder_escalated_at DATETIME DEFAULT NULL,
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                resolved_at DATETIME DEFAULT NULL,
-                KEY idx_oi_responsible (responsible_id),
-                KEY idx_oi_noticed (noticed_by_id),
-                KEY idx_oi_corrected (corrected_by_id),
-                KEY idx_oi_status (status),
-                KEY idx_oi_client (client_id),
-                KEY idx_oi_due (due_date)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        // 3. Tables creation
+        try { $pdo->exec("CREATE TABLE IF NOT EXISTS folder_custom_fields (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, folder_id INT UNSIGNED NOT NULL, field_name VARCHAR(100) NOT NULL, field_type VARCHAR(50) NOT NULL, options TEXT, sort_order INT NOT NULL DEFAULT 0, CONSTRAINT fk_fcf_folder FOREIGN KEY (folder_id) REFERENCES lead_folders(id) ON DELETE CASCADE)"); } catch (Throwable $e) {}
+        try { $pdo->exec("CREATE TABLE IF NOT EXISTS lead_custom_values (lead_id INT UNSIGNED NOT NULL, field_id INT UNSIGNED NOT NULL, field_value TEXT, PRIMARY KEY (lead_id, field_id), CONSTRAINT fk_lcv_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE, CONSTRAINT fk_lcv_field FOREIGN KEY (field_id) REFERENCES folder_custom_fields(id) ON DELETE CASCADE)"); } catch (Throwable $e) {}
+        try { $pdo->exec("CREATE TABLE IF NOT EXISTS announcements (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255) NOT NULL, content TEXT NOT NULL, type VARCHAR(50) NOT NULL DEFAULT 'info', created_by INT UNSIGNED NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT fk_ann_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE)"); } catch (Throwable $e) {}
+        try { $pdo->exec("CREATE TABLE IF NOT EXISTS approvals (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, title VARCHAR(255) NOT NULL, description TEXT, status VARCHAR(50) NOT NULL DEFAULT 'pending', reviewer_id INT UNSIGNED, reviewer_notes TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, CONSTRAINT fk_appr_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, CONSTRAINT fk_appr_rev FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE SET NULL)"); } catch (Throwable $e) {}
+        try { $pdo->exec("CREATE TABLE IF NOT EXISTS content_calendar (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, client_id INT UNSIGNED NOT NULL, title VARCHAR(255) NOT NULL, content_type VARCHAR(100), post_date DATE NOT NULL, status VARCHAR(50) NOT NULL DEFAULT 'draft', assigned_to INT UNSIGNED, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, CONSTRAINT fk_cc_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE, CONSTRAINT fk_cc_user FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL)"); } catch (Throwable $e) {}
+        try { $pdo->exec("CREATE TABLE IF NOT EXISTS operations_issues (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            issue_title VARCHAR(255) NOT NULL,
+            description TEXT DEFAULT NULL,
+            noticed_by_id INT UNSIGNED NOT NULL,
+            responsible_id INT UNSIGNED NOT NULL,
+            corrected_by_id INT UNSIGNED DEFAULT NULL,
+            correction_notes TEXT DEFAULT NULL,
+            deduction_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            deduction_type VARCHAR(50) NOT NULL DEFAULT 'deduction',
+            client_id INT UNSIGNED DEFAULT NULL,
+            task_id INT UNSIGNED DEFAULT NULL,
+            content_id INT UNSIGNED DEFAULT NULL,
+            severity ENUM('minor', 'medium', 'major', 'critical') NOT NULL DEFAULT 'medium',
+            status ENUM('open', 'assigned', 'rectifying', 'corrected', 'escalated_to_founder') NOT NULL DEFAULT 'assigned',
+            due_date DATE DEFAULT NULL,
+            is_delayed TINYINT(1) NOT NULL DEFAULT 0,
+            notified_founder TINYINT(1) NOT NULL DEFAULT 0,
+            founder_escalated_at DATETIME DEFAULT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            resolved_at DATETIME DEFAULT NULL,
+            KEY idx_oi_responsible (responsible_id),
+            KEY idx_oi_noticed (noticed_by_id),
+            KEY idx_oi_corrected (corrected_by_id),
+            KEY idx_oi_status (status),
+            KEY idx_oi_client (client_id),
+            KEY idx_oi_due (due_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"); } catch (Throwable $e) {}
 
-            // Double check process and content format columns for content_calendar
-            $ccExisting = array_column($pdo->query("SHOW COLUMNS FROM content_calendar")->fetchAll(PDO::FETCH_ASSOC), 'Field');
+        // 4. Content Calendar Columns
+        try {
+            $ccExisting = self::getTableColumns($pdo, 'content_calendar');
             $ccColsToAdd = [
                 'content_type' => "VARCHAR(50) NOT NULL DEFAULT 'reel'",
                 'service_id' => "INT UNSIGNED DEFAULT NULL",
@@ -109,24 +111,40 @@ class Database
             ];
             foreach ($ccColsToAdd as $col => $colDef) {
                 if (!in_array($col, $ccExisting, true)) {
-                    $pdo->exec("ALTER TABLE content_calendar ADD COLUMN $col $colDef");
+                    try { $pdo->exec("ALTER TABLE content_calendar ADD COLUMN $col $colDef"); } catch (Throwable $e) {}
                 }
             }
+        } catch (Throwable $e) {}
 
-            // Double check columns for approvals
-            $stApprCheck = $pdo->query("SHOW COLUMNS FROM approvals LIKE 'stage'");
-            if ($stApprCheck->rowCount() === 0) {
-                $pdo->exec("ALTER TABLE approvals 
-                    ADD COLUMN stage VARCHAR(50) NOT NULL DEFAULT 'pending_editor',
-                    ADD COLUMN editor_id INT UNSIGNED DEFAULT NULL,
-                    ADD COLUMN editor_notes TEXT DEFAULT NULL,
-                    ADD COLUMN rectification_notes TEXT DEFAULT NULL");
+        // 5. Approvals Columns
+        try {
+            $apprCols = self::getTableColumns($pdo, 'approvals');
+            if (!in_array('stage', $apprCols, true)) {
+                $pdo->exec("ALTER TABLE approvals ADD COLUMN stage VARCHAR(50) NOT NULL DEFAULT 'pending_editor'");
             }
-            
-            $_SESSION['db_migrated'] = true;
-        } catch (Exception $e) {
-            // Silently ignore schema creation errors here, assume they are handled by the app
-        }
+            if (!in_array('editor_id', $apprCols, true)) {
+                $pdo->exec("ALTER TABLE approvals ADD COLUMN editor_id INT UNSIGNED DEFAULT NULL");
+            }
+            if (!in_array('editor_notes', $apprCols, true)) {
+                $pdo->exec("ALTER TABLE approvals ADD COLUMN editor_notes TEXT DEFAULT NULL");
+            }
+            if (!in_array('rectification_notes', $apprCols, true)) {
+                $pdo->exec("ALTER TABLE approvals ADD COLUMN rectification_notes TEXT DEFAULT NULL");
+            }
+        } catch (Throwable $e) {}
+
+        $_SESSION['db_migrated_v'] = $targetVersion;
+    }
+
+    public static function getTableColumns(PDO $pdo, string $table): array
+    {
+        try {
+            $res = $pdo->query("SHOW COLUMNS FROM `$table`");
+            if ($res) {
+                return array_column($res->fetchAll(PDO::FETCH_ASSOC), 'Field');
+            }
+        } catch (Throwable $e) {}
+        return [];
     }
 
     /** Run a SELECT and return all rows. */

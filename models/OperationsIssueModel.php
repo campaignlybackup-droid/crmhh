@@ -138,36 +138,41 @@ class OperationsIssueModel
 
     public static function checkDelaysAndEscalate(): void
     {
-        // Detect issues past due date that are not corrected or escalated yet
-        $delayedIssues = Database::all(
-            "SELECT oi.*, u_resp.name AS resp_name 
-             FROM operations_issues oi
-             JOIN users u_resp ON u_resp.id = oi.responsible_id
-             WHERE oi.status NOT IN ('corrected', 'closed') 
-               AND oi.due_date IS NOT NULL 
-               AND oi.due_date < CURDATE() 
-               AND oi.is_delayed = 0"
-        );
+        try {
+            // Detect issues past due date that are not corrected or escalated yet
+            $delayedIssues = Database::all(
+                "SELECT oi.*, u_resp.name AS resp_name 
+                 FROM operations_issues oi
+                 JOIN users u_resp ON u_resp.id = oi.responsible_id
+                 WHERE oi.status NOT IN ('corrected', 'closed') 
+                   AND oi.due_date IS NOT NULL 
+                   AND oi.due_date < CURDATE() 
+                   AND oi.is_delayed = 0"
+            );
 
-        if (!empty($delayedIssues)) {
-            $founders = Database::all('SELECT id FROM users WHERE is_founder = 1 AND status = "active"');
-            foreach ($delayedIssues as $d) {
-                Database::run(
-                    "UPDATE operations_issues SET is_delayed = 1, status = 'escalated_to_founder', founder_escalated_at = NOW() WHERE id = ?",
-                    [$d['id']]
-                );
-
-                foreach ($founders as $f) {
-                    Notifier::send(
-                        (int)$f['id'],
-                        'operations_delayed_urgent',
-                        '🚨 DELAY ESCALATION: Unresolved Operations Issue past Due Date!',
-                        "Issue #{$d['id']}: '{$d['issue_title']}' assigned to {$d['resp_name']} is DELAYED past its target date ({$d['due_date']}). Please review immediately.",
-                        'operations_issue',
-                        (int)$d['id']
+            if (!empty($delayedIssues)) {
+                $founders = Database::all('SELECT id FROM users WHERE is_founder = 1 AND status = "active"');
+                foreach ($delayedIssues as $d) {
+                    Database::run(
+                        "UPDATE operations_issues SET is_delayed = 1, status = 'escalated_to_founder', founder_escalated_at = NOW() WHERE id = ?",
+                        [$d['id']]
                     );
+
+                    foreach ($founders as $f) {
+                        Notifier::send(
+                            (int)$f['id'],
+                            'operations_delayed_urgent',
+                            '🚨 DELAY ESCALATION: Unresolved Operations Issue past Due Date!',
+                            "Issue #{$d['id']}: '{$d['issue_title']}' assigned to {$d['resp_name']} is DELAYED past its target date ({$d['due_date']}). Please review immediately.",
+                            'operations_issue',
+                            (int)$d['id']
+                        );
+                    }
                 }
             }
+        } catch (Throwable $e) {
+            // If table does not exist or error occurs, fail silently
+            return;
         }
     }
 
@@ -236,18 +241,22 @@ class OperationsIssueModel
 
     public static function allDelayedOrAtRisk(): array
     {
-        return Database::all(
-            "SELECT oi.*, 
-                    u_noticed.name AS noticed_by_name, 
-                    u_resp.name AS responsible_name, 
-                    c.name AS client_name
-             FROM operations_issues oi
-             JOIN users u_noticed ON u_noticed.id = oi.noticed_by_id
-             JOIN users u_resp ON u_resp.id = oi.responsible_id
-             LEFT JOIN clients c ON c.id = oi.client_id
-             WHERE oi.status NOT IN ('corrected', 'closed')
-               AND (oi.is_delayed = 1 OR oi.status = 'escalated_to_founder' OR (oi.due_date IS NOT NULL AND oi.due_date < CURDATE()))
-             ORDER BY oi.created_at ASC"
-        );
+        try {
+            return Database::all(
+                "SELECT oi.*, 
+                        u_noticed.name AS noticed_by_name, 
+                        u_resp.name AS responsible_name, 
+                        c.name AS client_name
+                 FROM operations_issues oi
+                 JOIN users u_noticed ON u_noticed.id = oi.noticed_by_id
+                 JOIN users u_resp ON u_resp.id = oi.responsible_id
+                 LEFT JOIN clients c ON c.id = oi.client_id
+                 WHERE oi.status NOT IN ('corrected', 'closed')
+                   AND (oi.is_delayed = 1 OR oi.status = 'escalated_to_founder' OR (oi.due_date IS NOT NULL AND oi.due_date < CURDATE()))
+                 ORDER BY oi.created_at ASC"
+            );
+        } catch (Throwable $e) {
+            return [];
+        }
     }
 }

@@ -178,9 +178,9 @@ class LeadModel
         $mergedParams = array_merge($params, $dateParams);
         
         // Stats queries
-        $contacted = (int)Database::scalar("SELECT COUNT(*) FROM leads l JOIN lead_statuses ls ON ls.id = l.status_id WHERE $baseWhere $dateWhere AND ls.slug = 'contacted' AND DATE(l.updated_at) = CURDATE()", $mergedParams);
+        $contacted = (int)Database::scalar("SELECT COUNT(*) FROM leads l JOIN lead_statuses ls ON ls.id = l.status_id WHERE $baseWhere $dateWhere AND ls.slug IN ('call-scheduled', 'follow-up', 'meet', 'contacted') AND DATE(l.updated_at) = CURDATE()", $mergedParams);
         $followups = (int)Database::scalar("SELECT COUNT(*) FROM leads l WHERE $baseWhere $dateWhere AND l.next_followup_date = CURDATE()", $mergedParams);
-        $pending = (int)Database::scalar("SELECT COUNT(*) FROM leads l JOIN lead_statuses ls ON ls.id = l.status_id WHERE $baseWhere $dateWhere AND ls.slug = 'new'", $mergedParams);
+        $pending = (int)Database::scalar("SELECT COUNT(*) FROM leads l JOIN lead_statuses ls ON ls.id = l.status_id WHERE $baseWhere $dateWhere AND ls.slug IN ('new-leads', 'new')", $mergedParams);
         $missed = (int)Database::scalar("SELECT COUNT(*) FROM leads l WHERE $baseWhere $dateWhere AND l.next_followup_date < CURDATE()", $mergedParams);
         
         return [
@@ -328,7 +328,7 @@ class LeadModel
 
     public static function updateField(int $id, string $field, $newValue, int $userId): array
     {
-        $allowedFields = ['name', 'phone', 'email', 'company', 'source', 'status_id', 'assigned_user_id', 'next_followup_date', 'next_step', 'notes', 'folder_id'];
+        $allowedFields = ['name', 'phone', 'email', 'company', 'source', 'status_id', 'assigned_user_id', 'next_followup_date', 'next_step', 'notes', 'folder_id', 'docs_link', 'docs_access'];
         
         Database::beginTransaction();
         try {
@@ -374,9 +374,14 @@ class LeadModel
 
             if ($field === 'status_id') {
                 $oldName = Database::scalar('SELECT name FROM lead_statuses WHERE id = ?', [(int)$oldValue]);
-                $newName = Database::scalar('SELECT name FROM lead_statuses WHERE id = ?', [(int)$newValue]);
+                $statusRow = Database::one('SELECT name, color FROM lead_statuses WHERE id = ?', [(int)$newValue]);
+                $newName = $statusRow['name'] ?? 'Unknown';
+                $statusColor = $statusRow['color'] ?? '#6c757d';
                 Database::run('UPDATE leads SET status_id = ? WHERE id = ?', [$newValue, $id]);
                 ActivityModel::log('lead', $id, 'status_changed', "Changed Status", (string)$oldName, (string)$newName);
+                Database::run('UPDATE leads SET updated_at = NOW() WHERE id = ?', [$id]);
+                Database::commit();
+                return ['success' => true, 'old_value' => $oldValue, 'new_value' => $newValue, 'status_color' => $statusColor, 'status_name' => $newName];
             } elseif ($field === 'assigned_user_id') {
                 $oldName = $oldValue ? Database::scalar('SELECT name FROM users WHERE id=?', [$oldValue]) : 'Unassigned';
                 $newName = $newValue ? Database::scalar('SELECT name FROM users WHERE id=?', [$newValue]) : 'Unassigned';
@@ -468,5 +473,10 @@ class LeadModel
     public static function distinctSources(): array
     {
         return array_column(Database::all("SELECT DISTINCT source FROM leads WHERE source IS NOT NULL AND source <> '' ORDER BY source"), 'source');
+    }
+
+    public static function updateStatusColor(int $statusId, string $color): void
+    {
+        Database::run('UPDATE lead_statuses SET color = ? WHERE id = ?', [$color, $statusId]);
     }
 }

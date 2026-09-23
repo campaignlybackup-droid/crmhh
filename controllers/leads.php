@@ -486,6 +486,23 @@ switch ($action) {
         echo json_encode($result);
         exit;
     }
+
+    case 'api_update_status_color': {
+        if (($_POST['_csrf'] ?? '') !== Csrf::token()) {
+            echo json_encode(['success' => false, 'error' => 'CSRF verification failed']); exit;
+        }
+        if (!Auth::hasRole('founder') && !Auth::hasRole('manager')) {
+            echo json_encode(['success' => false, 'error' => 'Permission denied']); exit;
+        }
+        $statusId = (int)($_POST['status_id'] ?? 0);
+        $color = trim($_POST['color'] ?? '');
+        if (!$statusId || !$color) {
+            echo json_encode(['success' => false, 'error' => 'Invalid parameters']); exit;
+        }
+        LeadModel::updateStatusColor($statusId, $color);
+        echo json_encode(['success' => true, 'status_id' => $statusId, 'color' => $color]);
+        exit;
+    }
     
     case 'api_create_folder': {
         Permission::require('leads.assign'); // Only founder

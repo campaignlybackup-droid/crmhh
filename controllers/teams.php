@@ -81,6 +81,11 @@ switch ($action) {
         $teams = $canManage ? TeamModel::all() : Database::all(
             'SELECT * FROM teams WHERE deleted_at IS NULL AND id IN (' . implode(',', array_map('intval', $managedTeamIds ?: [0])) . ') ORDER BY name'
         );
+        foreach ($teams as &$t) {
+            $t['members_count'] = (int)Database::scalar('SELECT COUNT(*) FROM team_members tm JOIN users u ON u.id = tm.user_id WHERE tm.team_id = ? AND u.deleted_at IS NULL', [$t['id']]);
+            $t['managers'] = TeamModel::managers((int)$t['id']);
+        }
+        unset($t);
         render_page('teams/list', compact('teams', 'canManage'), 'Teams');
     }
 }

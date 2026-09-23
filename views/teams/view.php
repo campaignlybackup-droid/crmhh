@@ -25,12 +25,28 @@
 </div>
 
 <div class="card">
-    <div class="card-title">Workload</div>
+    <div class="card-title">Team Workload &amp; Deliverables</div>
     <div class="table-wrap"><table>
-        <thead><tr><th>Member</th><th>Open Tasks</th><th>Overdue</th><th>Completed</th></tr></thead>
+        <thead>
+            <tr>
+                <th>Member</th>
+                <th>Open Tasks</th>
+                <th>Overdue Tasks</th>
+                <th>Tasks Completed</th>
+                <th>Active Reels/Posts</th>
+                <th>Content Done</th>
+            </tr>
+        </thead>
         <tbody>
         <?php foreach ($workload as $w): ?>
-            <tr><td><?= e($w['name']) ?></td><td><?= (int)$w['open_tasks'] ?></td><td><?= (int)$w['overdue_tasks'] ?></td><td><?= (int)$w['completed_tasks'] ?></td></tr>
+            <tr>
+                <td><strong><?= e($w['name']) ?></strong></td>
+                <td><span class="badge badge-<?= (int)$w['open_tasks'] > 0 ? 'primary' : 'secondary' ?>"><?= (int)$w['open_tasks'] ?></span></td>
+                <td><span class="badge badge-<?= (int)$w['overdue_tasks'] > 0 ? 'danger' : 'secondary' ?>"><?= (int)$w['overdue_tasks'] ?></span></td>
+                <td><?= (int)$w['completed_tasks'] ?></td>
+                <td><span class="badge" style="background:#7c3aed; color:#fff;"><?= (int)$w['open_content'] ?></span></td>
+                <td><?= (int)$w['completed_content'] ?></td>
+            </tr>
         <?php endforeach; ?>
         </tbody>
     </table></div>

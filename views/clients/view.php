@@ -214,22 +214,203 @@
     <?php endif; ?>
 </div>
 
-<div class="card">
-    <div class="card-title">Related Content Calendar <a href="<?= url('content_calendar', ['client_id' => $client['id']]) ?>" class="btn btn-sm" style="float:right;">+ View/Add</a></div>
-    <?php if (empty($contentItems)): ?><p class="text-muted small">No content items yet for this client.</p><?php else: ?>
-    <div class="table-wrap responsive-table"><table>
-        <thead><tr><th>Post Date</th><th>Title</th><th>Assigned</th><th>Status</th></tr></thead>
-        <tbody>
-        <?php foreach ($contentItems as $p): ?>
-            <tr>
-                <td data-label="Post Date"><?= format_date($p['post_date']) ?></td>
-                <td data-label="Title"><strong><?= e($p['title']) ?></strong></td>
-                <td data-label="Assigned"><?= e($p['assignee_name'] ?? '—') ?></td>
-                <td data-label="Status"><span class="badge badge-<?= status_badge_class($p['status']) ?>"><?= e(humanize($p['status'])) ?></span></td>
-            </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table></div>
+<!-- ============================================================= -->
+<!-- REELS DELIVERABLES PIPELINE (LINKED TO CONTENT CALENDAR)       -->
+<!-- ============================================================= -->
+<?php
+    $reels = $clientDeliverables['reels'] ?? [];
+    $posts = $clientDeliverables['posts'] ?? [];
+    $reelsReq = $clientDeliverables['reels_required'] ?? 0;
+    $reelsComp = $clientDeliverables['reels_completed'] ?? 0;
+    $postsReq = $clientDeliverables['posts_required'] ?? 0;
+    $postsComp = $clientDeliverables['posts_completed'] ?? 0;
+    
+    $reelsPct = $reelsReq > 0 ? min(100, round(($reelsComp / $reelsReq) * 100)) : (count($reels) > 0 ? round(($reelsComp / count($reels)) * 100) : 0);
+    $postsPct = $postsReq > 0 ? min(100, round(($postsComp / $postsReq) * 100)) : (count($posts) > 0 ? round(($postsComp / count($posts)) * 100) : 0);
+?>
+
+<div class="card mb-4" style="border-top:4px solid #7c3aed; box-shadow:0 2px 10px rgba(124, 58, 237, 0.08);">
+    <div class="flex-between mb-3" style="flex-wrap:wrap; gap:10px;">
+        <div>
+            <div style="font-size:16px; font-weight:800; color:#7c3aed; display:flex; align-items:center; gap:8px;">
+                <span>🎬 Reels Deliverables</span>
+                <span class="badge" style="background:#ede9fe; color:#6d28d9; font-weight:700; font-size:11px;" id="client-reels-badge">
+                    <?= $reelsComp ?> / <?= $reelsReq > 0 ? $reelsReq : count($reels) ?> Completed (<?= $reelsPct ?>%)
+                </span>
+            </div>
+            <div class="text-muted small" style="margin-top:2px;">Track scripting, video editing, double-check review, and scheduled posting.</div>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-primary" onclick="openClientAddDeliverable('reel')" style="background:#7c3aed; border-color:#7c3aed; font-size:12px;">+ Add Reel</button>
+            <a href="<?= url('content_calendar', ['client_id' => $client['id'], 'type' => 'reel']) ?>" class="btn btn-sm btn-secondary" style="font-size:12px;">View in Calendar &rarr;</a>
+        </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div style="height:8px; background:#f1f5f9; border-radius:4px; overflow:hidden; margin-bottom:16px;">
+        <div id="client-reels-progress" style="width:<?= $reelsPct ?>%; height:100%; background:linear-gradient(90deg, #7c3aed, #a855f7); border-radius:4px; transition:width 0.3s ease;"></div>
+    </div>
+
+    <?php if (empty($reels)): ?>
+        <div style="background:var(--bg); border:1px dashed var(--border); border-radius:8px; padding:24px; text-align:center;">
+            <div style="font-size:24px; margin-bottom:6px;">🎬</div>
+            <strong style="display:block; font-size:14px; margin-bottom:4px;">No Reels Added Yet</strong>
+            <p class="text-muted small" style="margin-bottom:12px;">Schedule short-form video deliverables for this client. They link into the Content Calendar automatically.</p>
+            <button class="btn btn-sm btn-primary" onclick="openClientAddDeliverable('reel')" style="background:#7c3aed; border-color:#7c3aed;">+ Add First Reel</button>
+        </div>
+    <?php else: ?>
+        <div class="table-wrap responsive-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Reel Title / Concept</th>
+                        <th>Editor</th>
+                        <th>Post Date</th>
+                        <th>Quality Review</th>
+                        <th>Status</th>
+                        <th style="text-align:right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($reels as $r): 
+                        $isDone = in_array($r['status'], ['published', 'completed'], true);
+                    ?>
+                    <tr id="row-deliv-<?= $r['id'] ?>" style="<?= $isDone ? 'opacity:0.8; background:rgba(16, 185, 129, 0.04);' : '' ?>">
+                        <td data-label="Title">
+                            <strong style="color:var(--text);"><?= e($r['title']) ?></strong>
+                            <?php if (!empty($r['drive_link'])): ?>
+                                <a href="<?= e($r['drive_link']) ?>" target="_blank" rel="noopener noreferrer" style="font-size:11px; margin-left:6px; color:#7c3aed; text-decoration:none; font-weight:600;">🔗 Drive Link</a>
+                            <?php endif; ?>
+                            <?php if (!empty($r['content'])): ?>
+                                <div class="text-muted small" style="margin-top:2px;"><?= e(mb_strimwidth($r['content'], 0, 70, '...')) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($r['rectification_notes'])): ?>
+                                <div style="font-size:11px; color:#e11d48; margin-top:2px;">⚠️ Rectify: <?= e($r['rectification_notes']) ?></div>
+                            <?php endif; ?>
+                        </td>
+                        <td data-label="Editor"><?= e($r['assignee_name'] ?? '—') ?></td>
+                        <td data-label="Post Date"><?= format_date($r['post_date']) ?></td>
+                        <td data-label="Quality Review">
+                            <?php if ($r['status'] === 'needs_rectification'): ?>
+                                <span class="badge badge-danger" style="font-size:10px;">⚠️ Needs Rectification</span>
+                            <?php elseif ($r['status'] === 'manager_review'): ?>
+                                <span class="badge badge-info" style="font-size:10px;">Editor Checked ✓ &bull; In Manager Review</span>
+                            <?php elseif (!empty($r['manager_reviewed_by']) || in_array($r['status'], ['scheduled', 'published', 'completed'], true)): ?>
+                                <span class="badge badge-success" style="font-size:10px;">✓ Double-Checked</span>
+                            <?php else: ?>
+                                <span class="badge badge-warning" style="font-size:10px;">Pending Editor Check</span>
+                            <?php endif; ?>
+                        </td>
+                        <td data-label="Status">
+                            <span class="badge badge-<?= status_badge_class($r['status']) ?>" id="deliv-badge-<?= $r['id'] ?>"><?= e(humanize($r['status'])) ?></span>
+                        </td>
+                        <td data-label="Actions" style="text-align:right;">
+                            <div class="btn-group" style="justify-content:flex-end;">
+                                <button class="btn btn-sm <?= $isDone ? 'btn-secondary' : 'btn-success' ?>" style="font-size:11px; padding:3px 8px; font-weight:600;" onclick="toggleClientDeliverableStatus(<?= $r['id'] ?>)" id="btn-deliv-<?= $r['id'] ?>">
+                                    <?= $isDone ? '↺ Mark Unfinished' : '✓ Mark Done' ?>
+                                </button>
+                                <a href="<?= url('content_calendar', ['client_id' => $client['id']]) ?>" class="btn btn-sm btn-secondary" style="font-size:11px; padding:3px 8px;">Calendar</a>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</div>
+
+<!-- ============================================================= -->
+<!-- POSTS & STATICS DELIVERABLES PIPELINE                         -->
+<!-- ============================================================= -->
+<div class="card mb-4" style="border-top:4px solid #0284c7; box-shadow:0 2px 10px rgba(2, 132, 199, 0.08);">
+    <div class="flex-between mb-3" style="flex-wrap:wrap; gap:10px;">
+        <div>
+            <div style="font-size:16px; font-weight:800; color:#0284c7; display:flex; align-items:center; gap:8px;">
+                <span>🖼️ Posts &amp; Statics Deliverables</span>
+                <span class="badge" style="background:#e0f2fe; color:#0369a1; font-weight:700; font-size:11px;" id="client-posts-badge">
+                    <?= $postsComp ?> / <?= $postsReq > 0 ? $postsReq : count($posts) ?> Completed (<?= $postsPct ?>%)
+                </span>
+            </div>
+            <div class="text-muted small" style="margin-top:2px;">Track graphic design, carousels, copy approval, and scheduled posting.</div>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-primary" onclick="openClientAddDeliverable('post')" style="background:#0284c7; border-color:#0284c7; font-size:12px;">+ Add Post</button>
+            <a href="<?= url('content_calendar', ['client_id' => $client['id'], 'type' => 'post']) ?>" class="btn btn-sm btn-secondary" style="font-size:12px;">View in Calendar &rarr;</a>
+        </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div style="height:8px; background:#f1f5f9; border-radius:4px; overflow:hidden; margin-bottom:16px;">
+        <div id="client-posts-progress" style="width:<?= $postsPct ?>%; height:100%; background:linear-gradient(90deg, #0284c7, #38bdf8); border-radius:4px; transition:width 0.3s ease;"></div>
+    </div>
+
+    <?php if (empty($posts)): ?>
+        <div style="background:var(--bg); border:1px dashed var(--border); border-radius:8px; padding:24px; text-align:center;">
+            <div style="font-size:24px; margin-bottom:6px;">🖼️</div>
+            <strong style="display:block; font-size:14px; margin-bottom:4px;">No Posts Added Yet</strong>
+            <p class="text-muted small" style="margin-bottom:12px;">Schedule static graphic, carousel, or image deliverables for this client.</p>
+            <button class="btn btn-sm btn-primary" onclick="openClientAddDeliverable('post')" style="background:#0284c7; border-color:#0284c7;">+ Add First Post</button>
+        </div>
+    <?php else: ?>
+        <div class="table-wrap responsive-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Post Title / Creative</th>
+                        <th>Designer</th>
+                        <th>Post Date</th>
+                        <th>Quality Review</th>
+                        <th>Status</th>
+                        <th style="text-align:right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($posts as $p): 
+                        $isDone = in_array($p['status'], ['published', 'completed'], true);
+                    ?>
+                    <tr id="row-deliv-<?= $p['id'] ?>" style="<?= $isDone ? 'opacity:0.8; background:rgba(16, 185, 129, 0.04);' : '' ?>">
+                        <td data-label="Title">
+                            <strong style="color:var(--text);"><?= e($p['title']) ?></strong>
+                            <?php if (!empty($p['drive_link'])): ?>
+                                <a href="<?= e($p['drive_link']) ?>" target="_blank" rel="noopener noreferrer" style="font-size:11px; margin-left:6px; color:#0284c7; text-decoration:none; font-weight:600;">🔗 Drive Link</a>
+                            <?php endif; ?>
+                            <?php if (!empty($p['content'])): ?>
+                                <div class="text-muted small" style="margin-top:2px;"><?= e(mb_strimwidth($p['content'], 0, 70, '...')) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($p['rectification_notes'])): ?>
+                                <div style="font-size:11px; color:#e11d48; margin-top:2px;">⚠️ Rectify: <?= e($p['rectification_notes']) ?></div>
+                            <?php endif; ?>
+                        </td>
+                        <td data-label="Designer"><?= e($p['assignee_name'] ?? '—') ?></td>
+                        <td data-label="Post Date"><?= format_date($p['post_date']) ?></td>
+                        <td data-label="Quality Review">
+                            <?php if ($p['status'] === 'needs_rectification'): ?>
+                                <span class="badge badge-danger" style="font-size:10px;">⚠️ Needs Rectification</span>
+                            <?php elseif ($p['status'] === 'manager_review'): ?>
+                                <span class="badge badge-info" style="font-size:10px;">Editor Checked ✓ &bull; In Manager Review</span>
+                            <?php elseif (!empty($p['manager_reviewed_by']) || in_array($p['status'], ['scheduled', 'published', 'completed'], true)): ?>
+                                <span class="badge badge-success" style="font-size:10px;">✓ Double-Checked</span>
+                            <?php else: ?>
+                                <span class="badge badge-warning" style="font-size:10px;">Pending Editor Check</span>
+                            <?php endif; ?>
+                        </td>
+                        <td data-label="Status">
+                            <span class="badge badge-<?= status_badge_class($p['status']) ?>" id="deliv-badge-<?= $p['id'] ?>"><?= e(humanize($p['status'])) ?></span>
+                        </td>
+                        <td data-label="Actions" style="text-align:right;">
+                            <div class="btn-group" style="justify-content:flex-end;">
+                                <button class="btn btn-sm <?= $isDone ? 'btn-secondary' : 'btn-success' ?>" style="font-size:11px; padding:3px 8px; font-weight:600;" onclick="toggleClientDeliverableStatus(<?= $p['id'] ?>)" id="btn-deliv-<?= $p['id'] ?>">
+                                    <?= $isDone ? '↺ Mark Unfinished' : '✓ Mark Done' ?>
+                                </button>
+                                <a href="<?= url('content_calendar', ['client_id' => $client['id']]) ?>" class="btn btn-sm btn-secondary" style="font-size:11px; padding:3px 8px;">Calendar</a>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     <?php endif; ?>
 </div>
 
@@ -386,3 +567,107 @@ function openAddRequirement(csId, svcName) {
 }
 </script>
 <?php endif; ?>
+
+<!-- Client Add Deliverable Modal (Reels / Posts) -->
+<div class="modal-overlay" id="clientAddDeliverableModal">
+    <div class="modal" style="max-width:540px;">
+        <span class="modal-close" onclick="closeClientAddDeliverable()">&times;</span>
+        <div class="modal-title" id="clientDelivModalTitle">Schedule New Deliverable</div>
+        <form method="post" action="<?= url('content_calendar', ['action' => 'store']) ?>">
+            <?= Csrf::field() ?>
+            <input type="hidden" name="client_id" value="<?= $client['id'] ?>">
+            <input type="hidden" name="return_to" value="client">
+            
+            <div class="form-row">
+                <div class="form-group"><label>Deliverable Type *</label>
+                    <select name="content_type" id="clientDelivType" required class="form-control">
+                        <option value="reel">🎬 Reel (Short-Form Video)</option>
+                        <option value="post">🖼️ Post / Static Graphic</option>
+                        <option value="carousel">📑 Carousel</option>
+                        <option value="story">📱 Story</option>
+                    </select>
+                </div>
+                <div class="form-group"><label>Scheduled Post Date *</label>
+                    <input type="date" name="post_date" value="<?= date('Y-m-d') ?>" required class="form-control">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Title / Concept *</label>
+                <input type="text" name="title" id="clientDelivTitle" placeholder="e.g. Testimonial Reel #02 or Special Offer Post" required class="form-control">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group"><label>Assignee (Editor / Creator)</label>
+                    <select name="assigned_to" class="form-control">
+                        <option value="">— Unassigned —</option>
+                        <?php foreach ($managers as $m): ?>
+                            <option value="<?= $m['id'] ?>"><?= e($m['name']) ?><?= $m['id'] === Auth::id() ? ' (YOU)' : '' ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group"><label>Pipeline Stage</label>
+                    <select name="status" class="form-control">
+                        <option value="draft">1. Draft / Scripting</option>
+                        <option value="pending_editor_check">2. Pending Editor Check</option>
+                        <option value="manager_review">3. Pending Manager Review (Manav)</option>
+                        <option value="scheduled">4. Scheduled</option>
+                        <option value="published">5. Published &amp; Completed</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Google Drive / Video Asset Link</label>
+                <input type="url" name="drive_link" placeholder="https://drive.google.com/..." class="form-control">
+            </div>
+
+            <div class="form-group">
+                <label>Brief / Script Notes</label>
+                <textarea name="content" rows="3" placeholder="Notes, hooks, editing guidelines..." class="form-control"></textarea>
+            </div>
+
+            <div class="flex-between" style="margin-top:16px;">
+                <button type="submit" class="btn btn-primary">Add Deliverable &amp; Link to Calendar</button>
+                <button type="button" class="btn" onclick="closeClientAddDeliverable()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openClientAddDeliverable(type) {
+    document.getElementById('clientDelivType').value = type;
+    document.getElementById('clientDelivModalTitle').innerText = (type === 'reel') ? '🎬 Add Reel Deliverable' : '🖼️ Add Post / Graphic Deliverable';
+    document.getElementById('clientDelivTitle').placeholder = (type === 'reel') ? 'e.g. Product Demo Reel #04' : 'e.g. Infographic Carousel Post';
+    document.getElementById('clientAddDeliverableModal').classList.add('show');
+}
+
+function closeClientAddDeliverable() {
+    document.getElementById('clientAddDeliverableModal').classList.remove('show');
+}
+
+function toggleClientDeliverableStatus(id) {
+    const formData = new FormData();
+    formData.append('id', id);
+    formData.append('csrf_token', '<?= Csrf::token() ?>');
+
+    fetch('<?= url("content_calendar", ["action" => "toggle_done"]) ?>', {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert(data.error || 'Failed to update deliverable status.');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Network error while updating status.');
+    });
+}
+</script>

@@ -3,10 +3,40 @@
 echo "<h1>Emergency Code Updater</h1><pre>";
 
 $files = [
-    'controllers/proposals.php',
-    'models/ProposalModel.php',
-    'views/proposals/form.php',
-    'controllers/dashboard.php'
+    'core/Database.php',
+    'core/bootstrap.php',
+    'core/Flash.php',
+    'assets/css/style.css',
+    'index.php',
+    'models/OperationsIssueModel.php',
+    'models/LeadModel.php',
+    'models/ContentCalendarModel.php',
+    'models/ApprovalModel.php',
+    'models/LeaveModel.php',
+    'models/ReportModel.php',
+    'models/UserModel.php',
+    'models/TeamModel.php',
+    'controllers/operations_issues.php',
+    'controllers/dashboard.php',
+    'controllers/content_calendar.php',
+    'controllers/clients.php',
+    'controllers/approvals.php',
+    'controllers/leads.php',
+    'controllers/teams.php',
+    'controllers/folder_settings.php',
+    'views/operations_issues/index.php',
+    'views/operations_issues/form.php',
+    'views/operations_issues/view.php',
+    'views/dashboard/index.php',
+    'views/content_calendar/index.php',
+    'views/clients/view.php',
+    'views/approvals/view.php',
+    'views/leads/list.php',
+    'views/teams/list.php',
+    'views/teams/view.php',
+    'views/layout/sidebar.php',
+    'database/schema.sql',
+    'migrate_deep_fixes.php'
 ];
 
 $baseUrl = 'https://raw.githubusercontent.com/campaignlybackup-droid/crmhh/main/';

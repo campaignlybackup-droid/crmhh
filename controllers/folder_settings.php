@@ -1,6 +1,6 @@
 <?php
 Auth::requireLogin();
-if (!Auth::hasRole('founder')) {
+if (!Auth::isFounder() && !Permission::has('leads.manage')) {
     Permission::deny();
 }
 

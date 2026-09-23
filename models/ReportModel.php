@@ -34,10 +34,15 @@ class ReportModel
         if (Permission::has('reports.view_all', $userId)) {
             // no restriction
         } elseif (Permission::has('reports.view_team', $userId)) {
-            $ids = Permission::managedUserIds($userId);
-            $ph = implode(',', array_fill(0, count($ids), '?'));
-            $where[] = "dr.user_id IN ($ph)";
-            $params = array_merge($params, $ids);
+            $ids = array_values(array_unique(array_merge([$userId], Permission::managedUserIds($userId))));
+            if (!empty($ids)) {
+                $ph = implode(',', array_fill(0, count($ids), '?'));
+                $where[] = "dr.user_id IN ($ph)";
+                $params = array_merge($params, $ids);
+            } else {
+                $where[] = 'dr.user_id = ?';
+                $params[] = $userId;
+            }
         } else {
             $where[] = 'dr.user_id = ?';
             $params[] = $userId;
@@ -70,7 +75,7 @@ class ReportModel
         if (Permission::has('reports.view_all', $userId)) {
             // no restriction
         } elseif (Permission::has('reports.view_team', $userId)) {
-            $ids = Permission::managedUserIds($userId);
+            $ids = array_values(array_unique(array_merge([$userId], Permission::managedUserIds($userId))));
             if (empty($ids)) return []; // No team to view
             $ph = implode(',', array_fill(0, count($ids), '?'));
             $where[] = "dr.user_id IN ($ph)";

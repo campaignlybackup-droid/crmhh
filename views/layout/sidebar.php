@@ -14,6 +14,7 @@ $canTeams = Permission::has('teams.manage') || !empty(UserModel::managedTeamsFor
         <li class="<?= nav_active('content_calendar', $page) ?>"><a href="<?= url('content_calendar') ?>"><span class="nav-ico">&#128203;</span> Content Calendar</a></li>
         <li class="<?= nav_active('availability', $page) ?>"><a href="<?= url('availability') ?>"><span class="nav-ico">&#9200;</span> Founder Availability</a></li>
         <li class="<?= nav_active('approvals', $page) ?>"><a href="<?= url('approvals') ?>"><span class="nav-ico">&#10004;</span> Approvals</a></li>
+        <li class="<?= nav_active('operations_issues', $page) ?>"><a href="<?= url('operations_issues') ?>"><span class="nav-ico">&#9888;</span> Operations QC &amp; Errors</a></li>
         <?php if (Permission::has('proposals.view')): ?>
         <li class="<?= nav_active('proposals', $page) ?>"><a href="<?= url('proposals') ?>"><span class="nav-ico">&#128221;</span> Proposals</a></li>
         <?php endif; ?>

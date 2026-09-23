@@ -73,6 +73,8 @@ if (file_exists($configFile)) {
     require __DIR__ . '/../models/ProposalModel.php';
     require __DIR__ . '/../models/AnnouncementModel.php';
     require __DIR__ . '/../models/ContentCalendarModel.php';
+    require __DIR__ . '/../models/OperationsIssueModel.php';
+    Database::autoMigrate();
 }
 
 function csrf_check_or_die(): void

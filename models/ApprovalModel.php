@@ -5,10 +5,11 @@ class ApprovalModel
     public static function find(int $id): ?array
     {
         return Database::one(
-            'SELECT a.*, u.name AS sender_name, r.name AS reviewer_name
+            'SELECT a.*, u.name AS sender_name, r.name AS reviewer_name, ed.name AS editor_name
              FROM approvals a
              JOIN users u ON u.id = a.user_id
              LEFT JOIN users r ON r.id = a.reviewer_id
+             LEFT JOIN users ed ON ed.id = a.editor_id
              WHERE a.id = ?',
             [$id]
         );
@@ -17,16 +18,31 @@ class ApprovalModel
     public static function create(array $data): int
     {
         Database::run(
-            'INSERT INTO approvals (user_id, title, description, status, created_at) VALUES (?, ?, ?, ?, NOW())',
-            [$data['user_id'], $data['title'], $data['description'] ?: null, 'pending']
+            'INSERT INTO approvals (user_id, title, description, status, stage, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
+            [$data['user_id'], $data['title'], $data['description'] ?: null, 'pending', 'pending_editor']
         );
         return (int)Database::lastInsertId();
+    }
+
+    public static function editorCheck(int $id, bool $passed, int $editorId, ?string $notes): void
+    {
+        if ($passed) {
+            Database::run(
+                "UPDATE approvals SET stage = 'pending_manager', editor_id = ?, editor_notes = ?, status = 'pending', rectification_notes = NULL WHERE id = ?",
+                [$editorId, $notes, $id]
+            );
+        } else {
+            Database::run(
+                "UPDATE approvals SET status = 'needs_rectification', editor_id = ?, editor_notes = ?, rectification_notes = ? WHERE id = ?",
+                [$editorId, $notes, $notes, $id]
+            );
+        }
     }
 
     public static function updateStatus(int $id, string $status, int $reviewerId, ?string $notes): void
     {
         Database::run(
-            'UPDATE approvals SET status = ?, reviewer_id = ?, reviewer_notes = ? WHERE id = ?',
+            'UPDATE approvals SET status = ?, reviewer_id = ?, reviewer_notes = ?, stage = "completed" WHERE id = ?',
             [$status, $reviewerId, $notes, $id]
         );
     }

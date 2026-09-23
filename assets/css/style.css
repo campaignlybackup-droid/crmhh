@@ -159,7 +159,7 @@ td.wrap{white-space:normal}
 /* Alerts */
 .alert{padding:10px 16px;border-radius:var(--radius);margin-bottom:14px;font-size:13.5px;border:1px solid transparent}
 .alert-success{background:#e7f6ec;color:#146c34;border-color:#c3ebd0}
-.alert-danger{background:#fdecee;color:#a3222f;border-color:#f7cdd2}
+.alert-danger, .alert-error{background:#fdecee;color:#a3222f;border-color:#f7cdd2}
 .alert-info{background:#e8f1fd;color:#1f5bab;border-color:#c6dffa}
 .alert-warning{background:#fff6e0;color:#8a6300;border-color:#f5e2a6}
 

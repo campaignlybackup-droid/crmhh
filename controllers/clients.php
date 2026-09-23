@@ -34,13 +34,14 @@ switch ($action) {
             [$id]
         );
         $contentItems = ContentCalendarModel::all($id);
+        $clientDeliverables = ContentCalendarModel::forClientGrouped($id);
         $proposals = Database::all(
             "SELECT p.*, u.name AS assigned_name FROM proposals p LEFT JOIN users u ON u.id = p.assigned_user_id WHERE p.client_id = ? ORDER BY p.deadline_at ASC",
             [$id]
         );
         $allServices = ServiceModel::all();
         $managers = UserModel::activeSelectList();
-        render_page('clients/view', compact('client', 'services', 'timeline', 'tasks', 'contentItems', 'proposals', 'fullAccess', 'allServices', 'managers'), $client['name']);
+        render_page('clients/view', compact('client', 'services', 'timeline', 'tasks', 'contentItems', 'clientDeliverables', 'proposals', 'fullAccess', 'allServices', 'managers'), $client['name']);
         break;
     }
 

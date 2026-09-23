@@ -6,7 +6,10 @@
             <a href="<?= url('leads', $filters + ['view' => 'kanban']) ?>" class="btn btn-sm <?= ($_GET['view'] ?? '') === 'kanban' ? 'btn-primary' : 'btn-secondary' ?>" style="border-radius: 0 4px 4px 0; border-left: none;">Kanban</a>
         </div>
     </div>
-    <div class="btn-group">
+        <button type="button" class="btn btn-secondary" onclick="toggleSheetsMode()" id="sheets-toggle-btn">⛶ Sheets Mode</button>
+        <?php if (Auth::hasRole('founder') || Auth::hasRole('manager')): ?>
+        <button type="button" class="btn btn-secondary" onclick="openStatusColorsModal()">🎨 Status Colors</button>
+        <?php endif; ?>
         <?php if (!empty($filters['folder_id']) && Auth::hasRole('founder')): ?>
         <a href="<?= url('folder_settings', ['folder_id' => $filters['folder_id']]) ?>" class="btn btn-secondary">Folder Settings</a>
         <?php endif; ?>
@@ -115,11 +118,12 @@
 <?php endif; ?>
 
 
-<div class="table-wrap responsive-table" style="position:relative;">
+<div id="leads-table-container" class="table-wrap responsive-table" style="position:relative;">
 <table>
 <thead><tr>
     <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?><th class="checkbox-col" style="width:40px;"><input type="checkbox" onclick="toggleAllLeads(this)" title="Select All"></th><?php endif; ?>
     <th>ID</th><th>Folder</th><th>Name</th><th>Phone</th><th>Email</th><th>Company</th><th>Source</th>
+    <th>Docs</th><th>Docs Access</th>
     <?php if (!empty($customFields)) foreach ($customFields as $cf): ?><th><?= e($cf['field_name']) ?></th><?php endforeach; ?>
     <th>Status</th><th>Assigned</th><th>Follow-up</th><th>Next Step</th><th>Notes</th><th>Actions</th>
 </tr></thead>
@@ -139,6 +143,16 @@
     <td data-label="Email"><input type="email" id="qa_email" placeholder="Email" class="form-control form-control-sm" style="width:100%; min-width:100px;"></td>
     <td data-label="Company"><input type="text" id="qa_company" placeholder="Company" class="form-control form-control-sm" style="width:100%; min-width:90px;"></td>
     <td data-label="Source"><input type="text" id="qa_source" placeholder="Source" class="form-control form-control-sm" style="width:100%; min-width:80px;"></td>
+    <td data-label="Docs"><input type="url" id="qa_docs_link" placeholder="Drive URL" class="form-control form-control-sm" style="width:100%; min-width:90px;"></td>
+    <td data-label="Docs Access">
+        <select id="qa_docs_access" class="form-control form-control-sm" style="width:100%; min-width:95px;">
+            <option value="no_access">No Access</option>
+            <option value="requested">Requested ⏳</option>
+            <option value="granted">Granted ✓</option>
+            <option value="viewer">Viewer 👁️</option>
+            <option value="editor">Editor ✏️</option>
+        </select>
+    </td>
     
     <?php if (!empty($customFields)) foreach ($customFields as $cf): ?>
     <td data-label="<?= e($cf['field_name']) ?>">
@@ -181,13 +195,15 @@
 <?php if (empty($rows)): ?>
     <tr><td colspan="12" class="text-muted">No leads found.</td></tr>
 <?php endif; ?>
-<?php foreach ($rows as $r): ?>
-    <tr id="row_<?= $r['id'] ?>">
+<?php foreach ($rows as $r): 
+    $rowStatusColor = !empty($r['status_color']) ? $r['status_color'] : '#6c757d';
+?>
+    <tr id="row_<?= $r['id'] ?>" data-status-id="<?= $r['status_id'] ?>" style="background: <?= !empty($r['status_color']) ? "color-mix(in srgb, {$r['status_color']} 13%, var(--surface, #ffffff))" : 'inherit' ?>; border-left: 5px solid <?= e($rowStatusColor) ?>; transition: background 0.3s ease, border-left-color 0.3s ease;">
         <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
             <td class="checkbox-col"><input type="checkbox" class="lead-checkbox" value="<?= $r['id'] ?>" onchange="updateBulkDeleteBtn()"></td>
         <?php endif; ?>
         <td data-label="ID">
-            <a href="<?= url('leads', ['action' => 'view', 'id' => $r['id']]) ?>"><?= e($r['lead_code']) ?></a>
+            <a href="<?= url('leads', ['action' => 'view', 'id' => $r['id']]) ?>" style="font-weight:600;"><?= e($r['lead_code']) ?></a>
             <input type="hidden" class="edit-input" data-field="id" value="<?= $r['id'] ?>">
         </td>
         <td data-label="Folder">
@@ -210,6 +226,23 @@
         </td>
         <td data-label="Source">
             <input type="text" class="edit-input" style="width:100%;min-width:90px;" data-field="source" value="<?= e($r['source'] ?? '') ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
+        </td>
+        <td data-label="Docs" style="white-space:nowrap;">
+            <div style="display:flex; align-items:center; gap:4px;">
+                <input type="url" class="edit-input" style="width:100px; font-size:11px;" data-field="docs_link" placeholder="Drive / Doc URL" value="<?= e($r['docs_link'] ?? '') ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)">
+                <?php if (!empty($r['docs_link'])): ?>
+                    <a href="<?= e($r['docs_link']) ?>" target="_blank" rel="noopener noreferrer" title="Open Document" style="font-size:13px; text-decoration:none; padding:2px 4px; background:var(--bg); border-radius:4px; border:1px solid var(--border);">📄</a>
+                <?php endif; ?>
+            </div>
+        </td>
+        <td data-label="Docs Access">
+            <select class="edit-input" style="width:100%; min-width:95px; font-size:11px;" data-field="docs_access" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)">
+                <option value="no_access" <?= ($r['docs_access'] ?? '') === 'no_access' ? 'selected' : '' ?>>No Access</option>
+                <option value="requested" <?= ($r['docs_access'] ?? '') === 'requested' ? 'selected' : '' ?>>Requested ⏳</option>
+                <option value="granted" <?= ($r['docs_access'] ?? '') === 'granted' ? 'selected' : '' ?>>Granted ✓</option>
+                <option value="viewer" <?= ($r['docs_access'] ?? '') === 'viewer' ? 'selected' : '' ?>>Viewer 👁️</option>
+                <option value="editor" <?= ($r['docs_access'] ?? '') === 'editor' ? 'selected' : '' ?>>Editor ✏️</option>
+            </select>
         </td>
         
         <?php if (!empty($customFields)) foreach ($customFields as $cf): 
@@ -344,6 +377,13 @@ function handleInlineEdit(inp) {
                         if (inp.type !== 'checkbox') inp.value = finalVal;
                         inp.style.backgroundColor = '#d4edda';
                         setTimeout(function() { inp.style.backgroundColor = originalBg; }, 800);
+                        
+                        // Live update row color when status changes
+                        if (field === 'status_id' && json.status_color) {
+                            row.style.background = 'color-mix(in srgb, ' + json.status_color + ' 13%, var(--surface, #ffffff))';
+                            row.style.borderLeft = '5px solid ' + json.status_color;
+                        }
+
                         showToast('✅ Saved', 'ok');
                     } else {
                         showToast('❌ ' + (json.error || 'Save failed'), 'error');
@@ -482,5 +522,150 @@ function bulkDelete() {
     document.body.appendChild(form);
     form.submit();
 }
+
+// Sheets Fullscreen Mode Toggle
+function toggleSheetsMode() {
+    var container = document.getElementById('leads-table-container');
+    var isSheets = container.classList.toggle('sheets-fullscreen');
+    document.body.classList.toggle('sheets-mode-active', isSheets);
+    
+    var btn = document.getElementById('sheets-toggle-btn');
+    if (btn) {
+        btn.innerText = isSheets ? '✕ Exit Sheets' : '⛶ Sheets Mode';
+    }
+
+    var floatingExit = document.getElementById('sheets-floating-exit');
+    if (!floatingExit) {
+        floatingExit = document.createElement('div');
+        floatingExit.id = 'sheets-floating-exit';
+        floatingExit.innerHTML = '<span style="font-weight:600; font-size:13px; margin-right:12px;">📊 Google Sheets Table View</span>' +
+                                 '<button class="btn btn-sm btn-primary" onclick="toggleSheetsMode()">✕ Exit Fullscreen (Esc)</button>';
+        floatingExit.style.cssText = 'position:fixed; top:12px; right:24px; z-index:10001; background:var(--surface); border:1px solid var(--border); box-shadow:0 4px 16px rgba(0,0,0,0.15); border-radius:8px; padding:6px 14px; display:flex; align-items:center;';
+        document.body.appendChild(floatingExit);
+    }
+    floatingExit.style.display = isSheets ? 'flex' : 'none';
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.body.classList.contains('sheets-mode-active')) {
+        toggleSheetsMode();
+    }
+});
+
+// Status Colors Modal
+function openStatusColorsModal() {
+    document.getElementById('statusColorsModal').classList.add('show');
+}
+function closeStatusColorsModal() {
+    document.getElementById('statusColorsModal').classList.remove('show');
+}
+
+function saveStatusColor(statusId, colorInput) {
+    var color = colorInput.value;
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '<?= url('leads', ['action' => 'api_update_status_color']) ?>', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+            try {
+                var res = JSON.parse(xhr.responseText);
+                if (res.success) {
+                    showToast('Status color updated', 'ok');
+                    // Update all rows with this status
+                    document.querySelectorAll('tr[data-status-id="' + statusId + '"]').forEach(function(r) {
+                        r.style.background = 'color-mix(in srgb, ' + color + ' 13%, var(--surface, #ffffff))';
+                        r.style.borderLeft = '5px solid ' + color;
+                    });
+                }
+            } catch(e) {}
+        }
+    };
+    xhr.send('status_id=' + encodeURIComponent(statusId) + '&color=' + encodeURIComponent(color) + '&_csrf=<?= e(Csrf::token()) ?>');
+}
 </script>
+
+<!-- Status Colors Customizer Modal -->
+<div class="modal-overlay" id="statusColorsModal">
+    <div class="modal" style="max-width: 550px;">
+        <span class="modal-close" onclick="closeStatusColorsModal()">&times;</span>
+        <div class="modal-title">Customize Status &amp; Row Colors</div>
+        <p class="text-muted small">Pick a color for each status. Full table rows will dynamically tint to match their status color.</p>
+        <div style="max-height: 400px; overflow-y: auto;">
+            <table class="table">
+                <thead><tr><th>Status</th><th>Color Picker</th><th>Hex</th></tr></thead>
+                <tbody>
+                    <?php foreach ($statuses as $st): ?>
+                    <tr>
+                        <td><strong><?= e($st['name']) ?></strong></td>
+                        <td>
+                            <input type="color" value="<?= e($st['color'] ?: '#6c757d') ?>" 
+                                   onchange="this.nextElementSibling.value = this.value; saveStatusColor(<?= $st['id'] ?>, this);" 
+                                   style="width: 40px; height: 32px; border: none; cursor: pointer; border-radius: 4px;">
+                            <input type="text" value="<?= e($st['color'] ?: '#6c757d') ?>" 
+                                   onchange="this.previousElementSibling.value = this.value; saveStatusColor(<?= $st['id'] ?>, this);" 
+                                   style="width: 80px; font-size: 12px; margin-left: 6px; padding: 4px 6px;">
+                        </td>
+                        <td>
+                            <span class="badge" style="background:<?= e($st['color'] ?: '#6c757d') ?>"><?= e($st['name']) ?></span>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <div style="text-align: right; margin-top: 16px;">
+            <button type="button" class="btn btn-primary" onclick="closeStatusColorsModal()">Done</button>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Sheets Fullscreen Mode Styles */
+body.sheets-mode-active {
+    overflow: hidden !important;
+}
+.sheets-fullscreen {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 10000 !important;
+    background: #ffffff !important;
+    padding: 60px 16px 16px 16px !important;
+    margin: 0 !important;
+    max-height: 100vh !important;
+    overflow: auto !important;
+}
+.sheets-fullscreen table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+}
+.sheets-fullscreen table thead th {
+    position: sticky !important;
+    top: 0 !important;
+    background: #f1f5f9 !important;
+    z-index: 20 !important;
+    border-bottom: 2px solid #cbd5e1 !important;
+    border-right: 1px solid #e2e8f0 !important;
+    font-size: 12px !important;
+    padding: 8px !important;
+}
+.sheets-fullscreen table tbody td {
+    border: 1px solid #e2e8f0 !important;
+    padding: 4px 6px !important;
+}
+.sheets-fullscreen .edit-input {
+    border: 1px solid transparent !important;
+    background: transparent !important;
+    border-radius: 2px !important;
+    font-size: 12px !important;
+    padding: 4px !important;
+}
+.sheets-fullscreen .edit-input:hover,
+.sheets-fullscreen .edit-input:focus {
+    border: 1px solid var(--primary) !important;
+    background: #ffffff !important;
+}
+</style>
 <?php render('partials/pagination', ['p' => $p]); ?>

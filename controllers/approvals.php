@@ -52,6 +52,25 @@ switch ($action) {
         break;
     }
 
+    case 'editor_check': {
+        csrf_check_or_die();
+        $id = (int)($_POST['id'] ?? 0);
+        $approval = ApprovalModel::find($id);
+        if (!$approval) fatal_error('Approval request not found.');
+        
+        $decision = $_POST['decision'] ?? 'passed';
+        $notes = trim($_POST['editor_notes'] ?? '');
+        
+        ApprovalModel::editorCheck($id, $decision === 'passed', Auth::id(), $notes);
+        if ($decision === 'passed') {
+            Flash::success('Approval checked by editor and sent to Manager Review.');
+        } else {
+            Flash::warning('Issues flagged and returned for rectification.');
+        }
+        redirect(url('approvals', ['action' => 'view', 'id' => $id]));
+        break;
+    }
+
     case 'review': {
         csrf_check_or_die();
         $id = (int)($_POST['id'] ?? 0);

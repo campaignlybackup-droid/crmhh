@@ -89,7 +89,9 @@ class TeamModel
             "SELECT u.id, u.name,
                     SUM(CASE WHEN t.status NOT IN ('completed','cancelled') THEN 1 ELSE 0 END) AS open_tasks,
                     SUM(CASE WHEN t.status NOT IN ('completed','cancelled') AND t.deadline < NOW() THEN 1 ELSE 0 END) AS overdue_tasks,
-                    SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS completed_tasks
+                    SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS completed_tasks,
+                    (SELECT COUNT(*) FROM content_calendar cc WHERE cc.assigned_to = u.id AND cc.status NOT IN ('published','completed')) AS open_content,
+                    (SELECT COUNT(*) FROM content_calendar cc WHERE cc.assigned_to = u.id AND cc.status IN ('published','completed')) AS completed_content
              FROM users u
              JOIN team_members tm ON tm.user_id = u.id
              LEFT JOIN tasks t ON t.assigned_user_id = u.id AND t.deleted_at IS NULL

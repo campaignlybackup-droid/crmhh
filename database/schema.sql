@@ -125,6 +125,8 @@ CREATE TABLE leads (
     next_followup_date DATE DEFAULT NULL,
     next_step VARCHAR(255) DEFAULT NULL,
     notes TEXT DEFAULT NULL,
+    docs_link VARCHAR(500) DEFAULT NULL,
+    docs_access VARCHAR(50) NOT NULL DEFAULT 'no_access',
     converted_client_id INT UNSIGNED DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -492,8 +494,9 @@ INSERT INTO lead_statuses (name, slug, color, sort_order, is_won, is_lost, is_de
 ('Follow up', 'follow-up', '#fd7e14', 5, 0, 0, 0),
 ('Long nurture', 'long-nurture', '#20c997', 6, 0, 0, 0),
 ('Meet', 'meet', '#6f42c1', 7, 0, 0, 0),
-('Closed', 'closed', '#198754', 8, 1, 0, 0),
-('Dead', 'dead', '#dc3545', 9, 0, 1, 0);
+('Almost closed', 'almost-closed', '#0ea5e9', 8, 0, 0, 0),
+('Closed', 'closed', '#198754', 9, 1, 0, 0),
+('Dead', 'dead', '#dc3545', 10, 0, 1, 0);
 
 INSERT INTO services (name, slug, unit_label) VALUES
 ('Social Media Management', 'social-media', 'posts'),
@@ -632,15 +635,56 @@ CREATE TABLE approvals (
 CREATE TABLE content_calendar (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     client_id INT UNSIGNED NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    content_type VARCHAR(100),
+    service_id INT UNSIGNED DEFAULT NULL,
+    subcategory_id INT UNSIGNED DEFAULT NULL,
+    content_type VARCHAR(50) NOT NULL DEFAULT 'reel',
     post_date DATE NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content TEXT DEFAULT NULL,
+    drive_link VARCHAR(500) DEFAULT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'draft',
-    assigned_to INT UNSIGNED,
+    assigned_to INT UNSIGNED DEFAULT NULL,
+    editor_checked_by INT UNSIGNED DEFAULT NULL,
+    editor_checked_at DATETIME DEFAULT NULL,
+    manager_reviewed_by INT UNSIGNED DEFAULT NULL,
+    manager_reviewed_at DATETIME DEFAULT NULL,
+    rectification_notes TEXT DEFAULT NULL,
+    completed_at DATETIME DEFAULT NULL,
+    created_by INT UNSIGNED DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_cc_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     CONSTRAINT fk_cc_user FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE operations_issues (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    issue_title VARCHAR(255) NOT NULL,
+    description TEXT DEFAULT NULL,
+    noticed_by_id INT UNSIGNED NOT NULL,
+    responsible_id INT UNSIGNED NOT NULL,
+    corrected_by_id INT UNSIGNED DEFAULT NULL,
+    correction_notes TEXT DEFAULT NULL,
+    deduction_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    deduction_type VARCHAR(50) NOT NULL DEFAULT 'deduction',
+    client_id INT UNSIGNED DEFAULT NULL,
+    task_id INT UNSIGNED DEFAULT NULL,
+    content_id INT UNSIGNED DEFAULT NULL,
+    severity ENUM('minor', 'major', 'critical') NOT NULL DEFAULT 'medium',
+    status ENUM('open', 'assigned', 'rectifying', 'corrected', 'escalated_to_founder') NOT NULL DEFAULT 'assigned',
+    due_date DATE DEFAULT NULL,
+    is_delayed TINYINT(1) NOT NULL DEFAULT 0,
+    notified_founder TINYINT(1) NOT NULL DEFAULT 0,
+    founder_escalated_at DATETIME DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    resolved_at DATETIME DEFAULT NULL,
+    KEY idx_oi_responsible (responsible_id),
+    KEY idx_oi_noticed (noticed_by_id),
+    KEY idx_oi_corrected (corrected_by_id),
+    KEY idx_oi_status (status),
+    KEY idx_oi_client (client_id),
+    KEY idx_oi_due (due_date)
 );
 
 -- Performance Indexes

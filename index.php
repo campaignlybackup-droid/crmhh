@@ -6,7 +6,7 @@ Database::autoMigrate();
 $allowedPages = [
     'login', 'dashboard', 'users', 'teams', 'roles', 'leads', 'clients',
     'services', 'tasks', 'calendar', 'availability', 'reports', 'leave',
-    'notifications', 'search', 'audit', 'profile', 'approvals', 'proposals', 'backup', 'announcements', 'content_calendar', 'folder_settings'
+    'notifications', 'search', 'audit', 'profile', 'approvals', 'proposals', 'backup', 'announcements', 'content_calendar', 'folder_settings', 'operations_issues'
 ];
 
 $page = $_GET['page'] ?? 'dashboard';

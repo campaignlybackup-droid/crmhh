@@ -1,15 +1,82 @@
-<h1>Welcome back, <?= e(explode(' ', $currentUser['name'])[0]) ?></h1>
-<p class="text-muted">
-    <?php if (Auth::hasRole('founder')): ?>Founder &middot; complete agency overview<?php else: ?>
-    <?= e(implode(', ', array_column($roles, 'name'))) ?>
-    <?php endif; ?>
-</p>
+<div class="flex-between" style="align-items:flex-start; margin-bottom: 20px;">
+    <div>
+        <h1 style="margin: 0;">Welcome back, <?= e(explode(' ', $currentUser['name'])[0]) ?></h1>
+        <p class="text-muted" style="margin: 4px 0 0;">
+            <?php if (Auth::hasRole('founder')): ?>👑 Founder &middot; Complete Agency Overview<?php else: ?>
+            <?= e(implode(', ', array_column($roles, 'name'))) ?>
+            <?php endif; ?>
+        </p>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+        <span id="live-indicator" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); background:var(--surface); border:1px solid var(--border); padding:6px 12px; border-radius:20px;">
+            <span style="width:8px; height:8px; border-radius:50%; background:var(--success); display:inline-block; box-shadow:0 0 8px var(--success);"></span>
+            Live Updates Active &middot; <span id="last-updated-text">Just now</span>
+        </span>
+        <button class="btn btn-secondary btn-sm" onclick="manualRefreshDashboard()" id="manual-refresh-btn" title="Refresh Dashboard Data">
+            ↻ Refresh
+        </button>
+    </div>
+</div>
 
-<div class="grid grid-4" style="margin-top:16px">
+<!-- ========================================================================= -->
+<!-- 1. AT RISK & DELAYED FOUNDER ESCALATION CENTER -->
+<!-- ========================================================================= -->
+<?php if (!empty($clientAtRiskItems)): ?>
+<div class="card" style="border: 2px solid var(--danger); background: #fff5f5; margin-bottom: 24px; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.1);">
+    <div class="card-title" style="color:var(--danger); display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+        <span>🚨 Client Delivery At Risk &middot; Founder Escalation Queue (<?= count($clientAtRiskItems) ?> Items)</span>
+        <span class="badge badge-danger">Immediate Action Required</span>
+    </div>
+    <p class="small text-muted" style="margin-top:-6px; margin-bottom:12px;">
+        The following client deliverables or operations issues are delayed past deadlines. Founder intervention is requested to reassign or resolve.
+    </p>
+    <div class="table-wrap">
+        <table class="table" style="background:#fff;">
+            <thead>
+                <tr>
+                    <th>Type / Source</th>
+                    <th>Client</th>
+                    <th>Deliverable / Problem</th>
+                    <th>Responsible</th>
+                    <th>Delay / Overdue</th>
+                    <th>Severity</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($clientAtRiskItems as $risk): ?>
+                <tr>
+                    <td><span class="badge badge-secondary" style="font-size:11px;"><?= e($risk['source']) ?></span></td>
+                    <td><strong><?= e($risk['client']) ?></strong></td>
+                    <td><?= e($risk['item']) ?></td>
+                    <td><span class="badge badge-dark"><?= e($risk['responsible']) ?></span></td>
+                    <td><span style="color:var(--danger); font-weight:700;"><?= e($risk['delay']) ?></span></td>
+                    <td>
+                        <?php if ($risk['severity'] === 'critical'): ?>
+                            <span class="badge badge-danger">Critical Risk</span>
+                        <?php else: ?>
+                            <span class="badge badge-warning">Delayed</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <a href="<?= $risk['action_url'] ?>" class="btn btn-sm btn-danger" style="font-size:11px; padding:3px 8px;">Resolve Now</a>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- ========================================================================= -->
+<!-- 2. HIGH-LEVEL STAT CARDS -->
+<!-- ========================================================================= -->
+<div class="grid grid-4" style="margin-bottom: 24px;">
     <?php if ($leadCounts): ?>
     <div class="stat-card">
-        <div class="stat-label">Leads</div>
-        <div class="stat-value"><?= (int)$leadCounts['total'] ?></div>
+        <div class="stat-label">Total Leads</div>
+        <div class="stat-value" id="stat-leads-total"><?= (int)$leadCounts['total'] ?></div>
         <div class="stat-sub"><?= (int)$leadCounts['new_today'] ?> new today &middot; <?= (int)$leadCounts['overdue_followups'] ?> overdue follow-ups</div>
     </div>
     <?php endif; ?>
@@ -22,55 +89,184 @@
     <?php endif; ?>
     <div class="stat-card">
         <div class="stat-label">Pending Tasks</div>
-        <div class="stat-value"><?= (int)$taskCounts['pending'] ?></div>
+        <div class="stat-value" id="stat-tasks-pending"><?= (int)$taskCounts['pending'] ?></div>
         <div class="stat-sub"><?= (int)$taskCounts['upcoming'] ?> due within 3 days</div>
     </div>
     <div class="stat-card">
         <div class="stat-label">Overdue Tasks</div>
-        <div class="stat-value" style="color:var(--danger)"><?= (int)$taskCounts['overdue'] ?></div>
+        <div class="stat-value" style="color:var(--danger)" id="stat-tasks-overdue"><?= (int)$taskCounts['overdue'] ?></div>
         <div class="stat-sub"><?= (int)$taskCounts['completed'] ?> completed total</div>
     </div>
 </div>
 
-<?php if (Auth::hasRole('founder') && isset($masterPendingActions)): ?>
-<div class="card" style="margin-top:16px;">
-    <div class="card-title" style="color:var(--danger)">Master Action Center (All Pending Items)</div>
-    <?php if (empty($masterPendingActions)): ?>
-        <p class="text-muted small">No pending actions across the agency. Everything is caught up!</p>
-    <?php else: ?>
-        <div class="table-wrap">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Type</th>
-                        <th>Title / Subject</th>
-                        <th>Context / Client</th>
-                        <th>Assigned To</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($masterPendingActions as $item): ?>
-                    <tr>
-                        <td><strong><?= e($item['type']) ?></strong></td>
-                        <td><?= e($item['title']) ?></td>
-                        <td><?= e($item['context']) ?></td>
-                        <td><?= e($item['assigned_user_id']) ?></td>
-                        <td><span class="badge badge-<?= status_badge_class($item['status']) ?>"><?= e(humanize($item['status'])) ?></span></td>
-                        <td><a href="<?= $item['url'] ?>" class="btn btn-sm">View</a></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+<!-- ========================================================================= -->
+<!-- 3. ALL-TIME TABLE VIEWS (SHOOTS, APPROVALS, DUE TOMORROW) -->
+<!-- ========================================================================= -->
+<div class="card" style="margin-bottom: 24px; padding: 0; overflow:hidden;">
+    <div style="background:var(--bg); border-bottom:1px solid var(--border); padding: 12px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <div class="tabs" style="margin-bottom:0; border-bottom:none;">
+            <a href="javascript:void(0)" onclick="switchDashboardTable('shoots')" id="tab-btn-shoots" class="active">
+                🎬 Shoots Scheduled (<?= count($shootsScheduled) ?>)
+            </a>
+            <a href="javascript:void(0)" onclick="switchDashboardTable('approvals')" id="tab-btn-approvals">
+                ✓ Approval Pending (<?= count($pendingApprovalsList) ?>)
+            </a>
+            <a href="javascript:void(0)" onclick="switchDashboardTable('due-tomorrow')" id="tab-btn-due-tomorrow">
+                ⏳ Due Tomorrow (<?= count($dueTomorrowList) ?>)
+            </a>
         </div>
-    <?php endif; ?>
-</div>
-<?php endif; ?>
+        <span class="text-muted small">Full Table View (All Time)</span>
+    </div>
 
-<div class="grid grid-2" style="margin-top:8px">
+    <!-- TABLE 1: SHOOTS SCHEDULED -->
+    <div id="table-sec-shoots" style="display:block; padding:16px;">
+        <div class="flex-between" style="margin-bottom:12px;">
+            <h3 style="margin:0; font-size:15px;">All Scheduled Shoots (Videography &amp; Photography)</h3>
+            <a href="<?= url('calendar') ?>" class="btn btn-sm btn-secondary">Open Full Calendar &rarr;</a>
+        </div>
+        <?php if (empty($shootsScheduled)): ?>
+            <p class="text-muted small" style="text-align:center; padding:32px 0;">No shoots currently scheduled. Use the Calendar to schedule shoots.</p>
+        <?php else: ?>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Shoot Date &amp; Time</th>
+                            <th>Client</th>
+                            <th>Shoot Title / Details</th>
+                            <th>Location</th>
+                            <th>Assigned Crew / Videographer</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($shootsScheduled as $shoot): ?>
+                        <tr>
+                            <td>
+                                <strong><?= format_datetime($shoot['start_datetime']) ?></strong>
+                            </td>
+                            <td><?= e($shoot['client_name'] ?: 'Internal / Agency') ?></td>
+                            <td><strong><?= e($shoot['title']) ?></strong></td>
+                            <td><?= e($shoot['location'] ?: 'On Site / Client Studio') ?></td>
+                            <td><span class="badge badge-dark"><?= e($shoot['crew_name'] ?: 'Unassigned') ?></span></td>
+                            <td>
+                                <?php if (!empty($shoot['client_id'])): ?>
+                                    <a href="<?= url('clients', ['action' => 'view', 'id' => $shoot['client_id']]) ?>" class="btn btn-sm btn-secondary">Client Profile</a>
+                                <?php else: ?>
+                                    <a href="<?= url('calendar') ?>" class="btn btn-sm btn-secondary">View in Calendar</a>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- TABLE 2: APPROVAL PENDING (Double Check Process) -->
+    <div id="table-sec-approvals" style="display:none; padding:16px;">
+        <div class="flex-between" style="margin-bottom:12px;">
+            <h3 style="margin:0; font-size:15px;">Approvals &amp; Double Check Queue (Editor Check ➔ Manager Review)</h3>
+            <a href="<?= url('approvals') ?>" class="btn btn-sm btn-secondary">All Approvals &rarr;</a>
+        </div>
+        <?php if (empty($pendingApprovalsList)): ?>
+            <p class="text-muted small" style="text-align:center; padding:32px 0;">No approvals pending. All work is verified and approved!</p>
+        <?php else: ?>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Item Title</th>
+                            <th>Submitter</th>
+                            <th>Editor Quality Check</th>
+                            <th>Current Stage</th>
+                            <th>Date Submitted</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($pendingApprovalsList as $appr): ?>
+                        <tr>
+                            <td><span class="badge badge-secondary" style="font-size:11px;"><?= e($appr['type']) ?></span></td>
+                            <td><strong><?= e($appr['title']) ?></strong></td>
+                            <td><?= e($appr['submitter']) ?></td>
+                            <td>
+                                <?php if ($appr['editor'] !== '—' && $appr['editor'] !== 'Pending'): ?>
+                                    <span style="color:var(--info); font-weight:600;">✓ <?= e($appr['editor']) ?></span>
+                                <?php else: ?>
+                                    <span class="text-muted">Awaiting Editor Check</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <span class="badge <?= strpos($appr['stage'], 'Rectification') !== false ? 'badge-danger' : (strpos($appr['stage'], 'Manager') !== false ? 'badge-info' : 'badge-warning') ?>">
+                                    <?= e($appr['stage']) ?>
+                                </span>
+                            </td>
+                            <td><?= time_ago($appr['created_at']) ?></td>
+                            <td>
+                                <a href="<?= $appr['url'] ?>" class="btn btn-sm btn-primary">Review / Decide</a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- TABLE 3: DUE TOMORROW -->
+    <div id="table-sec-due-tomorrow" style="display:none; padding:16px;">
+        <div class="flex-between" style="margin-bottom:12px;">
+            <h3 style="margin:0; font-size:15px;">Due Tomorrow (<?= format_date($tomorrowDate) ?>)</h3>
+            <span class="badge badge-warning">Prepare Deliverables</span>
+        </div>
+        <?php if (empty($dueTomorrowList)): ?>
+            <p class="text-muted small" style="text-align:center; padding:32px 0;">Nothing due tomorrow. All caught up!</p>
+        <?php else: ?>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Deliverable / Task</th>
+                            <th>Client</th>
+                            <th>Assigned Staff</th>
+                            <th>Due Time</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($dueTomorrowList as $due): ?>
+                        <tr>
+                            <td><span class="badge badge-secondary" style="font-size:11px;"><?= e($due['type']) ?></span></td>
+                            <td><strong><?= e($due['title']) ?></strong></td>
+                            <td><?= e($due['client']) ?></td>
+                            <td><span class="badge badge-dark"><?= e($due['assignee']) ?></span></td>
+                            <td><?= format_datetime($due['due']) ?></td>
+                            <td><span class="badge badge-warning"><?= humanize($due['status']) ?></span></td>
+                            <td><a href="<?= $due['url'] ?>" class="btn btn-sm btn-secondary">Open</a></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- 4. MASTER PENDING ACTIONS & OVERDUE WORK -->
+<!-- ========================================================================= -->
+<div class="grid grid-2" style="margin-bottom: 24px;">
+    <!-- Overdue Tasks -->
     <div class="card">
-        <div class="card-title">Overdue Work <a href="<?= url('tasks', ['status' => 'overdue']) ?>" class="small">View all</a></div>
+        <div class="card-title">
+            <span>Overdue Work</span>
+            <a href="<?= url('tasks', ['status' => 'overdue']) ?>" class="small">View all</a>
+        </div>
         <?php if (empty($overdueTasks)): ?>
             <p class="text-muted small">Nothing overdue. Great work!</p>
         <?php else: ?>
@@ -79,7 +275,7 @@
             <tbody>
             <?php foreach ($overdueTasks as $t): ?>
                 <tr>
-                    <td><a href="<?= url('tasks', ['action' => 'view', 'id' => $t['id']]) ?>"><?= e($t['title']) ?></a></td>
+                    <td><a href="<?= url('tasks', ['action' => 'view', 'id' => $t['id']]) ?>" style="font-weight:600;"><?= e($t['title']) ?></a></td>
                     <td><?= e($t['client_name'] ?? '—') ?></td>
                     <td><?= e($t['assigned_name'] ?? '—') ?></td>
                     <td><span class="badge badge-danger"><?= (int)$t['days_overdue'] ?>d</span></td>
@@ -90,12 +286,13 @@
         <?php endif; ?>
     </div>
 
+    <!-- Recent Activity -->
     <div class="card">
         <div class="card-title">Recent Activity</div>
         <?php if (empty($recentActivity)): ?>
             <p class="text-muted small">No recent activity.</p>
         <?php else: ?>
-        <ul class="timeline">
+        <ul class="timeline" style="max-height:300px; overflow-y:auto;">
             <?php foreach ($recentActivity as $a): ?>
                 <li>
                     <strong><?= e($a['user_name'] ?? 'System') ?></strong> <?= e(humanize($a['action'])) ?> a <?= e($a['entity_type']) ?>
@@ -108,84 +305,59 @@
     </div>
 </div>
 
-<?php if (!empty($myAssignedServices)): ?>
-<div class="card" style="margin-top:8px">
-    <div class="card-title">My Assigned Work & Scopes</div>
-    <div class="table-wrap">
-        <table>
-            <thead><tr><th>Client</th><th>Service</th><th>Assigned Requirement</th><th>Deadline</th><th>Progress</th></tr></thead>
-            <tbody>
-                <?php foreach ($myAssignedServices as $svc): ?>
-                <tr>
-                    <td><a href="<?= url('clients', ['action' => 'view', 'id' => $svc['client_id']]) ?>"><?= e($svc['client_name']) ?> <span class="small text-muted">(<?= e($svc['client_code']) ?>)</span></a></td>
-                    <td><strong><?= e($svc['service_name']) ?></strong></td>
-                    <td>
-                        <strong><?= e($svc['requirement_name']) ?></strong>
-                        <?php if (!empty($svc['req_notes'])): ?><br><span class="text-muted small"><?= e($svc['req_notes']) ?></span><?php endif; ?>
-                    </td>
-                    <td><?= format_date($svc['deadline']) ?: '—' ?></td>
-                    <td><?= $svc['my_completed'] ?> / <?= $svc['quantity_assigned'] !== null ? $svc['quantity_assigned'] : '—' ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-</div>
-<?php endif; ?>
+<!-- JavaScript for Tab Switching and Auto-Refresh Polling -->
+<script>
+function switchDashboardTable(tabId) {
+    document.getElementById('table-sec-shoots').style.display = (tabId === 'shoots') ? 'block' : 'none';
+    document.getElementById('table-sec-approvals').style.display = (tabId === 'approvals') ? 'block' : 'none';
+    document.getElementById('table-sec-due-tomorrow').style.display = (tabId === 'due-tomorrow') ? 'block' : 'none';
 
-<div class="grid grid-2" style="margin-top:8px">
-    <?php if ($clientsVisible && !empty($renewals)): ?>
-    <div class="card">
-        <div class="card-title">Upcoming Renewals</div>
-        <div class="table-wrap"><table>
-            <thead><tr><th>Client</th><th>Renewal Date</th></tr></thead>
-            <tbody>
-            <?php foreach ($renewals as $c): ?>
-                <tr><td><a href="<?= url('clients', ['action' => 'view', 'id' => $c['id']]) ?>"><?= e($c['name']) ?></a></td><td><?= format_date($c['renewal_date']) ?></td></tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table></div>
-    </div>
-    <?php endif; ?>
+    document.getElementById('tab-btn-shoots').className = (tabId === 'shoots') ? 'active' : '';
+    document.getElementById('tab-btn-approvals').className = (tabId === 'approvals') ? 'active' : '';
+    document.getElementById('tab-btn-due-tomorrow').className = (tabId === 'due-tomorrow') ? 'active' : '';
+}
 
-    <?php if (!empty($pendingLeaveApprovals)): ?>
-    <div class="card">
-        <div class="card-title">Leave Requests Awaiting Your Decision</div>
-        <div class="table-wrap"><table>
-            <thead><tr><th>Employee</th><th>Dates</th><th></th></tr></thead>
-            <tbody>
-            <?php foreach ($pendingLeaveApprovals as $lr): ?>
-                <tr>
-                    <td><?= e($lr['user_name']) ?></td>
-                    <td><?= format_date($lr['start_date']) ?> &ndash; <?= format_date($lr['end_date']) ?></td>
-                    <td><a href="<?= url('leave', ['action' => 'view', 'id' => $lr['id']]) ?>" class="btn btn-sm">Review</a></td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table></div>
-    </div>
-    <?php endif; ?>
+function manualRefreshDashboard() {
+    var btn = document.getElementById('manual-refresh-btn');
+    if (btn) {
+        btn.innerText = '↻ Refreshing...';
+        btn.disabled = true;
+    }
+    window.location.reload();
+}
 
-    <?php if (!empty($teamWorkload)): ?>
-    <div class="card">
-        <div class="card-title">Team Workload</div>
-        <div class="table-wrap"><table>
-            <thead><tr><th>Member</th><th>Open</th><th>Overdue</th><th>Completed</th></tr></thead>
-            <tbody>
-            <?php foreach ($teamWorkload as $w): ?>
-                <tr><td><?= e($w['name']) ?></td><td><?= (int)$w['open_tasks'] ?></td><td><?= (int)$w['overdue_tasks'] ?></td><td><?= (int)$w['completed_tasks'] ?></td></tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table></div>
-    </div>
-    <?php endif; ?>
+// Background poll every 45 seconds to keep counters fresh
+var lastSyncSeconds = 0;
+setInterval(function() {
+    lastSyncSeconds += 5;
+    var el = document.getElementById('last-updated-text');
+    if (el) {
+        if (lastSyncSeconds < 60) el.innerText = lastSyncSeconds + 's ago';
+        else el.innerText = Math.floor(lastSyncSeconds / 60) + 'm ago';
+    }
+}, 5000);
 
-    <div class="card">
-        <div class="card-title">Today's Report <a href="<?= url('reports') ?>" class="small"><?= $todaysReport ? 'Edit' : 'Submit now' ?></a></div>
-        <?php if ($todaysReport): ?>
-            <p class="small text-success">You've submitted today's report.</p>
-        <?php else: ?>
-            <p class="small text-muted">You haven't submitted a daily report for today yet.</p>
-        <?php endif; ?>
-    </div>
-</div>
+setInterval(function() {
+    fetch('<?= url('dashboard', ['action' => 'live_sync']) ?>')
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data && data.success) {
+                lastSyncSeconds = 0;
+                var el = document.getElementById('last-updated-text');
+                if (el) el.innerText = 'Just now';
+                
+                if (data.leads && document.getElementById('stat-leads-total')) {
+                    document.getElementById('stat-leads-total').innerText = data.leads.total;
+                }
+                if (data.tasks) {
+                    if (document.getElementById('stat-tasks-pending')) {
+                        document.getElementById('stat-tasks-pending').innerText = data.tasks.pending;
+                    }
+                    if (document.getElementById('stat-tasks-overdue')) {
+                        document.getElementById('stat-tasks-overdue').innerText = data.tasks.overdue;
+                    }
+                }
+            }
+        }).catch(function(err) {});
+}, 45000);
+</script>

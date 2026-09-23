@@ -79,6 +79,8 @@ class UserModel
         Database::beginTransaction();
         try {
             $code = next_code('users', 'employee_code', 'EMP', 4);
+            $founderRoleId = (int)Database::scalar("SELECT id FROM roles WHERE slug = 'founder'");
+            $isFounder = in_array($founderRoleId, array_map('intval', $roleIds), true) || !empty($data['is_founder']) ? 1 : 0;
             Database::run(
                 'INSERT INTO users (employee_code, name, email, phone, password_hash, is_founder, manager_id, status, must_change_password, created_at)
                  VALUES (?,?,?,?,?,?,?,?,1,NOW())',
@@ -88,7 +90,7 @@ class UserModel
                     strtolower(trim($data['email'])),
                     $data['phone'] ?: null,
                     password_hash($data['password'], PASSWORD_DEFAULT),
-                    $data['is_founder'] ?? 0,
+                    $isFounder,
                     $data['manager_id'] ?: null,
                     'active',
                 ]
@@ -111,9 +113,12 @@ class UserModel
         Database::beginTransaction();
         try {
             $before = self::find($id);
+            $founderRoleId = (int)Database::scalar("SELECT id FROM roles WHERE slug = 'founder'");
+            $isFounder = in_array($founderRoleId, array_map('intval', $roleIds), true) || !empty($data['is_founder']) || ($id === 1) ? 1 : 0;
+            
             Database::run(
-                'UPDATE users SET name=?, email=?, phone=?, manager_id=? WHERE id=?',
-                [$data['name'], strtolower(trim($data['email'])), $data['phone'] ?: null, $data['manager_id'] ?: null, $id]
+                'UPDATE users SET name=?, email=?, phone=?, manager_id=?, is_founder=? WHERE id=?',
+                [$data['name'], strtolower(trim($data['email'])), $data['phone'] ?: null, $data['manager_id'] ?: null, $isFounder, $id]
             );
             Database::run('DELETE FROM user_roles WHERE user_id = ?', [$id]);
             foreach ($roleIds as $rid) {

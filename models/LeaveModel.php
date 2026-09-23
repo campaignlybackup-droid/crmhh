@@ -64,10 +64,15 @@ class LeaveModel
         if (Permission::has('leave.approve_all', $userId)) {
             // all
         } elseif (Permission::has('leave.approve_team', $userId)) {
-            $ids = Permission::managedUserIds($userId);
-            $ph = implode(',', array_fill(0, count($ids), '?'));
-            $where[] = "lr.user_id IN ($ph)";
-            $params = array_merge($params, $ids);
+            $ids = array_values(array_unique(array_merge([$userId], Permission::managedUserIds($userId))));
+            if (!empty($ids)) {
+                $ph = implode(',', array_fill(0, count($ids), '?'));
+                $where[] = "lr.user_id IN ($ph)";
+                $params = array_merge($params, $ids);
+            } else {
+                $where[] = 'lr.user_id = ?';
+                $params[] = $userId;
+            }
         } else {
             $where[] = 'lr.user_id = ?';
             $params[] = $userId;

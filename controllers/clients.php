@@ -207,6 +207,27 @@ switch ($action) {
         break;
     }
 
+    case 'update_deliverable_completed': {
+        $clientId = (int)($_POST['client_id'] ?? 0);
+        if ($clientId && !Permission::canAccessClient($clientId)) Permission::deny();
+        csrf_check_or_die();
+        $type = trim($_POST['type'] ?? 'reel');
+        $completed = (int)($_POST['quantity_completed'] ?? 0);
+        $required = isset($_POST['quantity_required']) && $_POST['quantity_required'] !== '' ? (int)$_POST['quantity_required'] : null;
+
+        ClientModel::updateDeliverableCompleted($clientId, $type, $completed, $required, Auth::id());
+
+        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true, 'type' => $type, 'completed' => $completed, 'required' => $required]);
+            exit;
+        }
+
+        Flash::success(ucfirst($type) . ' progress updated.');
+        redirect(url('clients', ['action' => 'view', 'id' => $clientId]));
+        break;
+    }
+
     default: {
         $filters = [
             'status' => $_GET['status'] ?? '',

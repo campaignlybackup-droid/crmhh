@@ -220,198 +220,201 @@
 <?php
     $reels = $clientDeliverables['reels'] ?? [];
     $posts = $clientDeliverables['posts'] ?? [];
-    $reelsReq = $clientDeliverables['reels_required'] ?? 0;
-    $reelsComp = $clientDeliverables['reels_completed'] ?? 0;
-    $postsReq = $clientDeliverables['posts_required'] ?? 0;
-    $postsComp = $clientDeliverables['posts_completed'] ?? 0;
+    $reelsReq = (int)($clientDeliverables['reels_required'] ?? 0);
+    $reelsComp = (int)($clientDeliverables['reels_completed'] ?? 0);
+    $postsReq = (int)($clientDeliverables['posts_required'] ?? 0);
+    $postsComp = (int)($clientDeliverables['posts_completed'] ?? 0);
     
-    $reelsPct = $reelsReq > 0 ? min(100, round(($reelsComp / $reelsReq) * 100)) : (count($reels) > 0 ? round(($reelsComp / count($reels)) * 100) : 0);
-    $postsPct = $postsReq > 0 ? min(100, round(($postsComp / $postsReq) * 100)) : (count($posts) > 0 ? round(($postsComp / count($posts)) * 100) : 0);
+    $reelsPct = $reelsReq > 0 ? min(100, round(($reelsComp / $reelsReq) * 100)) : ($reelsComp > 0 ? 100 : 0);
+    $postsPct = $postsReq > 0 ? min(100, round(($postsComp / $postsReq) * 100)) : ($postsComp > 0 ? 100 : 0);
+    
+    $canManageDeliverables = Permission::hasAny(['clients.manage_services', 'clients.edit', 'clients.assign']) || Auth::hasRole('founder') || Auth::hasRole('manager');
 ?>
 
-<div class="card mb-4" style="border-top:4px solid #7c3aed; box-shadow:0 2px 10px rgba(124, 58, 237, 0.08);">
+<!-- ============================================================= -->
+<!-- DELIVERABLES COMPLETED SECTION (REELS & POSTS NUMBERS)       -->
+<!-- ============================================================= -->
+<div class="card mb-4" style="border-top:4px solid #6366f1; box-shadow:0 2px 10px rgba(99, 102, 241, 0.08);">
     <div class="flex-between mb-3" style="flex-wrap:wrap; gap:10px;">
         <div>
-            <div style="font-size:16px; font-weight:800; color:#7c3aed; display:flex; align-items:center; gap:8px;">
-                <span>🎬 Reels Deliverables</span>
-                <span class="badge" style="background:#ede9fe; color:#6d28d9; font-weight:700; font-size:11px;" id="client-reels-badge">
-                    <?= $reelsComp ?> / <?= $reelsReq > 0 ? $reelsReq : count($reels) ?> Completed (<?= $reelsPct ?>%)
-                </span>
+            <div style="font-size:16px; font-weight:800; color:#4f46e5; display:flex; align-items:center; gap:8px;">
+                <span>🎯 Deliverables Completed (Reels &amp; Posts)</span>
             </div>
-            <div class="text-muted small" style="margin-top:2px;">Track scripting, video editing, double-check review, and scheduled posting.</div>
+            <div class="text-muted small" style="margin-top:2px;">Directly update completed quantities for reels and posts deliverables.</div>
         </div>
         <div class="btn-group">
-            <button class="btn btn-sm btn-primary" onclick="openClientAddDeliverable('reel')" style="background:#7c3aed; border-color:#7c3aed; font-size:12px;">+ Add Reel</button>
-            <a href="<?= url('content_calendar', ['client_id' => $client['id'], 'type' => 'reel']) ?>" class="btn btn-sm btn-secondary" style="font-size:12px;">View in Calendar &rarr;</a>
+            <a href="<?= url('content_calendar', ['client_id' => $client['id']]) ?>" class="btn btn-sm btn-secondary" style="font-size:12px;">Content Calendar &rarr;</a>
         </div>
     </div>
 
-    <!-- Progress bar -->
-    <div style="height:8px; background:#f1f5f9; border-radius:4px; overflow:hidden; margin-bottom:16px;">
-        <div id="client-reels-progress" style="width:<?= $reelsPct ?>%; height:100%; background:linear-gradient(90deg, #7c3aed, #a855f7); border-radius:4px; transition:width 0.3s ease;"></div>
+    <div class="table-wrap responsive-table">
+        <table>
+            <thead>
+                <tr>
+                    <th style="min-width:140px;">Deliverable</th>
+                    <th style="min-width:120px;">Required / Target</th>
+                    <th style="min-width:140px;">Completed</th>
+                    <th style="min-width:100px;">Remaining</th>
+                    <th style="min-width:160px;">Progress</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- 1. REELS ROW -->
+                <tr>
+                    <td data-label="Deliverable">
+                        <strong style="font-size:14px; color:#7c3aed; display:flex; align-items:center; gap:6px;">
+                            <span>🎬 Reels</span>
+                        </strong>
+                        <span class="small text-muted">Short-form video content</span>
+                    </td>
+                    <td data-label="Required / Target">
+                        <?php if ($canManageDeliverables): ?>
+                        <form method="post" action="<?= url('clients', ['action' => 'update_deliverable_completed']) ?>" style="display:inline-flex;align-items:center;gap:4px;margin:0">
+                            <?= Csrf::field() ?>
+                            <input type="hidden" name="client_id" value="<?= $client['id'] ?>">
+                            <input type="hidden" name="type" value="reel">
+                            <input type="hidden" name="quantity_completed" value="<?= $reelsComp ?>">
+                            <input type="number" name="quantity_required" value="<?= $reelsReq ?>" min="0" style="width:65px;padding:3px 6px;font-size:12px;height:28px" title="Set target required reels">
+                            <button class="btn btn-sm btn-secondary" style="padding:2px 8px;font-size:11px;height:28px" title="Update required target">Set</button>
+                        </form>
+                        <?php else: ?>
+                        <strong><?= $reelsReq ?></strong>
+                        <?php endif; ?>
+                    </td>
+                    <td data-label="Completed">
+                        <form method="post" action="<?= url('clients', ['action' => 'update_deliverable_completed']) ?>" style="display:inline-flex;align-items:center;gap:4px;margin:0">
+                            <?= Csrf::field() ?>
+                            <input type="hidden" name="client_id" value="<?= $client['id'] ?>">
+                            <input type="hidden" name="type" value="reel">
+                            <input type="number" name="quantity_completed" value="<?= $reelsComp ?>" min="0" style="width:65px;padding:3px 6px;font-size:12px;height:28px" title="Update completed count">
+                            <button class="btn btn-sm btn-primary" style="padding:2px 8px;font-size:11px;height:28px" title="Save progress">Save</button>
+                        </form>
+                    </td>
+                    <td data-label="Remaining">
+                        <?php if ($reelsReq > 0 && ($reelsReq - $reelsComp) <= 0): ?>
+                            <span class="badge badge-success" style="font-size:11px;">✓ Target Reached</span>
+                        <?php elseif ($reelsReq > 0): ?>
+                            <span style="font-weight:700; color:#f59e0b;"><?= max(0, $reelsReq - $reelsComp) ?> left</span>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <td data-label="Progress">
+                        <div class="flex-between" style="font-size:11px; margin-bottom:4px;">
+                            <span class="text-muted"><?= $reelsComp ?> / <?= $reelsReq > 0 ? $reelsReq : '—' ?></span>
+                            <strong style="color:#7c3aed;"><?= $reelsPct ?>%</strong>
+                        </div>
+                        <div class="progress" style="height:6px; margin:0;"><div class="progress-bar" style="width:<?= $reelsPct ?>%; background:#7c3aed;"></div></div>
+                    </td>
+                </tr>
+
+                <!-- 2. POSTS ROW -->
+                <tr>
+                    <td data-label="Deliverable">
+                        <strong style="font-size:14px; color:#0284c7; display:flex; align-items:center; gap:6px;">
+                            <span>🖼️ Posts &amp; Statics</span>
+                        </strong>
+                        <span class="small text-muted">Graphics, carousels &amp; images</span>
+                    </td>
+                    <td data-label="Required / Target">
+                        <?php if ($canManageDeliverables): ?>
+                        <form method="post" action="<?= url('clients', ['action' => 'update_deliverable_completed']) ?>" style="display:inline-flex;align-items:center;gap:4px;margin:0">
+                            <?= Csrf::field() ?>
+                            <input type="hidden" name="client_id" value="<?= $client['id'] ?>">
+                            <input type="hidden" name="type" value="post">
+                            <input type="hidden" name="quantity_completed" value="<?= $postsComp ?>">
+                            <input type="number" name="quantity_required" value="<?= $postsReq ?>" min="0" style="width:65px;padding:3px 6px;font-size:12px;height:28px" title="Set target required posts">
+                            <button class="btn btn-sm btn-secondary" style="padding:2px 8px;font-size:11px;height:28px" title="Update required target">Set</button>
+                        </form>
+                        <?php else: ?>
+                        <strong><?= $postsReq ?></strong>
+                        <?php endif; ?>
+                    </td>
+                    <td data-label="Completed">
+                        <form method="post" action="<?= url('clients', ['action' => 'update_deliverable_completed']) ?>" style="display:inline-flex;align-items:center;gap:4px;margin:0">
+                            <?= Csrf::field() ?>
+                            <input type="hidden" name="client_id" value="<?= $client['id'] ?>">
+                            <input type="hidden" name="type" value="post">
+                            <input type="number" name="quantity_completed" value="<?= $postsComp ?>" min="0" style="width:65px;padding:3px 6px;font-size:12px;height:28px" title="Update completed count">
+                            <button class="btn btn-sm btn-primary" style="padding:2px 8px;font-size:11px;height:28px" title="Save progress">Save</button>
+                        </form>
+                    </td>
+                    <td data-label="Remaining">
+                        <?php if ($postsReq > 0 && ($postsReq - $postsComp) <= 0): ?>
+                            <span class="badge badge-success" style="font-size:11px;">✓ Target Reached</span>
+                        <?php elseif ($postsReq > 0): ?>
+                            <span style="font-weight:700; color:#f59e0b;"><?= max(0, $postsReq - $postsComp) ?> left</span>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <td data-label="Progress">
+                        <div class="flex-between" style="font-size:11px; margin-bottom:4px;">
+                            <span class="text-muted"><?= $postsComp ?> / <?= $postsReq > 0 ? $postsReq : '—' ?></span>
+                            <strong style="color:#0284c7;"><?= $postsPct ?>%</strong>
+                        </div>
+                        <div class="progress" style="height:6px; margin:0;"><div class="progress-bar" style="width:<?= $postsPct ?>%; background:#0284c7;"></div></div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 
-    <?php if (empty($reels)): ?>
-        <div style="background:var(--bg); border:1px dashed var(--border); border-radius:8px; padding:24px; text-align:center;">
-            <div style="font-size:24px; margin-bottom:6px;">🎬</div>
-            <strong style="display:block; font-size:14px; margin-bottom:4px;">No Reels Added Yet</strong>
-            <p class="text-muted small" style="margin-bottom:12px;">Schedule short-form video deliverables for this client. They link into the Content Calendar automatically.</p>
-            <button class="btn btn-sm btn-primary" onclick="openClientAddDeliverable('reel')" style="background:#7c3aed; border-color:#7c3aed;">+ Add First Reel</button>
-        </div>
-    <?php else: ?>
-        <div class="table-wrap responsive-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Reel Title / Concept</th>
-                        <th>Editor</th>
-                        <th>Post Date</th>
-                        <th>Quality Review</th>
-                        <th>Status</th>
-                        <th style="text-align:right;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($reels as $r): 
-                        $isDone = in_array($r['status'], ['published', 'completed'], true);
-                    ?>
-                    <tr id="row-deliv-<?= $r['id'] ?>" style="<?= $isDone ? 'opacity:0.8; background:rgba(16, 185, 129, 0.04);' : '' ?>">
-                        <td data-label="Title">
-                            <strong style="color:var(--text);"><?= e($r['title']) ?></strong>
-                            <?php if (!empty($r['drive_link'])): ?>
-                                <a href="<?= e($r['drive_link']) ?>" target="_blank" rel="noopener noreferrer" style="font-size:11px; margin-left:6px; color:#7c3aed; text-decoration:none; font-weight:600;">🔗 Drive Link</a>
-                            <?php endif; ?>
-                            <?php if (!empty($r['content'])): ?>
-                                <div class="text-muted small" style="margin-top:2px;"><?= e(mb_strimwidth($r['content'], 0, 70, '...')) ?></div>
-                            <?php endif; ?>
-                            <?php if (!empty($r['rectification_notes'])): ?>
-                                <div style="font-size:11px; color:#e11d48; margin-top:2px;">⚠️ Rectify: <?= e($r['rectification_notes']) ?></div>
-                            <?php endif; ?>
-                        </td>
-                        <td data-label="Editor"><?= e($r['assignee_name'] ?? '—') ?></td>
-                        <td data-label="Post Date"><?= format_date($r['post_date']) ?></td>
-                        <td data-label="Quality Review">
-                            <?php if ($r['status'] === 'needs_rectification'): ?>
-                                <span class="badge badge-danger" style="font-size:10px;">⚠️ Needs Rectification</span>
-                            <?php elseif ($r['status'] === 'manager_review'): ?>
-                                <span class="badge badge-info" style="font-size:10px;">Editor Checked ✓ &bull; In Manager Review</span>
-                            <?php elseif (!empty($r['manager_reviewed_by']) || in_array($r['status'], ['scheduled', 'published', 'completed'], true)): ?>
-                                <span class="badge badge-success" style="font-size:10px;">✓ Double-Checked</span>
-                            <?php else: ?>
-                                <span class="badge badge-warning" style="font-size:10px;">Pending Editor Check</span>
-                            <?php endif; ?>
-                        </td>
-                        <td data-label="Status">
-                            <span class="badge badge-<?= status_badge_class($r['status']) ?>" id="deliv-badge-<?= $r['id'] ?>"><?= e(humanize($r['status'])) ?></span>
-                        </td>
-                        <td data-label="Actions" style="text-align:right;">
-                            <div class="btn-group" style="justify-content:flex-end;">
-                                <button class="btn btn-sm <?= $isDone ? 'btn-secondary' : 'btn-success' ?>" style="font-size:11px; padding:3px 8px; font-weight:600;" onclick="toggleClientDeliverableStatus(<?= $r['id'] ?>)" id="btn-deliv-<?= $r['id'] ?>">
-                                    <?= $isDone ? '↺ Mark Unfinished' : '✓ Mark Done' ?>
-                                </button>
-                                <a href="<?= url('content_calendar', ['client_id' => $client['id']]) ?>" class="btn btn-sm btn-secondary" style="font-size:11px; padding:3px 8px;">Calendar</a>
-                            </div>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    <?php endif; ?>
-</div>
-
-<!-- ============================================================= -->
-<!-- POSTS & STATICS DELIVERABLES PIPELINE                         -->
-<!-- ============================================================= -->
-<div class="card mb-4" style="border-top:4px solid #0284c7; box-shadow:0 2px 10px rgba(2, 132, 199, 0.08);">
-    <div class="flex-between mb-3" style="flex-wrap:wrap; gap:10px;">
-        <div>
-            <div style="font-size:16px; font-weight:800; color:#0284c7; display:flex; align-items:center; gap:8px;">
-                <span>🖼️ Posts &amp; Statics Deliverables</span>
-                <span class="badge" style="background:#e0f2fe; color:#0369a1; font-weight:700; font-size:11px;" id="client-posts-badge">
-                    <?= $postsComp ?> / <?= $postsReq > 0 ? $postsReq : count($posts) ?> Completed (<?= $postsPct ?>%)
-                </span>
+    <!-- Optional Collapsible: Schedule / View Individual Calendar Items -->
+    <details style="margin-top:14px; border-top:1px dashed var(--border); padding-top:10px;">
+        <summary style="font-size:12px; color:var(--text-muted); cursor:pointer; font-weight:600;">
+            📅 Optional: View / Schedule Individual Calendar Content (<?= count($reels) ?> reels, <?= count($posts) ?> posts)
+        </summary>
+        <div style="margin-top:12px;">
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-bottom:12px;">
+                <button class="btn btn-sm btn-primary" onclick="openClientAddDeliverable('reel')" style="background:#7c3aed; border-color:#7c3aed; font-size:11px;">+ Schedule Reel</button>
+                <button class="btn btn-sm btn-primary" onclick="openClientAddDeliverable('post')" style="background:#0284c7; border-color:#0284c7; font-size:11px;">+ Schedule Post</button>
             </div>
-            <div class="text-muted small" style="margin-top:2px;">Track graphic design, carousels, copy approval, and scheduled posting.</div>
-        </div>
-        <div class="btn-group">
-            <button class="btn btn-sm btn-primary" onclick="openClientAddDeliverable('post')" style="background:#0284c7; border-color:#0284c7; font-size:12px;">+ Add Post</button>
-            <a href="<?= url('content_calendar', ['client_id' => $client['id'], 'type' => 'post']) ?>" class="btn btn-sm btn-secondary" style="font-size:12px;">View in Calendar &rarr;</a>
-        </div>
-    </div>
-
-    <!-- Progress bar -->
-    <div style="height:8px; background:#f1f5f9; border-radius:4px; overflow:hidden; margin-bottom:16px;">
-        <div id="client-posts-progress" style="width:<?= $postsPct ?>%; height:100%; background:linear-gradient(90deg, #0284c7, #38bdf8); border-radius:4px; transition:width 0.3s ease;"></div>
-    </div>
-
-    <?php if (empty($posts)): ?>
-        <div style="background:var(--bg); border:1px dashed var(--border); border-radius:8px; padding:24px; text-align:center;">
-            <div style="font-size:24px; margin-bottom:6px;">🖼️</div>
-            <strong style="display:block; font-size:14px; margin-bottom:4px;">No Posts Added Yet</strong>
-            <p class="text-muted small" style="margin-bottom:12px;">Schedule static graphic, carousel, or image deliverables for this client.</p>
-            <button class="btn btn-sm btn-primary" onclick="openClientAddDeliverable('post')" style="background:#0284c7; border-color:#0284c7;">+ Add First Post</button>
-        </div>
-    <?php else: ?>
-        <div class="table-wrap responsive-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Post Title / Creative</th>
-                        <th>Designer</th>
-                        <th>Post Date</th>
-                        <th>Quality Review</th>
-                        <th>Status</th>
-                        <th style="text-align:right;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($posts as $p): 
-                        $isDone = in_array($p['status'], ['published', 'completed'], true);
-                    ?>
-                    <tr id="row-deliv-<?= $p['id'] ?>" style="<?= $isDone ? 'opacity:0.8; background:rgba(16, 185, 129, 0.04);' : '' ?>">
-                        <td data-label="Title">
-                            <strong style="color:var(--text);"><?= e($p['title']) ?></strong>
-                            <?php if (!empty($p['drive_link'])): ?>
-                                <a href="<?= e($p['drive_link']) ?>" target="_blank" rel="noopener noreferrer" style="font-size:11px; margin-left:6px; color:#0284c7; text-decoration:none; font-weight:600;">🔗 Drive Link</a>
-                            <?php endif; ?>
-                            <?php if (!empty($p['content'])): ?>
-                                <div class="text-muted small" style="margin-top:2px;"><?= e(mb_strimwidth($p['content'], 0, 70, '...')) ?></div>
-                            <?php endif; ?>
-                            <?php if (!empty($p['rectification_notes'])): ?>
-                                <div style="font-size:11px; color:#e11d48; margin-top:2px;">⚠️ Rectify: <?= e($p['rectification_notes']) ?></div>
-                            <?php endif; ?>
-                        </td>
-                        <td data-label="Designer"><?= e($p['assignee_name'] ?? '—') ?></td>
-                        <td data-label="Post Date"><?= format_date($p['post_date']) ?></td>
-                        <td data-label="Quality Review">
-                            <?php if ($p['status'] === 'needs_rectification'): ?>
-                                <span class="badge badge-danger" style="font-size:10px;">⚠️ Needs Rectification</span>
-                            <?php elseif ($p['status'] === 'manager_review'): ?>
-                                <span class="badge badge-info" style="font-size:10px;">Editor Checked ✓ &bull; In Manager Review</span>
-                            <?php elseif (!empty($p['manager_reviewed_by']) || in_array($p['status'], ['scheduled', 'published', 'completed'], true)): ?>
-                                <span class="badge badge-success" style="font-size:10px;">✓ Double-Checked</span>
-                            <?php else: ?>
-                                <span class="badge badge-warning" style="font-size:10px;">Pending Editor Check</span>
-                            <?php endif; ?>
-                        </td>
-                        <td data-label="Status">
-                            <span class="badge badge-<?= status_badge_class($p['status']) ?>" id="deliv-badge-<?= $p['id'] ?>"><?= e(humanize($p['status'])) ?></span>
-                        </td>
-                        <td data-label="Actions" style="text-align:right;">
-                            <div class="btn-group" style="justify-content:flex-end;">
-                                <button class="btn btn-sm <?= $isDone ? 'btn-secondary' : 'btn-success' ?>" style="font-size:11px; padding:3px 8px; font-weight:600;" onclick="toggleClientDeliverableStatus(<?= $p['id'] ?>)" id="btn-deliv-<?= $p['id'] ?>">
-                                    <?= $isDone ? '↺ Mark Unfinished' : '✓ Mark Done' ?>
+            
+            <?php if (!empty($reels) || !empty($posts)): ?>
+            <div class="table-wrap responsive-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Title / Concept</th>
+                            <th>Assignee</th>
+                            <th>Post Date</th>
+                            <th>Status</th>
+                            <th style="text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach (array_merge($reels, $posts) as $item): 
+                            $isDone = in_array($item['status'], ['published', 'completed'], true);
+                            $isReel = strtolower($item['content_type'] ?? '') === 'reel';
+                        ?>
+                        <tr style="<?= $isDone ? 'opacity:0.75;' : '' ?>">
+                            <td data-label="Type"><span class="badge" style="background:<?= $isReel ? '#ede9fe; color:#6d28d9;' : '#e0f2fe; color:#0369a1;' ?>"><?= $isReel ? '🎬 Reel' : '🖼️ Post' ?></span></td>
+                            <td data-label="Title">
+                                <strong><?= e($item['title']) ?></strong>
+                                <?php if (!empty($item['drive_link'])): ?>
+                                    <a href="<?= e($item['drive_link']) ?>" target="_blank" rel="noopener noreferrer" style="font-size:11px; margin-left:6px; text-decoration:none; font-weight:600;">🔗 Link</a>
+                                <?php endif; ?>
+                            </td>
+                            <td data-label="Assignee"><?= e($item['assignee_name'] ?? '—') ?></td>
+                            <td data-label="Date"><?= format_date($item['post_date']) ?></td>
+                            <td data-label="Status"><span class="badge badge-<?= status_badge_class($item['status']) ?>"><?= e(humanize($item['status'])) ?></span></td>
+                            <td data-label="Actions" style="text-align:right;">
+                                <button class="btn btn-sm <?= $isDone ? 'btn-secondary' : 'btn-success' ?>" style="font-size:10px; padding:2px 6px;" onclick="toggleClientDeliverableStatus(<?= $item['id'] ?>)">
+                                    <?= $isDone ? '↺ Undo' : '✓ Done' ?>
                                 </button>
-                                <a href="<?= url('content_calendar', ['client_id' => $client['id']]) ?>" class="btn btn-sm btn-secondary" style="font-size:11px; padding:3px 8px;">Calendar</a>
-                            </div>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php else: ?>
+            <p class="text-muted small" style="margin:4px 0;">No individual calendar items scheduled yet.</p>
+            <?php endif; ?>
         </div>
-    <?php endif; ?>
+    </details>
 </div>
 
 <div class="card">

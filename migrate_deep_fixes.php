@@ -37,6 +37,26 @@ try {
         echo "✓ Added docs_access column to leads.\n";
     }
 
+    // 2b. Add deliverable columns to clients table if not present
+    $cCols = Database::all("SHOW COLUMNS FROM clients");
+    $cColNames = array_column($cCols, 'Field');
+    if (!in_array('reels_required', $cColNames, true)) {
+        $db->exec("ALTER TABLE clients ADD COLUMN reels_required INT UNSIGNED NOT NULL DEFAULT 0");
+        echo "✓ Added reels_required column to clients.\n";
+    }
+    if (!in_array('reels_completed', $cColNames, true)) {
+        $db->exec("ALTER TABLE clients ADD COLUMN reels_completed INT UNSIGNED NOT NULL DEFAULT 0");
+        echo "✓ Added reels_completed column to clients.\n";
+    }
+    if (!in_array('posts_required', $cColNames, true)) {
+        $db->exec("ALTER TABLE clients ADD COLUMN posts_required INT UNSIGNED NOT NULL DEFAULT 0");
+        echo "✓ Added posts_required column to clients.\n";
+    }
+    if (!in_array('posts_completed', $cColNames, true)) {
+        $db->exec("ALTER TABLE clients ADD COLUMN posts_completed INT UNSIGNED NOT NULL DEFAULT 0");
+        echo "✓ Added posts_completed column to clients.\n";
+    }
+
     // 3. Create operations_issues table
     $db->exec("CREATE TABLE IF NOT EXISTS operations_issues (
         id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

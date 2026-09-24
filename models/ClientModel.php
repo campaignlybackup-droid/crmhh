@@ -253,6 +253,46 @@ class ClientModel
         ActivityModel::log('client', (int)$a['client_id'], 'progress_updated', "{$a['service_name']} ({$a['requirement_name']}) progress updated to $completed");
     }
 
+    /** Direct update of Reels and Posts completed / required quantities for a client */
+    public static function updateDeliverableCompleted(int $clientId, string $type, int $completed, ?int $required = null, ?int $userId = null): void
+    {
+        $userId = $userId ?? Auth::id();
+        $completed = max(0, $completed);
+        
+        $type = in_array(strtolower($type), ['reel', 'reels', 'video'], true) ? 'reels' : 'posts';
+        $colComp = "{$type}_completed";
+        $colReq = "{$type}_required";
+
+        if ($required !== null) {
+            $required = max(0, $required);
+            Database::run("UPDATE clients SET $colComp = ?, $colReq = ? WHERE id = ?", [$completed, $required, $clientId]);
+        } else {
+            Database::run("UPDATE clients SET $colComp = ? WHERE id = ?", [$completed, $clientId]);
+        }
+
+        // Also sync with matching client_service_quantities and client_services if configured
+        try {
+            $subLike = ($type === 'reels') ? '%reel%' : '%post%';
+            $matchingSubIds = Database::all(
+                "SELECT csq.id, csq.client_service_id 
+                 FROM client_service_quantities csq
+                 JOIN client_services cs ON cs.id = csq.client_service_id
+                 JOIN service_subcategories sub ON sub.id = csq.subcategory_id
+                 WHERE cs.client_id = ? AND cs.deleted_at IS NULL AND (sub.name LIKE ? OR sub.name LIKE ?)",
+                [$clientId, $subLike, ($type === 'reels' ? '%video%' : '%static%')]
+            );
+
+            foreach ($matchingSubIds as $m) {
+                Database::run("UPDATE client_service_quantities SET quantity_completed = ? WHERE id = ?", [$completed, $m['id']]);
+                $sum = (int)Database::scalar("SELECT COALESCE(SUM(quantity_completed),0) FROM client_service_quantities WHERE client_service_id = ?", [$m['client_service_id']]);
+                Database::run("UPDATE client_services SET quantity_completed = ? WHERE id = ?", [$sum, $m['client_service_id']]);
+            }
+        } catch (Throwable $e) {}
+
+        ActivityModel::log('client', $clientId, 'progress_updated', ucfirst($type) . " completed quantity updated to $completed");
+        AuditLog::record('update_deliverable_completed', 'client', $clientId, null, "Updated $type completed to $completed");
+    }
+
     public static function upcomingRenewals(int $days = 30, ?int $userId = null): array
     {
         $userId = $userId ?? Auth::id();

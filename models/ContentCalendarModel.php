@@ -276,25 +276,42 @@ class ContentCalendarModel
             }
         }
 
-        // Get required quantities from client_service_quantities
-        $reqReels = (int)Database::scalar(
-            "SELECT SUM(csq.quantity_required) FROM client_service_quantities csq
-             JOIN client_services cs ON cs.id = csq.client_service_id
-             JOIN service_subcategories sub ON sub.id = csq.subcategory_id
-             WHERE cs.client_id = ? AND cs.deleted_at IS NULL AND (sub.name LIKE '%reel%' OR sub.name LIKE '%video%')",
-            [$clientId]
-        );
+        // Check direct client deliverable columns
+        $clientDirect = null;
+        try {
+            $clientDirect = Database::one("SELECT reels_required, reels_completed, posts_required, posts_completed FROM clients WHERE id = ?", [$clientId]);
+        } catch (Throwable $e) {}
 
-        $reqPosts = (int)Database::scalar(
-            "SELECT SUM(csq.quantity_required) FROM client_service_quantities csq
-             JOIN client_services cs ON cs.id = csq.client_service_id
-             JOIN service_subcategories sub ON sub.id = csq.subcategory_id
-             WHERE cs.client_id = ? AND cs.deleted_at IS NULL AND (sub.name LIKE '%post%' OR sub.name LIKE '%static%' OR sub.name LIKE '%graphic%' OR sub.name LIKE '%carousel%')",
-            [$clientId]
-        );
+        // Get required quantities from client_service_quantities or direct client setting
+        $reqReels = ($clientDirect && (int)$clientDirect['reels_required'] > 0)
+            ? (int)$clientDirect['reels_required']
+            : (int)Database::scalar(
+                "SELECT SUM(csq.quantity_required) FROM client_service_quantities csq
+                 JOIN client_services cs ON cs.id = csq.client_service_id
+                 JOIN service_subcategories sub ON sub.id = csq.subcategory_id
+                 WHERE cs.client_id = ? AND cs.deleted_at IS NULL AND (sub.name LIKE '%reel%' OR sub.name LIKE '%video%')",
+                [$clientId]
+            );
 
-        $compReels = count(array_filter($reels, fn($r) => in_array($r['status'], ['published', 'completed'], true)));
-        $compPosts = count(array_filter($posts, fn($p) => in_array($p['status'], ['published', 'completed'], true)));
+        $reqPosts = ($clientDirect && (int)$clientDirect['posts_required'] > 0)
+            ? (int)$clientDirect['posts_required']
+            : (int)Database::scalar(
+                "SELECT SUM(csq.quantity_required) FROM client_service_quantities csq
+                 JOIN client_services cs ON cs.id = csq.client_service_id
+                 JOIN service_subcategories sub ON sub.id = csq.subcategory_id
+                 WHERE cs.client_id = ? AND cs.deleted_at IS NULL AND (sub.name LIKE '%post%' OR sub.name LIKE '%static%' OR sub.name LIKE '%graphic%' OR sub.name LIKE '%carousel%')",
+                [$clientId]
+            );
+
+        $calendarCompReels = count(array_filter($reels, fn($r) => in_array($r['status'], ['published', 'completed'], true)));
+        $compReels = ($clientDirect && isset($clientDirect['reels_completed']) && (int)$clientDirect['reels_completed'] > 0)
+            ? (int)$clientDirect['reels_completed']
+            : $calendarCompReels;
+
+        $calendarCompPosts = count(array_filter($posts, fn($p) => in_array($p['status'], ['published', 'completed'], true)));
+        $compPosts = ($clientDirect && isset($clientDirect['posts_completed']) && (int)$clientDirect['posts_completed'] > 0)
+            ? (int)$clientDirect['posts_completed']
+            : $calendarCompPosts;
 
         return [
             'reels' => $reels,

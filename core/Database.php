@@ -24,7 +24,7 @@ class Database
     }
     public static function autoMigrate(): void
     {
-        $targetVersion = 9;
+        $targetVersion = 10;
         if (!isset($_GET['migrate']) && ($_SESSION['db_migrated_v'] ?? 0) >= $targetVersion) {
             return;
         }
@@ -42,6 +42,15 @@ class Database
             if (!in_array('notes', $cols, true)) $pdo->exec("ALTER TABLE leads ADD COLUMN notes TEXT DEFAULT NULL");
             if (!in_array('docs_link', $cols, true)) $pdo->exec("ALTER TABLE leads ADD COLUMN docs_link VARCHAR(500) DEFAULT NULL AFTER notes");
             if (!in_array('docs_access', $cols, true)) $pdo->exec("ALTER TABLE leads ADD COLUMN docs_access VARCHAR(50) NOT NULL DEFAULT 'no_access' AFTER docs_link");
+        } catch (Throwable $e) {}
+
+        // 1b. Clients deliverable columns
+        try {
+            $clientCols = self::getTableColumns($pdo, 'clients');
+            if (!in_array('reels_required', $clientCols, true)) $pdo->exec("ALTER TABLE clients ADD COLUMN reels_required INT UNSIGNED NOT NULL DEFAULT 0");
+            if (!in_array('reels_completed', $clientCols, true)) $pdo->exec("ALTER TABLE clients ADD COLUMN reels_completed INT UNSIGNED NOT NULL DEFAULT 0");
+            if (!in_array('posts_required', $clientCols, true)) $pdo->exec("ALTER TABLE clients ADD COLUMN posts_required INT UNSIGNED NOT NULL DEFAULT 0");
+            if (!in_array('posts_completed', $clientCols, true)) $pdo->exec("ALTER TABLE clients ADD COLUMN posts_completed INT UNSIGNED NOT NULL DEFAULT 0");
         } catch (Throwable $e) {}
 
         // 2. Almost closed status

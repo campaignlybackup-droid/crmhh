@@ -10,6 +10,7 @@ $files = [
     'index.php',
     'models/OperationsIssueModel.php',
     'models/LeadModel.php',
+    'models/ClientModel.php',
     'models/ContentCalendarModel.php',
     'models/ApprovalModel.php',
     'models/LeaveModel.php',

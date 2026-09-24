@@ -1,6 +1,6 @@
 <div class="flex-between">
     <h1>Lead Folders</h1>
-    <?php if (Auth::hasRole('founder')): ?>
+    <?php if (Auth::hasRole('founder') || Auth::hasRole('manager') || Permission::has('leads.manage')): ?>
         <button class="btn btn-primary" data-modal-open="newFolderModal">+ Create Custom Folder</button>
     <?php endif; ?>
 </div>
@@ -63,7 +63,7 @@
 </div>
 <?php endif; ?>
 
-<?php if (Auth::hasRole('founder')): ?>
+<?php if (Auth::hasRole('founder') || Auth::hasRole('manager') || Permission::has('leads.manage')): ?>
 <div class="modal-overlay" id="newFolderModal">
     <div class="modal">
         <h2 style="margin-top:0;">Create Custom Folder</h2>

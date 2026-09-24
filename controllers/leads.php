@@ -402,9 +402,10 @@ switch ($action) {
             $assignedUserId = (int)$json['assigned_user_id'];
         }
         $folderId = !empty($json['folder_id']) ? (int)$json['folder_id'] : null;
-        if ($folderId && !Auth::hasRole('founder')) {
+        if ($folderId && !Auth::hasRole('founder') && !Auth::hasRole('manager') && !Permission::has('leads.manage')) {
             $hasAccess = (int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ? AND user_id = ?', [$folderId, Auth::id()]);
-            if (!$hasAccess) { echo json_encode(['success' => false, 'error' => 'Access denied to this folder']); exit; }
+            $isPublic = ((int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ?', [$folderId])) === 0;
+            if (!$hasAccess && !$isPublic) { echo json_encode(['success' => false, 'error' => 'Access denied to this folder']); exit; }
         }
         
         $id = LeadModel::create([
@@ -505,7 +506,9 @@ switch ($action) {
     }
     
     case 'api_create_folder': {
-        Permission::require('leads.assign'); // Only founder
+        if (!Auth::hasRole('founder') && !Auth::hasRole('manager') && !Permission::has('leads.manage')) {
+            echo json_encode(['success' => false, 'error' => 'Permission denied']); exit;
+        }
         $json = json_decode(file_get_contents('php://input'), true);
         $name = trim($json['name'] ?? '');
         if (!$name) { echo json_encode(['success' => false, 'error' => 'Folder name is required']); exit; }
@@ -513,6 +516,7 @@ switch ($action) {
         Database::run('INSERT INTO lead_folders (name, created_by) VALUES (?, ?)', [$name, Auth::id()]);
         $folderId = Database::lastInsertId();
         
+        Database::run('INSERT IGNORE INTO lead_folder_users (folder_id, user_id) VALUES (?, ?)', [$folderId, Auth::id()]);
         if (!empty($json['users']) && is_array($json['users'])) {
             foreach ($json['users'] as $uid) {
                 Database::run('INSERT IGNORE INTO lead_folder_users (folder_id, user_id) VALUES (?, ?)', [$folderId, (int)$uid]);

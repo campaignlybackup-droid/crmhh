@@ -76,20 +76,19 @@ class LeadModel
         
         $lead = Database::one('SELECT assigned_user_id, created_by, folder_id FROM leads WHERE id = ? AND deleted_at IS NULL', [$leadId]);
         if (!$lead) return false;
+
+        $isManager = Auth::hasRole('manager');
+        $canViewAll = Permission::has('leads.view_all') || Permission::has('leads.manage');
+        if ($isManager || $canViewAll) return true;
         
         if ($lead['folder_id']) {
             $hasAccess = (int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ? AND user_id = ?', [$lead['folder_id'], $userId]);
-            if ($hasAccess > 0) return true;
+            $isPublicFolder = ((int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ?', [$lead['folder_id']])) === 0;
+            if ($hasAccess > 0 || $isPublicFolder) return true;
         }
         
         $ownerId = (int)$lead['assigned_user_id'] ?: (int)$lead['created_by'];
         if ($ownerId === $userId) return true;
-        
-        $isManager = Auth::hasRole('manager');
-        if ($isManager && !$lead['folder_id']) {
-            $isOwnerFounder = (int)Database::scalar('SELECT COUNT(*) FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ? AND r.slug = ?', [$ownerId, 'founder']);
-            return $isOwnerFounder === 0;
-        }
         
         return false;
     }
@@ -97,10 +96,17 @@ class LeadModel
     public static function getCustomFolders(int $userId): array
     {
         $isFounder = Auth::hasRole('founder');
-        if ($isFounder) {
+        $isManager = Auth::hasRole('manager');
+        $canView = Permission::has('leads.view') || Permission::has('leads.view_all') || Permission::has('leads.manage');
+        
+        if ($isFounder || $isManager || $canView) {
             return Database::all('SELECT lf.*, (SELECT COUNT(*) FROM leads l WHERE l.folder_id = lf.id AND l.deleted_at IS NULL) as lead_count FROM lead_folders lf ORDER BY lf.name');
         } else {
-            return Database::all('SELECT lf.*, (SELECT COUNT(*) FROM leads l WHERE l.folder_id = lf.id AND l.deleted_at IS NULL) as lead_count FROM lead_folders lf JOIN lead_folder_users lfu ON lfu.folder_id = lf.id WHERE lfu.user_id = ? ORDER BY lf.name', [$userId]);
+            return Database::all('SELECT DISTINCT lf.*, (SELECT COUNT(*) FROM leads l WHERE l.folder_id = lf.id AND l.deleted_at IS NULL) as lead_count 
+                                  FROM lead_folders lf 
+                                  LEFT JOIN lead_folder_users lfu ON lfu.folder_id = lf.id 
+                                  WHERE lfu.user_id = ? OR lf.created_by = ? OR (SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = lf.id) = 0
+                                  ORDER BY lf.name', [$userId, $userId]);
         }
     }
 
@@ -141,9 +147,9 @@ class LeadModel
         if ($folderId !== '') {
             $where[] = "l.folder_id = ?";
             $params[] = $folderId;
-            // Access is checked at the controller level or we can enforce it here
-            if (!$isFounder) {
-                $where[] = "EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id = ?)";
+            $canViewAll = Permission::has('leads.view_all') || Permission::has('leads.manage');
+            if (!$isFounder && !$isManager && !$canViewAll) {
+                $where[] = "(EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id = ?) OR NOT EXISTS (SELECT 1 FROM lead_folder_users lfu2 WHERE lfu2.folder_id = l.folder_id))";
                 $params[] = $userId;
             }
         } else {
@@ -203,16 +209,17 @@ class LeadModel
         $assignedUserId = $filters['assigned_user_id'] ?? '';
         $folderId = $filters['folder_id'] ?? '';
         
+        $canViewAll = Permission::has('leads.view_all') || Permission::has('leads.manage');
         if ($folderId === 'all') {
-            if (!$isFounder) {
-                $where[] = "(l.folder_id IS NULL OR EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id = ?))";
+            if (!$isFounder && !$isManager && !$canViewAll) {
+                $where[] = "(l.folder_id IS NULL OR EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id = ?) OR NOT EXISTS (SELECT 1 FROM lead_folder_users lfu2 WHERE lfu2.folder_id = l.folder_id))";
                 $params[] = $userId;
             }
         } elseif ($folderId !== '') {
             $where[] = "l.folder_id = ?";
             $params[] = $folderId;
-            if (!$isFounder) {
-                $where[] = "EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id = ?)";
+            if (!$isFounder && !$isManager && !$canViewAll) {
+                $where[] = "(EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id = ?) OR NOT EXISTS (SELECT 1 FROM lead_folder_users lfu2 WHERE lfu2.folder_id = l.folder_id))";
                 $params[] = $userId;
             }
         } else {

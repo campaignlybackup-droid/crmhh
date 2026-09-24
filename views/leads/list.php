@@ -6,11 +6,12 @@
             <a href="<?= url('leads', $filters + ['view' => 'kanban']) ?>" class="btn btn-sm <?= ($_GET['view'] ?? '') === 'kanban' ? 'btn-primary' : 'btn-secondary' ?>" style="border-radius: 0 4px 4px 0; border-left: none;">Kanban</a>
         </div>
     </div>
+    <div class="btn-group" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
         <button type="button" class="btn btn-secondary" onclick="toggleSheetsMode()" id="sheets-toggle-btn">⛶ Sheets Mode</button>
         <?php if (Auth::hasRole('founder') || Auth::hasRole('manager')): ?>
         <button type="button" class="btn btn-secondary" onclick="openStatusColorsModal()">🎨 Status Colors</button>
         <?php endif; ?>
-        <?php if (!empty($filters['folder_id']) && Auth::hasRole('founder')): ?>
+        <?php if (!empty($filters['folder_id']) && (Auth::hasRole('founder') || Auth::hasRole('manager') || Permission::has('leads.manage'))): ?>
         <a href="<?= url('folder_settings', ['folder_id' => $filters['folder_id']]) ?>" class="btn btn-secondary">Folder Settings</a>
         <?php endif; ?>
         <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>

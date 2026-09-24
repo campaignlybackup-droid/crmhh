@@ -32,6 +32,7 @@ $files = [
     'views/clients/view.php',
     'views/approvals/view.php',
     'views/leads/list.php',
+    'views/leads/folders.php',
     'views/teams/list.php',
     'views/teams/view.php',
     'views/layout/sidebar.php',

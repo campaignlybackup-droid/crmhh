@@ -165,6 +165,39 @@ try {
         echo "- 'Interviews' folder already exists.\n";
     }
 
+    // 7. Ensure Sheet 1 to Sheet 7 folders exist and are accessible
+    $existingFolders = $db->query("SELECT name FROM lead_folders")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+    $founderId = (int)($db->query("SELECT id FROM users WHERE is_founder = 1 ORDER BY id ASC LIMIT 1")->fetchColumn() ?: 1);
+
+    for ($i = 1; $i <= 7; $i++) {
+        $sheetName = "Sheet $i";
+        if (!in_array($sheetName, $existingFolders, true)) {
+            $stmt = $db->prepare("INSERT INTO lead_folders (name, created_by, created_at) VALUES (?, ?, NOW())");
+            $stmt->execute([$sheetName, $founderId]);
+            $newFolderId = (int)$db->lastInsertId();
+
+            $defaultStatuses = [
+                ['New Leads', 'new-leads', '#6366f1', 1],
+                ['Contacted', 'contacted', '#0ea5e9', 2],
+                ['In Discussion', 'in-discussion', '#f59e0b', 3],
+                ['Follow Up', 'follow-up', '#ec4899', 4],
+                ['Meeting Scheduled', 'meeting-scheduled', '#8b5cf6', 5],
+                ['Almost closed', 'almost-closed', '#0284c7', 6],
+                ['Closed', 'closed', '#10b981', 7],
+                ['Lost', 'lost', '#ef4444', 8],
+            ];
+            foreach ($defaultStatuses as $ds) {
+                try {
+                    $db->prepare("INSERT INTO lead_statuses (name, slug, color, sort_order, is_won, is_lost, is_default, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+                        ->execute([$ds[0], $ds[1], $ds[2], $ds[3], ($ds[1]==='closed'?1:0), ($ds[1]==='lost'?1:0), ($ds[1]==='new-leads'?1:0), $newFolderId]);
+                } catch (Throwable $e) {}
+            }
+            echo "✓ Created '$sheetName' folder (ID: $newFolderId) with default statuses.\n";
+        } else {
+            echo "- '$sheetName' already exists.\n";
+        }
+    }
+
     echo "\n</pre><h3 style='color:green;'>Migration successfully completed with ZERO data loss!</h3>";
 } catch (Throwable $e) {
     echo "\n</pre><h3 style='color:red;'>Migration Error: " . htmlspecialchars($e->getMessage()) . "</h3>";

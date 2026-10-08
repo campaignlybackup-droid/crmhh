@@ -153,6 +153,36 @@
       setInterval(pollNotifications, 30000);
     }
 
+    // ─── Synchronized Live Agency Clock ───────────────────────────────────
+    (function initLiveClock() {
+      var clockEl = document.getElementById('topbarClockTime');
+      if (!clockEl || !window.__SERVER_TIME__) return;
+
+      var serverTs = window.__SERVER_TIME__.ts * 1000;
+      var clientBase = Date.now();
+      var tzOffsetSeconds = typeof window.__SERVER_TIME__.tzOffset === 'number' ? window.__SERVER_TIME__.tzOffset : 19800;
+
+      function pad(n) { return n < 10 ? '0' + n : n; }
+
+      function update() {
+        var elapsed = Date.now() - clientBase;
+        var currentServerEpoch = serverTs + elapsed;
+        // Shift epoch by tzOffset (seconds to ms) so UTC getters give the agency's exact local time
+        var targetDate = new Date(currentServerEpoch + (tzOffsetSeconds * 1000));
+        var utcHours = targetDate.getUTCHours();
+        var utcMinutes = targetDate.getUTCMinutes();
+        var utcSeconds = targetDate.getUTCSeconds();
+
+        var ampm = utcHours >= 12 ? 'PM' : 'AM';
+        var h = utcHours % 12;
+        h = h ? h : 12;
+        clockEl.textContent = pad(h) + ':' + pad(utcMinutes) + ':' + pad(utcSeconds) + ' ' + ampm;
+      }
+
+      update();
+      setInterval(update, 1000);
+    })();
+
     // ─── Flash message auto-dismiss after 5 seconds ─────────────────────────
     var flash = document.querySelector('.flash-message, .alert, [class*="flash"]');
     if (flash) {
@@ -164,3 +194,4 @@
     }
   });
 })();
+

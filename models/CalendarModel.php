@@ -6,27 +6,72 @@ class CalendarModel
     {
         $startDate = "$year-" . str_pad((string)$month, 2, '0', STR_PAD_LEFT) . '-01 00:00:00';
         $endDate = date('Y-m-t 23:59:59', strtotime("$year-$month-01"));
-        $isFounder = Auth::hasRole('founder');
-        $isManager = Auth::hasRole('manager');
+        $currentUserId = Auth::id() ?: 1;
+        $isFounder = Auth::hasRole('founder') || Auth::isFounder();
+        $isManager = Auth::hasRole('manager') || !empty(UserModel::managedTeamsFor($currentUserId));
         
+        // Determine allowed target user IDs to completely prevent cross-team leakage
+        $targetUserIds = [];
+        if ($userId === 'all') {
+            if ($isFounder || Permission::has('calendar.view_all')) {
+                $targetUserIds = null; // Unrestricted for founder
+            } elseif ($isManager) {
+                $targetUserIds = Permission::managedUserIds($currentUserId);
+            } else {
+                $targetUserIds = Permission::teamUserIds($currentUserId);
+            }
+        } else {
+            $reqId = (int)$userId;
+            if ($isFounder || Permission::has('calendar.view_all')) {
+                $targetUserIds = [$reqId];
+            } elseif ($isManager) {
+                $managed = Permission::managedUserIds($currentUserId);
+                $targetUserIds = in_array($reqId, $managed, true) ? [$reqId] : [$currentUserId];
+            } else {
+                $targetUserIds = ($reqId === $currentUserId) ? [$currentUserId] : [$currentUserId];
+            }
+        }
+
         $events = [];
         
         // 1. Events Query
         $evWhere = "start_datetime BETWEEN ? AND ?";
         $evParams = [$startDate, $endDate];
-        if ($userId !== 'all') { $evWhere .= " AND user_id = ?"; $evParams[] = $userId; }
-        if (!$isFounder && $isManager) { $evWhere .= " AND user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')"; }
+        if ($targetUserIds !== null) {
+            if (empty($targetUserIds)) {
+                $evWhere .= " AND 0=1";
+            } else {
+                $ph = implode(',', array_fill(0, count($targetUserIds), '?'));
+                $evWhere .= " AND user_id IN ($ph)";
+                $evParams = array_merge($evParams, $targetUserIds);
+            }
+        }
         
         $dbEvents = Database::all("SELECT * FROM calendar_events WHERE $evWhere", $evParams);
-        foreach ($dbEvents as $e) { $events[] = $e; }
+        foreach ($dbEvents as $e) {
+            $e['formatted_time'] = date('g:ia', strtotime($e['start_datetime']));
+            $events[] = $e;
+        }
 
-        // 2. Tasks Query
-        $taskWhere = "deadline IS NOT NULL AND deleted_at IS NULL AND deadline BETWEEN ? AND ?";
+        // 2. Tasks Query (also respecting privacy and client visibility)
+        $taskWhere = "t.deadline IS NOT NULL AND t.deleted_at IS NULL AND t.deadline BETWEEN ? AND ?";
         $taskParams = [$startDate, $endDate];
-        if ($userId !== 'all') { $taskWhere .= " AND assigned_user_id = ?"; $taskParams[] = $userId; }
-        if (!$isFounder && $isManager) { $taskWhere .= " AND assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')"; }
+        if ($targetUserIds !== null) {
+            if (empty($targetUserIds)) {
+                $taskWhere .= " AND 0=1";
+            } else {
+                $ph = implode(',', array_fill(0, count($targetUserIds), '?'));
+                $taskWhere .= " AND t.assigned_user_id IN ($ph)";
+                $taskParams = array_merge($taskParams, $targetUserIds);
+            }
+        }
+        if (!$isFounder) {
+            $taskWhere .= " AND (t.is_private = 0 OR t.assigned_user_id = ? OR t.assigned_by = ?)";
+            $taskParams[] = $currentUserId;
+            $taskParams[] = $currentUserId;
+        }
         
-        $tasks = Database::all("SELECT id, title, deadline AS start_datetime, task_code, description FROM tasks WHERE $taskWhere", $taskParams);
+        $tasks = Database::all("SELECT t.id, t.title, t.deadline AS start_datetime, t.task_code, t.description FROM tasks t WHERE $taskWhere", $taskParams);
         foreach ($tasks as $t) {
             $events[] = [
                 'id' => 'task-' . $t['id'],
@@ -34,6 +79,7 @@ class CalendarModel
                 'description' => $t['description'],
                 'event_type' => 'deadline',
                 'start_datetime' => $t['start_datetime'],
+                'formatted_time' => date('g:ia', strtotime($t['start_datetime'])),
                 'end_datetime' => null,
                 'related_type' => 'task',
                 'related_id' => $t['id'],
@@ -42,12 +88,19 @@ class CalendarModel
         }
         
         // 3. Leads Follow-ups Query
-        $leadWhere = "next_followup_date IS NOT NULL AND deleted_at IS NULL AND next_followup_date BETWEEN ? AND ?";
+        $leadWhere = "l.next_followup_date IS NOT NULL AND l.deleted_at IS NULL AND l.next_followup_date BETWEEN ? AND ?";
         $leadParams = [date('Y-m-d', strtotime($startDate)), date('Y-m-d', strtotime($endDate))];
-        if ($userId !== 'all') { $leadWhere .= " AND assigned_user_id = ?"; $leadParams[] = $userId; }
-        if (!$isFounder && $isManager) { $leadWhere .= " AND assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')"; }
+        if ($targetUserIds !== null) {
+            if (empty($targetUserIds)) {
+                $leadWhere .= " AND 0=1";
+            } else {
+                $ph = implode(',', array_fill(0, count($targetUserIds), '?'));
+                $leadWhere .= " AND l.assigned_user_id IN ($ph)";
+                $leadParams = array_merge($leadParams, $targetUserIds);
+            }
+        }
         
-        $leads = Database::all("SELECT id, name, next_followup_date, notes FROM leads WHERE $leadWhere", $leadParams);
+        $leads = Database::all("SELECT l.id, l.name, l.next_followup_date, l.notes FROM leads l WHERE $leadWhere", $leadParams);
         foreach ($leads as $l) {
             $events[] = [
                 'id' => 'lead-' . $l['id'],
@@ -55,6 +108,7 @@ class CalendarModel
                 'description' => $l['notes'],
                 'event_type' => 'followup',
                 'start_datetime' => $l['next_followup_date'] . ' 09:00:00', // Default to 9am for sorting
+                'formatted_time' => '9:00am',
                 'end_datetime' => null,
                 'related_type' => 'lead',
                 'related_id' => $l['id'],

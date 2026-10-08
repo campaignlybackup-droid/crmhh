@@ -100,11 +100,34 @@ class Permission
                  WHERE tmg.user_id = ?",
                 [$userId]
             );
-            $ids = array_map('intval', array_column($rows, 'user_id'));
+            $directRows = Database::all(
+                "SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL",
+                [$userId]
+            );
+            $ids = array_map('intval', array_merge(array_column($rows, 'user_id'), array_column($directRows, 'id')));
             $ids[] = $userId;
             self::$managedCache[$userId] = array_values(array_unique($ids));
         }
         return self::$managedCache[$userId];
+    }
+
+    /**
+     * User ids of all peers in any team that $userId belongs to, plus themselves.
+     */
+    public static function teamUserIds(?int $userId = null): array
+    {
+        $userId = $userId ?? Auth::id();
+        if (!$userId) return [];
+
+        $rows = Database::all(
+            "SELECT DISTINCT tm2.user_id FROM team_members tm1
+             JOIN team_members tm2 ON tm2.team_id = tm1.team_id
+             WHERE tm1.user_id = ?",
+            [$userId]
+        );
+        $ids = array_map('intval', array_column($rows, 'user_id'));
+        $ids[] = $userId;
+        return array_values(array_unique($ids));
     }
 
     /**

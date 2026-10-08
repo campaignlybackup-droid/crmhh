@@ -73,6 +73,11 @@ try {
         $shootsWhere .= " AND (ce.user_id = ? OR ce.created_by = ?)";
         $shootsParams[] = $userId;
         $shootsParams[] = $userId;
+    } elseif ($isManager && !$isFounder) {
+        $managedIds = Permission::managedUserIds($userId);
+        $ph = implode(',', array_fill(0, count($managedIds), '?'));
+        $shootsWhere .= " AND (ce.user_id IN ($ph) OR ce.created_by = ?)";
+        $shootsParams = array_merge($managedIds, [$userId]);
     }
 
     $shootsScheduled = Database::all(
@@ -87,6 +92,21 @@ try {
     );
 
     // Also supplement with tasks categorized as shoots or videography
+    $taskShootsWhere = "t.deleted_at IS NULL AND t.status NOT IN ('completed', 'cancelled') AND (s.slug IN ('videography', 'photography') OR t.title LIKE '%shoot%' OR t.title LIKE '%Shooting%')";
+    $taskShootsParams = [];
+    if (!$isFounder && !$isManager) {
+        $taskShootsWhere .= " AND (t.assigned_user_id = ? OR t.assigned_by = ?)";
+        $taskShootsParams = [$userId, $userId];
+    } elseif ($isManager && !$isFounder) {
+        $managedIds = Permission::managedUserIds($userId);
+        $ph = implode(',', array_fill(0, count($managedIds), '?'));
+        $taskShootsWhere .= " AND (t.assigned_user_id IN ($ph) OR t.assigned_by = ?)";
+        $taskShootsParams = array_merge($managedIds, [$userId]);
+    }
+    $cVis = Permission::clientVisibility($userId);
+    $taskShootsWhere .= " AND (t.client_id IS NULL OR ({$cVis['sql']}))";
+    $taskShootsParams = array_merge($taskShootsParams, $cVis['params']);
+
     $taskShoots = Database::all(
         "SELECT t.id, t.title, t.description, t.deadline AS start_datetime, NULL AS end_datetime, '' AS location,
                 u.name AS crew_name, c.name AS client_name, c.id AS client_id
@@ -94,9 +114,9 @@ try {
          LEFT JOIN users u ON u.id = t.assigned_user_id
          LEFT JOIN clients c ON c.id = t.client_id
          LEFT JOIN services s ON s.id = t.service_id
-         WHERE t.deleted_at IS NULL AND t.status NOT IN ('completed', 'cancelled')
-           AND (s.slug IN ('videography', 'photography') OR t.title LIKE '%shoot%' OR t.title LIKE '%Shooting%')
-         ORDER BY t.deadline ASC"
+         WHERE $taskShootsWhere
+         ORDER BY t.deadline ASC",
+        $taskShootsParams
     );
     foreach ($taskShoots as $ts) {
         $ts['id'] = 'task_' . $ts['id'];
@@ -116,6 +136,11 @@ try {
         $apprWhere .= " AND (a.user_id = ? OR a.editor_id = ?)";
         $apprParams[] = $userId;
         $apprParams[] = $userId;
+    } elseif ($isManager && !$isFounder) {
+        $managedIds = Permission::managedUserIds($userId);
+        $ph = implode(',', array_fill(0, count($managedIds), '?'));
+        $apprWhere .= " AND (a.user_id IN ($ph) OR a.reviewer_id = ? OR a.editor_id = ?)";
+        $apprParams = array_merge($managedIds, [$userId, $userId]);
     }
     $dbApprovals = Database::all(
         "SELECT a.id, a.title, a.description, a.status, a.stage, a.created_at,
@@ -147,6 +172,19 @@ try {
     }
 
     // B. Content Calendar double check items
+    $ccVis = Permission::clientVisibility($userId);
+    $ccWhere = "cc.status IN ('pending_editor_check', 'pending_approval', 'manager_review', 'needs_rectification') AND ({$ccVis['sql']})";
+    $ccParams = $ccVis['params'];
+    if (!$isFounder && !$isManager) {
+        $ccWhere .= " AND (cc.assigned_to = ? OR cc.editor_checked_by = ?)";
+        $ccParams[] = $userId;
+        $ccParams[] = $userId;
+    } elseif ($isManager && !$isFounder) {
+        $managedIds = Permission::managedUserIds($userId);
+        $ph = implode(',', array_fill(0, count($managedIds), '?'));
+        $ccWhere .= " AND (cc.assigned_to IN ($ph) OR cc.editor_checked_by IN ($ph))";
+        $ccParams = array_merge($ccParams, $managedIds, $managedIds);
+    }
     $ccPending = Database::all(
         "SELECT cc.id, cc.title, cc.status, cc.post_date, cc.created_at,
                 c.name AS client_name, u.name AS assignee_name, ed.name AS editor_name,
@@ -155,8 +193,9 @@ try {
          JOIN clients c ON c.id = cc.client_id
          LEFT JOIN users u ON u.id = cc.assigned_to
          LEFT JOIN users ed ON ed.id = cc.editor_checked_by
-         WHERE cc.status IN ('pending_editor_check', 'pending_approval', 'manager_review', 'needs_rectification')
-         ORDER BY cc.post_date ASC"
+         WHERE $ccWhere
+         ORDER BY cc.post_date ASC",
+        $ccParams
     );
     foreach ($ccPending as $cc) {
         $stage = '1. Editor Check Pending';
@@ -183,14 +222,31 @@ $tomorrowDate = date('Y-m-d', strtotime('+1 day'));
 $dueTomorrowList = [];
 try {
     // A. Tasks due tomorrow
+    $tasksTomorrowWhere = "DATE(t.deadline) = ? AND t.status NOT IN ('completed', 'cancelled') AND t.deleted_at IS NULL";
+    $tasksTomorrowParams = [$tomorrowDate];
+    if (!$isFounder) {
+        if ($isManager) {
+            $managedIds = Permission::managedUserIds($userId);
+            $ph = implode(',', array_fill(0, count($managedIds), '?'));
+            $tasksTomorrowWhere .= " AND (t.assigned_user_id IN ($ph) OR t.assigned_by = ?)";
+            $tasksTomorrowParams = array_merge($tasksTomorrowParams, $managedIds, [$userId]);
+        } else {
+            $tasksTomorrowWhere .= " AND (t.assigned_user_id = ? OR t.assigned_by = ?)";
+            $tasksTomorrowParams[] = $userId;
+            $tasksTomorrowParams[] = $userId;
+        }
+        $tasksTomorrowWhere .= " AND (t.is_private = 0 OR t.assigned_user_id = ? OR t.assigned_by = ?)";
+        $tasksTomorrowParams[] = $userId;
+        $tasksTomorrowParams[] = $userId;
+    }
     $tasksDueTomorrow = Database::all(
         "SELECT t.id, t.title, t.deadline, t.priority, t.status, c.name AS client_name, u.name AS assignee_name
          FROM tasks t
          LEFT JOIN clients c ON c.id = t.client_id
          LEFT JOIN users u ON u.id = t.assigned_user_id
-         WHERE DATE(t.deadline) = ? AND t.status NOT IN ('completed', 'cancelled') AND t.deleted_at IS NULL
+         WHERE $tasksTomorrowWhere
          ORDER BY t.priority DESC",
-        [$tomorrowDate]
+        $tasksTomorrowParams
     );
     foreach ($tasksDueTomorrow as $tdt) {
         $dueTomorrowList[] = [
@@ -205,13 +261,25 @@ try {
     }
 
     // B. Content due tomorrow
+    $cVis = Permission::clientVisibility($userId);
+    $contentTomorrowWhere = "cc.post_date = ? AND cc.status != 'published' AND ({$cVis['sql']})";
+    $contentTomorrowParams = array_merge([$tomorrowDate], $cVis['params']);
+    if (!$isFounder && !$isManager) {
+        $contentTomorrowWhere .= " AND cc.assigned_to = ?";
+        $contentTomorrowParams[] = $userId;
+    } elseif ($isManager && !$isFounder) {
+        $managedIds = Permission::managedUserIds($userId);
+        $ph = implode(',', array_fill(0, count($managedIds), '?'));
+        $contentTomorrowWhere .= " AND cc.assigned_to IN ($ph)";
+        $contentTomorrowParams = array_merge($contentTomorrowParams, $managedIds);
+    }
     $contentDueTomorrow = Database::all(
         "SELECT cc.id, cc.title, cc.post_date, cc.status, c.name AS client_name, u.name AS assignee_name
          FROM content_calendar cc
          JOIN clients c ON c.id = cc.client_id
          LEFT JOIN users u ON u.id = cc.assigned_to
-         WHERE cc.post_date = ? AND cc.status != 'published'",
-        [$tomorrowDate]
+         WHERE $contentTomorrowWhere",
+        $contentTomorrowParams
     );
     foreach ($contentDueTomorrow as $cdt) {
         $dueTomorrowList[] = [
@@ -226,13 +294,26 @@ try {
     }
 
     // C. Follow-ups due tomorrow
+    $leadsTomorrowWhere = "l.next_followup_date = ? AND l.deleted_at IS NULL AND ls.is_won = 0 AND ls.is_lost = 0";
+    $leadsTomorrowParams = [$tomorrowDate];
+    if (!$isFounder && !Permission::has('leads.view_all')) {
+        if ($isManager) {
+            $managedIds = Permission::managedUserIds($userId);
+            $ph = implode(',', array_fill(0, count($managedIds), '?'));
+            $leadsTomorrowWhere .= " AND l.assigned_user_id IN ($ph)";
+            $leadsTomorrowParams = array_merge($leadsTomorrowParams, $managedIds);
+        } else {
+            $leadsTomorrowWhere .= " AND l.assigned_user_id = ?";
+            $leadsTomorrowParams[] = $userId;
+        }
+    }
     $leadsDueTomorrow = Database::all(
         "SELECT l.id, l.name, l.company, l.next_followup_date, u.name AS assignee_name, ls.name AS status_name
          FROM leads l
          JOIN lead_statuses ls ON ls.id = l.status_id
          LEFT JOIN users u ON u.id = l.assigned_user_id
-         WHERE l.next_followup_date = ? AND l.deleted_at IS NULL AND ls.is_won = 0 AND ls.is_lost = 0",
-        [$tomorrowDate]
+         WHERE $leadsTomorrowWhere",
+        $leadsTomorrowParams
     );
     foreach ($leadsDueTomorrow as $ldt) {
         $dueTomorrowList[] = [
@@ -253,14 +334,35 @@ try {
 $clientAtRiskItems = [];
 try {
     // A. Delayed / Overdue Client Tasks
+    $overdueTasksWhere = "t.deadline < NOW() AND t.status NOT IN ('completed', 'cancelled') AND t.deleted_at IS NULL";
+    $overdueTasksParams = [];
+    if (!$isFounder) {
+        if ($isManager) {
+            $managedIds = Permission::managedUserIds($userId);
+            $ph = implode(',', array_fill(0, count($managedIds), '?'));
+            $overdueTasksWhere .= " AND (t.assigned_user_id IN ($ph) OR t.assigned_by = ?)";
+            $overdueTasksParams = array_merge($managedIds, [$userId]);
+        } else {
+            $overdueTasksWhere .= " AND (t.assigned_user_id = ? OR t.assigned_by = ?)";
+            $overdueTasksParams = [$userId, $userId];
+        }
+        $overdueTasksWhere .= " AND (t.is_private = 0 OR t.assigned_user_id = ? OR t.assigned_by = ?)";
+        $overdueTasksParams[] = $userId;
+        $overdueTasksParams[] = $userId;
+    }
+    $cVis = Permission::clientVisibility($userId);
+    $overdueTasksWhere .= " AND ({$cVis['sql']})";
+    $overdueTasksParams = array_merge($overdueTasksParams, $cVis['params']);
+
     $overdueClientTasks = Database::all(
         "SELECT t.id, t.title, t.deadline, DATEDIFF(NOW(), t.deadline) AS days_delayed,
                 c.name AS client_name, u.name AS responsible_name, t.priority
          FROM tasks t
          JOIN clients c ON c.id = t.client_id
          LEFT JOIN users u ON u.id = t.assigned_user_id
-         WHERE t.deadline < NOW() AND t.status NOT IN ('completed', 'cancelled') AND t.deleted_at IS NULL
-         ORDER BY days_delayed DESC LIMIT 20"
+         WHERE $overdueTasksWhere
+         ORDER BY days_delayed DESC LIMIT 20",
+        $overdueTasksParams
     );
     foreach ($overdueClientTasks as $oct) {
         $clientAtRiskItems[] = [
@@ -274,8 +376,8 @@ try {
         ];
     }
 
-    // B. Delayed Operations Issues
-    $delayedOpsIssues = OperationsIssueModel::allDelayedOrAtRisk();
+    // B. Delayed Operations Issues (scoped to viewer)
+    $delayedOpsIssues = OperationsIssueModel::allDelayedOrAtRisk($userId);
     foreach ($delayedOpsIssues as $doi) {
         $clientAtRiskItems[] = [
             'source' => 'Operations Error Delay',
@@ -289,14 +391,26 @@ try {
     }
 
     // C. Delayed Content Posts past post_date
+    $delayedContentWhere = "cc.post_date < CURDATE() AND cc.status NOT IN ('published', 'scheduled') AND ({$cVis['sql']})";
+    $delayedContentParams = $cVis['params'];
+    if (!$isFounder && !$isManager) {
+        $delayedContentWhere .= " AND cc.assigned_to = ?";
+        $delayedContentParams[] = $userId;
+    } elseif ($isManager && !$isFounder) {
+        $managedIds = Permission::managedUserIds($userId);
+        $ph = implode(',', array_fill(0, count($managedIds), '?'));
+        $delayedContentWhere .= " AND cc.assigned_to IN ($ph)";
+        $delayedContentParams = array_merge($delayedContentParams, $managedIds);
+    }
     $delayedContent = Database::all(
         "SELECT cc.id, cc.title, cc.post_date, DATEDIFF(NOW(), cc.post_date) AS days_delayed,
                 c.name AS client_name, u.name AS responsible_name
          FROM content_calendar cc
          JOIN clients c ON c.id = cc.client_id
          LEFT JOIN users u ON u.id = cc.assigned_to
-         WHERE cc.post_date < CURDATE() AND cc.status NOT IN ('published', 'scheduled')
-         ORDER BY days_delayed DESC LIMIT 15"
+         WHERE $delayedContentWhere
+         ORDER BY days_delayed DESC LIMIT 15",
+        $delayedContentParams
     );
     foreach ($delayedContent as $dc) {
         $clientAtRiskItems[] = [
@@ -316,7 +430,16 @@ try {
 // =========================================================================
 $masterPendingActions = [];
 try {
-    $leadFilter = $isFounder ? "1=1" : "l.assigned_user_id = $userId";
+    $leadFilter = "1=1";
+    if (!$isFounder && !Permission::has('leads.view_all')) {
+        if ($isManager) {
+            $managedIds = Permission::managedUserIds($userId);
+            $ph = implode(',', array_fill(0, count($managedIds), '?'));
+            $leadFilter = "l.assigned_user_id IN ($ph)";
+        } else {
+            $leadFilter = "l.assigned_user_id = $userId";
+        }
+    }
     $pendingLeads = Database::all(
         "SELECT l.id, l.name, l.company, u.name as assignee, ls.name as status_name 
          FROM leads l 

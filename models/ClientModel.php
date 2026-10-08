@@ -115,6 +115,8 @@ class ClientModel
 
     public static function update(int $id, array $data): void
     {
+        $oldClient = Database::one("SELECT start_date, renewal_date FROM clients WHERE id = ?", [$id]);
+
         Database::run(
             'UPDATE clients SET name=?, company=?, contact_person=?, phone=?, email=?, website=?, status=?, start_date=?, renewal_date=?, retention_date=?, drive_link=?, notes=? WHERE id=?',
             [
@@ -123,8 +125,85 @@ class ClientModel
                 $data['renewal_date'] ?: null, $data['retention_date'] ?: null, $data['drive_link'] ?: null, $data['notes'] ?: null, $id,
             ]
         );
-        ActivityModel::log('client', $id, 'updated', 'Client details updated');
-        AuditLog::record('update', 'client', $id);
+
+        // Check if deliverables and progress should be reset to 0:
+        // 1. Explicitly requested via reset_cycle flag
+        // 2. Or the start_date / renewal_date was changed to a different month
+        $shouldReset = !empty($data['reset_cycle']);
+        if (!$shouldReset && $oldClient) {
+            $oldStartMonth = !empty($oldClient['start_date']) ? substr($oldClient['start_date'], 0, 7) : '';
+            $newStartMonth = !empty($data['start_date']) ? substr($data['start_date'], 0, 7) : '';
+            $oldRenewalMonth = !empty($oldClient['renewal_date']) ? substr($oldClient['renewal_date'], 0, 7) : '';
+            $newRenewalMonth = !empty($data['renewal_date']) ? substr($data['renewal_date'], 0, 7) : '';
+
+            if (($newStartMonth && $oldStartMonth && $newStartMonth !== $oldStartMonth) ||
+                ($newRenewalMonth && $oldRenewalMonth && $newRenewalMonth !== $oldRenewalMonth)) {
+                $shouldReset = true;
+            }
+        }
+
+        if ($shouldReset) {
+            self::resetCycleProgressOnly($id);
+        }
+
+        ActivityModel::log('client', $id, 'updated', 'Client details updated' . ($shouldReset ? ' (deliverables & work progress reset to 0 for new cycle)' : ''));
+        AuditLog::record('update', 'client', $id, null, $shouldReset ? 'cycle_reset' : null);
+    }
+
+    /**
+     * Resets completed counts (Reels, Posts, Work Requirements) back to 0 for a client.
+     */
+    public static function resetCycleProgressOnly(int $clientId): void
+    {
+        Database::run("UPDATE clients SET reels_completed = 0, posts_completed = 0 WHERE id = ?", [$clientId]);
+        Database::run("UPDATE client_services SET quantity_completed = 0 WHERE client_id = ? AND deleted_at IS NULL", [$clientId]);
+        Database::run(
+            "UPDATE client_service_quantities csq
+             JOIN client_services cs ON cs.id = csq.client_service_id
+             SET csq.quantity_completed = 0
+             WHERE cs.client_id = ? AND cs.deleted_at IS NULL",
+            [$clientId]
+        );
+        Database::run(
+            "UPDATE client_service_assignments csa
+             JOIN client_services cs ON cs.id = csa.client_service_id
+             SET csa.quantity_completed = 0
+             WHERE cs.client_id = ? AND cs.deleted_at IS NULL",
+            [$clientId]
+        );
+    }
+
+    /**
+     * Complete reset of client cycle with new dates and resetting all progress to 0.
+     */
+    public static function resetCycle(int $clientId, ?string $newStartDate = null, ?string $newRenewalDate = null, ?string $newRetentionDate = null): void
+    {
+        $client = Database::one("SELECT * FROM clients WHERE id = ?", [$clientId]);
+        if (!$client) return;
+
+        $updates = ["reels_completed = 0", "posts_completed = 0"];
+        $params = [];
+
+        if ($newStartDate !== null) {
+            $updates[] = "start_date = ?";
+            $params[] = $newStartDate ?: null;
+        }
+        if ($newRenewalDate !== null) {
+            $updates[] = "renewal_date = ?";
+            $params[] = $newRenewalDate ?: null;
+        }
+        if ($newRetentionDate !== null) {
+            $updates[] = "retention_date = ?";
+            $params[] = $newRetentionDate ?: null;
+        }
+
+        $params[] = $clientId;
+        Database::run("UPDATE clients SET " . implode(', ', $updates) . " WHERE id = ?", $params);
+
+        self::resetCycleProgressOnly($clientId);
+
+        ActivityModel::log('client', $clientId, 'cycle_reset', 'New monthly cycle started. Deliverables & work requirements progress reset to 0.');
+        AuditLog::record('cycle_reset', 'client', $clientId, null, 'Monthly cycle reset to 0');
     }
 
     public static function softDelete(int $id): void

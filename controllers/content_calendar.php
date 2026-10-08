@@ -5,6 +5,7 @@ $action = $_GET['action'] ?? 'index';
 if ($action === 'store') {
     csrf_check_or_die();
     $clientId = (int)($_POST['client_id'] ?? 0);
+    if (!Permission::canAccessClient($clientId)) Permission::deny();
     $serviceId = !empty($_POST['service_id']) ? (int)$_POST['service_id'] : null;
     $subcategoryId = !empty($_POST['subcategory_id']) ? (int)$_POST['subcategory_id'] : null;
     $contentType = in_array($_POST['content_type'] ?? '', ['reel', 'post', 'carousel', 'story']) ? $_POST['content_type'] : 'reel';
@@ -32,6 +33,8 @@ if ($action === 'store') {
 if ($action === 'update') {
     csrf_check_or_die();
     $id = (int)($_POST['id'] ?? 0);
+    $item = ContentCalendarModel::find($id);
+    if (!$item || !Permission::canAccessClient((int)$item['client_id'])) Permission::deny();
     $postDate = !empty($_POST['post_date']) ? $_POST['post_date'] : date('Y-m-d');
     $title = trim($_POST['title'] ?? '');
     $content = trim($_POST['content'] ?? '');
@@ -56,6 +59,8 @@ if ($action === 'update') {
 if ($action === 'toggle_done') {
     csrf_check_or_die();
     $id = (int)($_POST['id'] ?? 0);
+    $item = ContentCalendarModel::find($id);
+    if (!$item || !Permission::canAccessClient((int)$item['client_id'])) Permission::deny();
     $res = ContentCalendarModel::toggleStatus($id);
 
     $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || isset($_GET['ajax']);
@@ -86,6 +91,8 @@ if ($action === 'toggle_done') {
 if ($action === 'delete') {
     csrf_check_or_die();
     $id = (int)($_POST['id'] ?? 0);
+    $item = ContentCalendarModel::find($id);
+    if (!$item || !Permission::canAccessClient((int)$item['client_id'])) Permission::deny();
     $clientId = (int)($_POST['client_id'] ?? 0);
     $returnTo = $_POST['return_to'] ?? '';
 
@@ -103,6 +110,8 @@ if ($action === 'delete') {
 if ($action === 'editor_check') {
     csrf_check_or_die();
     $id = (int)($_POST['id'] ?? 0);
+    $item = ContentCalendarModel::find($id);
+    if (!$item || !Permission::canAccessClient((int)$item['client_id'])) Permission::deny();
     $decision = $_POST['decision'] ?? 'passed';
     $notes = trim($_POST['rectification_notes'] ?? '');
     
@@ -122,6 +131,8 @@ if ($action === 'editor_check') {
 if ($action === 'manager_review') {
     csrf_check_or_die();
     $id = (int)($_POST['id'] ?? 0);
+    $item = ContentCalendarModel::find($id);
+    if (!$item || !Permission::canAccessClient((int)$item['client_id'])) Permission::deny();
     $decision = $_POST['decision'] ?? 'approve';
     $notes = trim($_POST['rectification_notes'] ?? '');
 
@@ -146,8 +157,15 @@ $viewAssignedTo = !empty($_GET['assigned_to']) ? (int)$_GET['assigned_to'] : nul
 $contentTypeFilter = !empty($_GET['type']) ? $_GET['type'] : null;
 $viewMode = $_GET['view_mode'] ?? 'pipeline'; // 'pipeline' or 'by_client'
 
-if (!Permission::has('calendar.view_all')) {
-    $viewAssignedTo = Auth::id();
+$isFounder = Auth::hasRole('founder') || Auth::isFounder();
+$isManager = Auth::hasRole('manager') || !empty(UserModel::managedTeamsFor(Auth::id()));
+
+if (!Permission::has('calendar.view_all') && !$isFounder) {
+    if (!$isManager) {
+        $viewAssignedTo = Auth::id();
+    } elseif ($viewAssignedTo && !Permission::manages(Auth::id(), $viewAssignedTo)) {
+        $viewAssignedTo = Auth::id();
+    }
 }
 
 $posts = ContentCalendarModel::all($viewClientId, $viewAssignedTo, $contentTypeFilter);
@@ -157,9 +175,10 @@ $totalReelsCount = count(array_filter($posts, fn($p) => ($p['content_type'] ?? '
 $totalPostsCount = count(array_filter($posts, fn($p) => in_array($p['content_type'] ?? '', ['post', 'carousel', 'story', 'static'], true)));
 $publishedCount = count(array_filter($posts, fn($p) => in_array($p['status'], ['published', 'completed'], true)));
 
-$clients = Database::all('SELECT id, name, company FROM clients WHERE deleted_at IS NULL ORDER BY name');
+$vis = Permission::clientVisibility();
+$clients = Database::all("SELECT id, name, company FROM clients WHERE deleted_at IS NULL AND ({$vis['sql']}) ORDER BY name", $vis['params']);
 $services = ServiceModel::all();
-$managers = UserModel::activeSelectList();
+$managers = UserModel::scopedSelectList();
 
 $clientsDeliverables = [];
 if ($viewMode === 'by_client') {

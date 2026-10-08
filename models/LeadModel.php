@@ -71,49 +71,75 @@ class LeadModel
     public static function canAccess(int $leadId, ?int $userId = null): bool
     {
         $userId = $userId ?? Auth::id();
-        $isFounder = Auth::hasRole('founder');
+        if (!$userId) return false;
+        $isFounder = Auth::hasRole('founder', $userId) || (Auth::user()['is_founder'] ?? 0) == 1;
         if ($isFounder) return true;
         
         $lead = Database::one('SELECT assigned_user_id, created_by, folder_id FROM leads WHERE id = ? AND deleted_at IS NULL', [$leadId]);
         if (!$lead) return false;
 
-        $isManager = Auth::hasRole('manager');
-        $canViewAll = Permission::has('leads.view_all') || Permission::has('leads.manage');
-        if ($isManager || $canViewAll) return true;
+        $canViewAll = Permission::has('leads.view_all', $userId);
+        if ($canViewAll) return true;
+
+        $isManager = Auth::hasRole('manager', $userId) || !empty(UserModel::managedTeamsFor($userId));
         
+        // Check folder access if folder is set
         if ($lead['folder_id']) {
-            $hasAccess = (int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ? AND user_id = ?', [$lead['folder_id'], $userId]);
-            $isPublicFolder = ((int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ?', [$lead['folder_id']])) === 0;
-            if ($hasAccess > 0 || $isPublicFolder) return true;
+            $folderId = (int)$lead['folder_id'];
+            $isPublicFolder = ((int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ?', [$folderId])) === 0;
+            $hasFolderAccess = (int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ? AND user_id = ?', [$folderId, $userId]) > 0;
+            
+            if (!$isPublicFolder && !$hasFolderAccess) {
+                if ($isManager) {
+                    $assignedId = (int)$lead['assigned_user_id'];
+                    if (!$assignedId || !Permission::manages($userId, $assignedId)) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
         }
-        
+
         $ownerId = (int)$lead['assigned_user_id'] ?: (int)$lead['created_by'];
         if ($ownerId === $userId) return true;
+
+        if ($isManager) {
+            $assignedId = (int)$lead['assigned_user_id'];
+            $createdById = (int)$lead['created_by'];
+            if ($assignedId && Permission::manages($userId, $assignedId)) return true;
+            if ($createdById && Permission::manages($userId, $createdById)) return true;
+        }
         
         return false;
     }
 
     public static function getCustomFolders(int $userId): array
     {
-        $isFounder = Auth::hasRole('founder');
-        $isManager = Auth::hasRole('manager');
-        $canView = Permission::has('leads.view') || Permission::has('leads.view_all') || Permission::has('leads.manage');
-        
-        if ($isFounder || $isManager || $canView) {
+        $isFounder = Auth::hasRole('founder', $userId) || (Auth::user()['is_founder'] ?? 0) == 1;
+        if ($isFounder || Permission::has('leads.view_all', $userId)) {
             return Database::all('SELECT lf.*, (SELECT COUNT(*) FROM leads l WHERE l.folder_id = lf.id AND l.deleted_at IS NULL) as lead_count FROM lead_folders lf ORDER BY lf.name');
-        } else {
-            return Database::all('SELECT DISTINCT lf.*, (SELECT COUNT(*) FROM leads l WHERE l.folder_id = lf.id AND l.deleted_at IS NULL) as lead_count 
-                                  FROM lead_folders lf 
-                                  LEFT JOIN lead_folder_users lfu ON lfu.folder_id = lf.id 
-                                  WHERE lfu.user_id = ? OR lf.created_by = ? OR (SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = lf.id) = 0
-                                  ORDER BY lf.name', [$userId, $userId]);
         }
+
+        $managedIds = Permission::managedUserIds($userId);
+        $ph = implode(',', array_fill(0, count($managedIds), '?'));
+        
+        return Database::all(
+            "SELECT DISTINCT lf.*, (SELECT COUNT(*) FROM leads l WHERE l.folder_id = lf.id AND l.deleted_at IS NULL) as lead_count 
+             FROM lead_folders lf 
+             LEFT JOIN lead_folder_users lfu ON lfu.folder_id = lf.id 
+             WHERE lfu.user_id IN ($ph) 
+                OR lf.created_by = ? 
+                OR (SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = lf.id) = 0
+             ORDER BY lf.name",
+            array_merge($managedIds, [$userId])
+        );
     }
 
     public static function getFolderStats(int $userId): array
     {
-        $isFounder = Auth::hasRole('founder');
-        $isManager = Auth::hasRole('manager');
+        $isFounder = Auth::hasRole('founder', $userId) || (Auth::user()['is_founder'] ?? 0) == 1;
+        $isManager = Auth::hasRole('manager', $userId) || !empty(UserModel::managedTeamsFor($userId));
         if (!$isFounder && !$isManager) return [];
         
         $sql = "SELECT u.id, u.name, COUNT(l.id) AS lead_count 
@@ -123,20 +149,25 @@ class LeadModel
                 LEFT JOIN leads l ON l.assigned_user_id = u.id AND l.deleted_at IS NULL
                 WHERE u.status = 'active' AND u.deleted_at IS NULL
                   AND r.slug IN ('manager', 'sales') ";
+        $params = [];
                 
         if (!$isFounder && $isManager) {
-            $sql .= " AND u.id NOT IN (SELECT ur2.user_id FROM user_roles ur2 JOIN roles r2 ON r2.id = ur2.role_id WHERE r2.slug = 'founder')";
+            $managedIds = Permission::managedUserIds($userId);
+            $ph = implode(',', array_fill(0, count($managedIds), '?'));
+            $sql .= " AND u.id IN ($ph) ";
+            $params = $managedIds;
         }
         
         $sql .= " GROUP BY u.id ORDER BY u.name";
-        return Database::all($sql);
+        return Database::all($sql, $params);
     }
 
     public static function getDashboardStats(array $filters, ?int $userId = null): array
     {
         $userId = $userId ?? Auth::id();
-        $isFounder = Auth::hasRole('founder');
-        $isManager = Auth::hasRole('manager');
+        $isFounder = Auth::hasRole('founder', $userId) || (Auth::user()['is_founder'] ?? 0) == 1;
+        $isManager = Auth::hasRole('manager', $userId) || !empty(UserModel::managedTeamsFor($userId));
+        $canViewAll = Permission::has('leads.view_all', $userId);
         
         $where = ['l.deleted_at IS NULL'];
         $params = [];
@@ -147,24 +178,43 @@ class LeadModel
         if ($folderId !== '') {
             $where[] = "l.folder_id = ?";
             $params[] = $folderId;
-            $canViewAll = Permission::has('leads.view_all') || Permission::has('leads.manage');
-            if (!$isFounder && !$isManager && !$canViewAll) {
-                $where[] = "(EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id = ?) OR NOT EXISTS (SELECT 1 FROM lead_folder_users lfu2 WHERE lfu2.folder_id = l.folder_id))";
-                $params[] = $userId;
+            if (!$isFounder && !$canViewAll) {
+                $managedIds = Permission::managedUserIds($userId);
+                $ph = implode(',', array_fill(0, count($managedIds), '?'));
+                $where[] = "(EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id IN ($ph)) OR NOT EXISTS (SELECT 1 FROM lead_folder_users lfu2 WHERE lfu2.folder_id = l.folder_id))";
+                $params = array_merge($params, $managedIds);
             }
         } else {
-            $where[] = "l.folder_id IS NULL"; // Regular assignments
-            
+            $where[] = "l.folder_id IS NULL";
             if ($assignedUserId === 'all') {
-                $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+                if ($isFounder || $canViewAll) {
+                    // All leads
+                } elseif ($isManager) {
+                    $managedIds = Permission::managedUserIds($userId);
+                    $ph = implode(',', array_fill(0, count($managedIds), '?'));
+                    $where[] = "l.assigned_user_id IN ($ph)";
+                    $params = array_merge($params, $managedIds);
+                } else {
+                    $where[] = "l.assigned_user_id = ?";
+                    $params[] = $userId;
+                }
             } elseif ($assignedUserId !== '') {
-                $where[] = "l.assigned_user_id = ?";
-                $params[] = $assignedUserId;
-            } elseif (!$isFounder && !$isManager) {
+                $targetId = (int)$assignedUserId;
+                if ($isFounder || $canViewAll || ($isManager && Permission::manages($userId, $targetId)) || $targetId === $userId) {
+                    $where[] = "l.assigned_user_id = ?";
+                    $params[] = $targetId;
+                } else {
+                    $where[] = "l.assigned_user_id = ?";
+                    $params[] = $userId;
+                }
+            } elseif (!$isFounder && !$canViewAll && !$isManager) {
                 $where[] = 'l.assigned_user_id = ?';
                 $params[] = $userId;
-            } elseif (!$isFounder && $isManager) {
-                 $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+            } elseif ($isManager && !$isFounder && !$canViewAll) {
+                $managedIds = Permission::managedUserIds($userId);
+                $ph = implode(',', array_fill(0, count($managedIds), '?'));
+                $where[] = "l.assigned_user_id IN ($ph)";
+                $params = array_merge($params, $managedIds);
             }
         }
 
@@ -203,44 +253,64 @@ class LeadModel
         $where = ['l.deleted_at IS NULL'];
         $params = [];
         
-        $isFounder = Auth::hasRole('founder');
-        $isManager = Auth::hasRole('manager');
+        $isFounder = Auth::hasRole('founder', $userId) || (Auth::user()['is_founder'] ?? 0) == 1;
+        $isManager = Auth::hasRole('manager', $userId) || !empty(UserModel::managedTeamsFor($userId));
+        $canViewAll = Permission::has('leads.view_all', $userId);
         
         $assignedUserId = $filters['assigned_user_id'] ?? '';
         $folderId = $filters['folder_id'] ?? '';
         
-        $canViewAll = Permission::has('leads.view_all') || Permission::has('leads.manage');
         if ($folderId === 'all') {
-            if (!$isFounder && !$isManager && !$canViewAll) {
-                $where[] = "(l.folder_id IS NULL OR EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id = ?) OR NOT EXISTS (SELECT 1 FROM lead_folder_users lfu2 WHERE lfu2.folder_id = l.folder_id))";
-                $params[] = $userId;
+            if (!$isFounder && !$canViewAll) {
+                $managedIds = Permission::managedUserIds($userId);
+                $ph = implode(',', array_fill(0, count($managedIds), '?'));
+                $where[] = "(l.folder_id IS NULL OR EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id IN ($ph)) OR NOT EXISTS (SELECT 1 FROM lead_folder_users lfu2 WHERE lfu2.folder_id = l.folder_id))";
+                $params = array_merge($params, $managedIds);
             }
         } elseif ($folderId !== '') {
             $where[] = "l.folder_id = ?";
             $params[] = $folderId;
-            if (!$isFounder && !$isManager && !$canViewAll) {
-                $where[] = "(EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id = ?) OR NOT EXISTS (SELECT 1 FROM lead_folder_users lfu2 WHERE lfu2.folder_id = l.folder_id))";
-                $params[] = $userId;
+            if (!$isFounder && !$canViewAll) {
+                $managedIds = Permission::managedUserIds($userId);
+                $ph = implode(',', array_fill(0, count($managedIds), '?'));
+                $where[] = "(EXISTS (SELECT 1 FROM lead_folder_users lfu WHERE lfu.folder_id = l.folder_id AND lfu.user_id IN ($ph)) OR NOT EXISTS (SELECT 1 FROM lead_folder_users lfu2 WHERE lfu2.folder_id = l.folder_id))";
+                $params = array_merge($params, $managedIds);
             }
         } else {
             $where[] = "l.folder_id IS NULL";
             if ($assignedUserId === 'all') {
-                 if (!$isFounder) {
-                     $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
-                 }
+                if ($isFounder || $canViewAll) {
+                    // All
+                } elseif ($isManager) {
+                    $managedIds = Permission::managedUserIds($userId);
+                    $ph = implode(',', array_fill(0, count($managedIds), '?'));
+                    $where[] = "l.assigned_user_id IN ($ph)";
+                    $params = array_merge($params, $managedIds);
+                } else {
+                    $where[] = "l.assigned_user_id = ?";
+                    $params[] = $userId;
+                }
             } elseif ($assignedUserId !== '') {
-                 $where[] = 'l.assigned_user_id = ?'; 
-                 $params[] = $assignedUserId; 
-            } elseif (!$isFounder && !$isManager) {
+                $targetId = (int)$assignedUserId;
+                if ($isFounder || $canViewAll || ($isManager && Permission::manages($userId, $targetId)) || $targetId === $userId) {
+                    $where[] = 'l.assigned_user_id = ?'; 
+                    $params[] = $targetId; 
+                } else {
+                    $where[] = 'l.assigned_user_id = ?';
+                    $params[] = $userId;
+                }
+            } elseif (!$isFounder && !$canViewAll && !$isManager) {
                 $where[] = 'l.assigned_user_id = ?';
                 $params[] = $userId;
-            } elseif (!$isFounder && $isManager) {
-                $where[] = "l.assigned_user_id NOT IN (SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.slug = 'founder')";
+            } elseif ($isManager && !$isFounder && !$canViewAll) {
+                $managedIds = Permission::managedUserIds($userId);
+                $ph = implode(',', array_fill(0, count($managedIds), '?'));
+                $where[] = "l.assigned_user_id IN ($ph)";
+                $params = array_merge($params, $managedIds);
             }
         }
 
         if (!empty($filters['status_id'])) { $where[] = 'l.status_id = ?'; $params[] = $filters['status_id']; }
-        if (!empty($filters['assigned_user_id']) && $filters['assigned_user_id'] !== 'all') { $where[] = 'l.assigned_user_id = ?'; $params[] = $filters['assigned_user_id']; }
         if (!empty($filters['source'])) { $where[] = 'l.source = ?'; $params[] = $filters['source']; }
         if (!empty($filters['followup']) && $filters['followup'] === 'today') { $where[] = 'l.next_followup_date = CURDATE()'; }
         if (!empty($filters['followup']) && $filters['followup'] === 'overdue') { $where[] = 'l.next_followup_date < CURDATE()'; }

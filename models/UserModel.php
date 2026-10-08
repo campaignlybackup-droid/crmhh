@@ -45,6 +45,27 @@ class UserModel
         return Database::all("SELECT id, name, employee_code FROM users WHERE deleted_at IS NULL AND status='active' ORDER BY name ASC");
     }
 
+    /**
+     * Returns active users visible/assignable to the current user.
+     * Founder/users.manage sees all active users; managers see their managed users + self;
+     * team members see members of their own teams + self.
+     */
+    public static function scopedSelectList(?int $userId = null): array
+    {
+        $userId = $userId ?? Auth::id();
+        if (!$userId || Auth::isFounder() || Auth::hasRole('founder') || Permission::has('users.manage', $userId)) {
+            return self::activeSelectList();
+        }
+        $isManager = Auth::hasRole('manager') || !empty(self::managedTeamsFor($userId));
+        $allowedIds = $isManager ? Permission::managedUserIds($userId) : Permission::teamUserIds($userId);
+        if (empty($allowedIds)) return [];
+        $ph = implode(',', array_fill(0, count($allowedIds), '?'));
+        return Database::all(
+            "SELECT id, name, employee_code FROM users WHERE deleted_at IS NULL AND status='active' AND id IN ($ph) ORDER BY name ASC",
+            $allowedIds
+        );
+    }
+
     public static function rolesFor(int $userId): array
     {
         return Database::all(

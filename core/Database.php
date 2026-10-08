@@ -15,6 +15,14 @@ class Database
                     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                     PDO::ATTR_EMULATE_PREPARES => false,
                 ]);
+                // Perfectly synchronize MySQL session timezone with PHP's timezone
+                try {
+                    $now = new DateTime('now', new DateTimeZone(date_default_timezone_get()));
+                    $tzOffset = $now->format('P');
+                    self::$instance->exec("SET time_zone = '{$tzOffset}'");
+                } catch (Throwable $tzErr) {
+                    app_log('Notice: Could not set MySQL session time_zone: ' . $tzErr->getMessage());
+                }
             } catch (PDOException $e) {
                 app_log('DB connection failed: ' . $e->getMessage());
                 fatal_error('Unable to connect to the database. Please check the configuration or contact the administrator.');

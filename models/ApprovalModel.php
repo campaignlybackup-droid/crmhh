@@ -55,10 +55,20 @@ class ApprovalModel
         $params = [];
 
         // Visibility rules
-        if (!Auth::hasRole('founder') && !Auth::hasRole('manager')) {
-            // Normal team members only see their own requests
-            $where = "a.user_id = ?";
-            $params[] = $userId;
+        $isFounder = Auth::hasRole('founder', $userId) || (Auth::user()['is_founder'] ?? 0) == 1;
+        $isManager = Auth::hasRole('manager', $userId) || !empty(UserModel::managedTeamsFor($userId));
+
+        if ($isFounder) {
+            $where = "1=1";
+        } elseif ($isManager) {
+            $managedIds = Permission::managedUserIds($userId);
+            $ph = implode(',', array_fill(0, count($managedIds), '?'));
+            $where = "(a.user_id IN ($ph) OR a.reviewer_id = ? OR a.editor_id = ?)";
+            $params = array_merge($managedIds, [$userId, $userId]);
+        } else {
+            // Team members see their own requests + requests where they are assigned as editor
+            $where = "(a.user_id = ? OR a.editor_id = ?)";
+            $params = [$userId, $userId];
         }
 
         $total = (int)Database::scalar("SELECT COUNT(*) FROM approvals a WHERE $where", $params);

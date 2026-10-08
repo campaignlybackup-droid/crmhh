@@ -12,6 +12,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css?v=<?= filemtime(__DIR__ . '/../../assets/css/style.css') ?>">
+<script>
+window.__SERVER_TIME__ = {
+    ts: <?= time() ?>,
+    tz: <?= json_encode(date_default_timezone_get()) ?>,
+    tzCode: <?= json_encode(date('T')) ?>,
+    tzOffset: <?= (int)date('Z') ?>
+};
+</script>
 </head>
 <body>
 <header class="topbar">
@@ -22,6 +30,11 @@
         <input type="text" name="q" placeholder="Search leads, clients, tasks, people&hellip;" value="<?= old('q') ?>">
     </form>
     <div class="topbar-right">
+        <div class="topbar-clock" id="topbarClock" title="Agency Live Synchronized Time (<?= e(date_default_timezone_get()) ?>)">
+            <span class="clock-dot"></span>
+            <span class="clock-time" id="topbarClockTime"><?= date('h:i:s A') ?></span>
+            <span class="clock-tz"><?= date('T') ?></span>
+        </div>
         <button type="button" class="icon-btn" onclick="window.location.reload()" title="Refresh">&#8635;</button>
         <a href="<?= url('search') ?>" class="icon-btn search-btn-mobile">&#128269;</a>
         <div class="dropdown" id="notifDropdown">

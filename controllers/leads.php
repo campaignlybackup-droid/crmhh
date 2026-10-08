@@ -16,7 +16,7 @@ switch ($action) {
         $statuses = LeadModel::statuses($folderId);
         $customFields = LeadModel::getCustomFields($folderId);
         $customValues = LeadModel::getCustomValues($id);
-        $users = UserModel::activeSelectList();
+        $users = UserModel::scopedSelectList();
         $proposals = Database::all("SELECT p.*, u.name AS assigned_name FROM proposals p LEFT JOIN users u ON u.id = p.assigned_user_id WHERE p.lead_id = ? ORDER BY p.deadline_at ASC", [$id]);
         render_page('leads/view', compact('lead', 'timeline', 'statuses', 'customFields', 'customValues', 'users', 'proposals'), 'Lead ' . $lead['lead_code']);
         break;
@@ -27,7 +27,7 @@ switch ($action) {
         $folderId = isset($_GET['folder_id']) && $_GET['folder_id'] !== '' ? (int)$_GET['folder_id'] : null;
         $statuses = LeadModel::statuses($folderId);
         $customFields = LeadModel::getCustomFields($folderId);
-        $users = UserModel::activeSelectList();
+        $users = UserModel::scopedSelectList();
         render_page('leads/form', ['lead' => null, 'folderId' => $folderId, 'statuses' => $statuses, 'customFields' => $customFields, 'customValues' => [], 'users' => $users], 'New Lead');
         break;
     }
@@ -71,7 +71,7 @@ switch ($action) {
         $statuses = LeadModel::statuses($folderId);
         $customFields = LeadModel::getCustomFields($folderId);
         $customValues = LeadModel::getCustomValues($id);
-        $users = UserModel::activeSelectList();
+        $users = UserModel::scopedSelectList();
         render_page('leads/form', compact('lead', 'folderId', 'statuses', 'customFields', 'customValues', 'users'), 'Edit Lead');
         break;
     }
@@ -557,7 +557,7 @@ switch ($action) {
             }
         }
 
-        $users = UserModel::activeSelectList();
+        $users = UserModel::scopedSelectList();
         $sources = LeadModel::distinctSources();
         $dashboardStats = LeadModel::getDashboardStats($filters);
         $allFolders = LeadModel::getCustomFolders(Auth::id());

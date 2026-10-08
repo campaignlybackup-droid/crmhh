@@ -29,6 +29,10 @@ class ContentCalendarModel
             $params[] = $contentType;
         }
 
+        $vis = Permission::clientVisibility(Auth::id());
+        $sql .= " AND ({$vis['sql']})";
+        $params = array_merge($params, $vis['params']);
+
         $sql .= ' ORDER BY cc.post_date ASC, cc.id DESC';
         return Database::all($sql, $params);
     }
@@ -276,10 +280,10 @@ class ContentCalendarModel
             }
         }
 
-        // Check direct client deliverable columns
+        // Check direct client deliverable columns & active cycle dates
         $clientDirect = null;
         try {
-            $clientDirect = Database::one("SELECT reels_required, reels_completed, posts_required, posts_completed FROM clients WHERE id = ?", [$clientId]);
+            $clientDirect = Database::one("SELECT reels_required, reels_completed, posts_required, posts_completed, start_date, renewal_date FROM clients WHERE id = ?", [$clientId]);
         } catch (Throwable $e) {}
 
         // Get required quantities from client_service_quantities or direct client setting
@@ -303,15 +307,48 @@ class ContentCalendarModel
                 [$clientId]
             );
 
-        $calendarCompReels = count(array_filter($reels, fn($r) => in_array($r['status'], ['published', 'completed'], true)));
-        $compReels = ($clientDirect && isset($clientDirect['reels_completed']) && (int)$clientDirect['reels_completed'] > 0)
-            ? (int)$clientDirect['reels_completed']
-            : $calendarCompReels;
+        // Active cycle dates for scoping completed calendar items
+        $cycleStart = !empty($clientDirect['start_date']) ? $clientDirect['start_date'] : null;
+        $cycleEnd = !empty($clientDirect['renewal_date']) ? $clientDirect['renewal_date'] : null;
 
-        $calendarCompPosts = count(array_filter($posts, fn($p) => in_array($p['status'], ['published', 'completed'], true)));
-        $compPosts = ($clientDirect && isset($clientDirect['posts_completed']) && (int)$clientDirect['posts_completed'] > 0)
+        $cycleCompReels = 0;
+        foreach ($reels as $r) {
+            if (!in_array($r['status'], ['published', 'completed'], true)) continue;
+            $pDate = !empty($r['post_date']) ? $r['post_date'] : null;
+            if ($cycleStart) {
+                if ($pDate && $pDate >= $cycleStart && (!$cycleEnd || $pDate <= $cycleEnd)) {
+                    $cycleCompReels++;
+                }
+            } else {
+                if ($pDate && substr($pDate, 0, 7) === date('Y-m')) {
+                    $cycleCompReels++;
+                }
+            }
+        }
+
+        $cycleCompPosts = 0;
+        foreach ($posts as $p) {
+            if (!in_array($p['status'], ['published', 'completed'], true)) continue;
+            $pDate = !empty($p['post_date']) ? $p['post_date'] : null;
+            if ($cycleStart) {
+                if ($pDate && $pDate >= $cycleStart && (!$cycleEnd || $pDate <= $cycleEnd)) {
+                    $cycleCompPosts++;
+                }
+            } else {
+                if ($pDate && substr($pDate, 0, 7) === date('Y-m')) {
+                    $cycleCompPosts++;
+                }
+            }
+        }
+
+        // If client has explicit reels_completed (including 0!), use it; otherwise use cycle count
+        $compReels = ($clientDirect && isset($clientDirect['reels_completed']) && $clientDirect['reels_completed'] !== null && $clientDirect['reels_completed'] !== '')
+            ? (int)$clientDirect['reels_completed']
+            : $cycleCompReels;
+
+        $compPosts = ($clientDirect && isset($clientDirect['posts_completed']) && $clientDirect['posts_completed'] !== null && $clientDirect['posts_completed'] !== '')
             ? (int)$clientDirect['posts_completed']
-            : $calendarCompPosts;
+            : $cycleCompPosts;
 
         return [
             'reels' => $reels,
@@ -323,10 +360,10 @@ class ContentCalendarModel
             'posts_completed' => $compPosts,
         ];
     }
-
     public static function clientsWithDeliverables(): array
     {
-        $clients = Database::all('SELECT id, name, company FROM clients WHERE deleted_at IS NULL ORDER BY name ASC');
+        $vis = Permission::clientVisibility(Auth::id());
+        $clients = Database::all("SELECT id, name, company FROM clients WHERE deleted_at IS NULL AND ({$vis['sql']}) ORDER BY name ASC", $vis['params']);
         $result = [];
 
         foreach ($clients as $c) {

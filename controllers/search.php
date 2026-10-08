@@ -30,6 +30,8 @@ if (mb_strlen($q) >= 2) {
     }
 
     if (Permission::hasAny(['tasks.view', 'tasks.view_all'])) {
+        $userId = Auth::id() ?: 1;
+        $isFounder = Auth::hasRole('founder') || Auth::isFounder();
         $scope = Permission::scopeIds('tasks.view_all');
         $where = '(title LIKE ? OR task_code LIKE ?) AND deleted_at IS NULL';
         $params = [$like, $like];
@@ -41,6 +43,11 @@ if (mb_strlen($q) >= 2) {
             } else {
                 $where .= ' AND 0=1';
             }
+        }
+        if (!$isFounder) {
+            $where .= " AND (is_private = 0 OR assigned_user_id = ? OR assigned_by = ?)";
+            $params[] = $userId;
+            $params[] = $userId;
         }
         $results['tasks'] = Database::all("SELECT * FROM tasks WHERE $where LIMIT 15", $params);
     }

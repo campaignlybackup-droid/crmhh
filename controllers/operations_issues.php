@@ -18,8 +18,9 @@ switch ($action) {
         ];
 
         [$rows, $p] = OperationsIssueModel::paginate($page, $perPage, $filters);
-        $users = UserModel::activeSelectList();
-        $clients = Database::all('SELECT id, name FROM clients WHERE deleted_at IS NULL ORDER BY name ASC');
+        $users = UserModel::scopedSelectList();
+        $vis = Permission::clientVisibility();
+        $clients = Database::all("SELECT id, name FROM clients WHERE deleted_at IS NULL AND ({$vis['sql']}) ORDER BY name ASC", $vis['params']);
         $delayedCount = count(OperationsIssueModel::allDelayedOrAtRisk());
 
         render_page('operations_issues/index', compact('rows', 'p', 'filters', 'users', 'clients', 'delayedCount'), 'Operations Errors & Issue Log');
@@ -27,8 +28,9 @@ switch ($action) {
     }
 
     case 'create': {
-        $users = UserModel::activeSelectList();
-        $clients = Database::all('SELECT id, name FROM clients WHERE deleted_at IS NULL ORDER BY name ASC');
+        $users = UserModel::scopedSelectList();
+        $vis = Permission::clientVisibility();
+        $clients = Database::all("SELECT id, name FROM clients WHERE deleted_at IS NULL AND ({$vis['sql']}) ORDER BY name ASC", $vis['params']);
         $tasks = Database::all('SELECT id, title FROM tasks WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 50');
         render_page('operations_issues/form', compact('users', 'clients', 'tasks'), 'Log Operational Error');
         break;
@@ -69,16 +71,16 @@ switch ($action) {
         $issue = OperationsIssueModel::find($id);
         if (!$issue) fatal_error('Operational error record not found.');
 
-        $isFounder = Auth::hasRole('founder');
-        $isManager = Auth::hasRole('manager');
+        $isFounder = Auth::hasRole('founder') || Auth::isFounder();
         $isResponsible = (int)$issue['responsible_id'] === Auth::id();
         $isNoticed = (int)$issue['noticed_by_id'] === Auth::id();
+        $managesResp = Permission::manages(Auth::id(), (int)$issue['responsible_id']);
 
-        if (!$isFounder && !$isManager && !$isResponsible && !$isNoticed) {
+        if (!$isFounder && !$isResponsible && !$isNoticed && !$managesResp) {
             Permission::deny();
         }
 
-        render_page('operations_issues/view', compact('issue', 'isFounder', 'isManager', 'isResponsible'), 'Issue Details: ' . $issue['issue_title']);
+        render_page('operations_issues/view', compact('issue', 'isFounder', 'isResponsible'), 'Issue Details: ' . $issue['issue_title']);
         break;
     }
 

@@ -28,19 +28,38 @@ switch ($action) {
             if (empty($services)) Permission::deny();
         }
         $timeline = $fullAccess ? ActivityModel::timeline('client', $id) : [];
+        
+        $taskWhere = "t.client_id = ? AND t.deleted_at IS NULL";
+        $taskParams = [$id];
+        if (!$fullAccess) {
+            $taskWhere .= " AND (t.is_private = 0 OR t.assigned_user_id = ? OR t.assigned_by = ?)";
+            $taskWhere .= " AND (t.assigned_user_id = ? OR t.assigned_by = ?)";
+            array_push($taskParams, Auth::id(), Auth::id(), Auth::id(), Auth::id());
+        }
         $tasks = Database::all(
             "SELECT t.*, u.name AS assigned_name FROM tasks t LEFT JOIN users u ON u.id = t.assigned_user_id
-             WHERE t.client_id = ? AND t.deleted_at IS NULL ORDER BY (t.deadline IS NULL), t.deadline ASC LIMIT 20",
-            [$id]
+             WHERE $taskWhere ORDER BY (t.deadline IS NULL), t.deadline ASC LIMIT 20",
+            $taskParams
         );
         $contentItems = ContentCalendarModel::all($id);
         $clientDeliverables = ContentCalendarModel::forClientGrouped($id);
-        $proposals = Database::all(
-            "SELECT p.*, u.name AS assigned_name FROM proposals p LEFT JOIN users u ON u.id = p.assigned_user_id WHERE p.client_id = ? ORDER BY p.deadline_at ASC",
-            [$id]
-        );
+        
+        $proposals = [];
+        if (Permission::hasAny(['proposals.view', 'proposals.manage'])) {
+            $propWhere = "p.client_id = ?";
+            $propParams = [$id];
+            if (!Permission::has('proposals.manage')) {
+                $propWhere .= " AND p.assigned_user_id = ?";
+                $propParams[] = Auth::id();
+            }
+            $proposals = Database::all(
+                "SELECT p.*, u.name AS assigned_name FROM proposals p LEFT JOIN users u ON u.id = p.assigned_user_id WHERE $propWhere ORDER BY p.deadline_at ASC",
+                $propParams
+            );
+        }
+        
         $allServices = ServiceModel::all();
-        $managers = UserModel::activeSelectList();
+        $managers = UserModel::scopedSelectList();
         render_page('clients/view', compact('client', 'services', 'timeline', 'tasks', 'contentItems', 'clientDeliverables', 'proposals', 'fullAccess', 'allServices', 'managers'), $client['name']);
         break;
     }
@@ -48,7 +67,7 @@ switch ($action) {
     case 'create': {
         Permission::require('clients.create');
         $allServices = ServiceModel::all();
-        $managers = UserModel::activeSelectList();
+        $managers = UserModel::scopedSelectList();
         render_page('clients/form', ['client' => null, 'allServices' => $allServices, 'managers' => $managers], 'New Client');
         break;
     }
@@ -98,6 +117,23 @@ switch ($action) {
         csrf_check_or_die();
         ClientModel::update($id, $_POST);
         Flash::success('Client updated.');
+        redirect(url('clients', ['action' => 'view', 'id' => $id]));
+        break;
+    }
+
+    case 'reset_cycle': {
+        $id = (int)($_POST['client_id'] ?? 0);
+        if (!Permission::canAccessClient($id)) Permission::deny();
+        if (!Permission::hasAny(['clients.edit', 'clients.manage_services']) && !Auth::hasRole('founder') && !Auth::hasRole('manager')) {
+            Permission::deny();
+        }
+        csrf_check_or_die();
+        $newStart = !empty($_POST['start_date']) ? trim($_POST['start_date']) : null;
+        $newRenewal = !empty($_POST['renewal_date']) ? trim($_POST['renewal_date']) : null;
+        $newRetention = !empty($_POST['retention_date']) ? trim($_POST['retention_date']) : null;
+
+        ClientModel::resetCycle($id, $newStart, $newRenewal, $newRetention);
+        Flash::success('New monthly cycle started! Deliverables and work requirements progress have been reset to 0.');
         redirect(url('clients', ['action' => 'view', 'id' => $id]));
         break;
     }

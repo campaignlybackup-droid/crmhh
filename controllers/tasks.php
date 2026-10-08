@@ -12,16 +12,17 @@ switch ($action) {
         $task = TaskModel::find($id);
         if (!$task) fatal_error('Task not found.');
         $timeline = ActivityModel::timeline('task', $id);
-        $users = UserModel::activeSelectList();
+        $users = UserModel::scopedSelectList();
         render_page('tasks/view', compact('task', 'timeline', 'users'), $task['title']);
         break;
     }
 
     case 'create': {
         Permission::require('tasks.create');
-        $clients = Database::all('SELECT id, name FROM clients WHERE deleted_at IS NULL ORDER BY name');
+        $vis = Permission::clientVisibility();
+        $clients = Database::all("SELECT id, name FROM clients WHERE deleted_at IS NULL AND ({$vis['sql']}) ORDER BY name", $vis['params']);
         $services = ServiceModel::all();
-        $users = UserModel::activeSelectList();
+        $users = UserModel::scopedSelectList();
         $preselectClientId = (int)($_GET['client_id'] ?? 0);
         render_page('tasks/form', ['task' => null, 'clients' => $clients, 'services' => $services, 'users' => $users, 'preselectClientId' => $preselectClientId], 'New Task');
         break;
@@ -44,9 +45,10 @@ switch ($action) {
         Permission::require('tasks.edit');
         $task = TaskModel::find($id);
         if (!$task) fatal_error('Task not found.');
-        $clients = Database::all('SELECT id, name FROM clients WHERE deleted_at IS NULL ORDER BY name');
+        $vis = Permission::clientVisibility();
+        $clients = Database::all("SELECT id, name FROM clients WHERE deleted_at IS NULL AND ({$vis['sql']}) ORDER BY name", $vis['params']);
         $services = ServiceModel::all();
-        $users = UserModel::activeSelectList();
+        $users = UserModel::scopedSelectList();
         render_page('tasks/form', compact('task', 'clients', 'services', 'users'), 'Edit Task');
         break;
     }
@@ -111,8 +113,9 @@ switch ($action) {
         ];
         $page = current_page_int();
         [$rows, $p] = TaskModel::paginate($page, 25, $filters);
-        $clients = Database::all('SELECT id, name FROM clients WHERE deleted_at IS NULL ORDER BY name');
-        $users = UserModel::activeSelectList();
+        $vis = Permission::clientVisibility();
+        $clients = Database::all("SELECT id, name FROM clients WHERE deleted_at IS NULL AND ({$vis['sql']}) ORDER BY name", $vis['params']);
+        $users = UserModel::scopedSelectList();
         render_page('tasks/list', compact('rows', 'p', 'filters', 'clients', 'users'), 'Tasks');
     }
 }

@@ -13,12 +13,17 @@
 </div>
 
 <div class="card" style="margin-bottom: 16px;">
-    <div class="flex-between">
+    <div class="flex-between" style="flex-wrap:wrap;gap:8px;">
         <strong>Quick Actions</strong>
         <div class="btn-group">
+            <?php if ($fullAccess && (Permission::hasAny(['clients.edit', 'clients.manage_services']) || Auth::hasRole('founder') || Auth::hasRole('manager'))): ?>
+            <button type="button" class="btn btn-sm btn-secondary" data-modal-open="resetCycleModal" style="display:inline-flex;align-items:center;gap:4px;color:var(--primary);border-color:var(--primary);" title="Start fresh monthly cycle and reset completed targets to 0">🔄 Start New Month Cycle</button>
+            <?php endif; ?>
             <a href="<?= url('tasks', ['action' => 'create', 'client_id' => $client['id']]) ?>" class="btn btn-sm btn-primary">+ Add Task</a>
             <a href="<?= url('content_calendar', ['client_id' => $client['id']]) ?>" class="btn btn-sm btn-primary">+ View/Add Content</a>
+            <?php if (Permission::has('proposals.manage')): ?>
             <a href="<?= url('proposals', ['action' => 'create', 'client_id' => $client['id']]) ?>" class="btn btn-sm btn-primary">+ Add Proposal</a>
+            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -41,12 +46,29 @@
 </div>
 <?php endif; ?>
 
+<?php if ($fullAccess && !empty($client['renewal_date']) && $client['renewal_date'] < date('Y-m-d')): ?>
+<div class="card mb-3" style="background:#fffbeb; border:1px solid #fef3c7; border-left:4px solid #f59e0b; padding:12px 16px; border-radius:6px;">
+    <div class="flex-between" style="flex-wrap:wrap; gap:8px;">
+        <div>
+            <strong style="color:#b45309;">⚠️ Billing Cycle Ended (<?= format_date($client['renewal_date']) ?>)</strong>
+            <div class="small" style="color:#92400e; margin-top:2px;">The renewal date for this client has passed. Start a new cycle to advance the dates and reset monthly completed targets to 0.</div>
+        </div>
+        <button type="button" class="btn btn-sm btn-primary" data-modal-open="resetCycleModal" style="font-size:11px;background:#d97706;border-color:#d97706;">🔄 Start New Month Cycle</button>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="card">
-    <div class="card-title">
-        Services &amp; Work Requirements
-        <?php if ($fullAccess && Permission::has('clients.manage_services')): ?>
-        <button class="btn btn-sm" data-modal-open="addServiceModal">+ Add Service</button>
-        <?php endif; ?>
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <span>Services &amp; Work Requirements</span>
+        <div class="btn-group">
+            <?php if ($fullAccess && (Permission::hasAny(['clients.edit', 'clients.manage_services']) || Auth::hasRole('founder') || Auth::hasRole('manager'))): ?>
+            <button type="button" class="btn btn-sm" data-modal-open="resetCycleModal" style="font-size:12px;display:inline-flex;align-items:center;gap:4px;">🔄 Start New Month Cycle</button>
+            <?php endif; ?>
+            <?php if ($fullAccess && Permission::has('clients.manage_services')): ?>
+            <button class="btn btn-sm" data-modal-open="addServiceModal">+ Add Service</button>
+            <?php endif; ?>
+        </div>
     </div>
 
     <?php foreach ($services as $svc): ?>
@@ -417,8 +439,9 @@
     </details>
 </div>
 
+<?php if (Permission::hasAny(['proposals.view', 'proposals.manage'])): ?>
 <div class="card">
-    <div class="card-title">Related Proposals <a href="<?= url('proposals', ['action' => 'create', 'client_id' => $client['id']]) ?>" class="btn btn-sm" style="float:right;">+ Add</a></div>
+    <div class="card-title">Related Proposals <?php if (Permission::has('proposals.manage')): ?><a href="<?= url('proposals', ['action' => 'create', 'client_id' => $client['id']]) ?>" class="btn btn-sm" style="float:right;">+ Add</a><?php endif; ?></div>
     <?php if (empty($proposals)): ?><p class="text-muted small">No proposals yet for this client.</p><?php else: ?>
     <div class="table-wrap responsive-table"><table>
         <thead><tr><th>Title</th><th>Assigned</th><th>Status</th><th>Deadline</th></tr></thead>
@@ -435,6 +458,7 @@
     </table></div>
     <?php endif; ?>
 </div>
+<?php endif; ?>
 
 <?php if ($fullAccess && !empty($timeline)): ?>
 <div class="card">
@@ -633,6 +657,68 @@ function openAddRequirement(csId, svcName) {
             <div class="flex-between" style="margin-top:16px;">
                 <button type="submit" class="btn btn-primary">Add Deliverable &amp; Link to Calendar</button>
                 <button type="button" class="btn" onclick="closeClientAddDeliverable()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Reset Cycle Modal -->
+<div class="modal-overlay" id="resetCycleModal">
+    <div class="modal-box" style="max-width:520px;">
+        <div class="modal-header">
+            <h3 style="margin:0;display:flex;align-items:center;gap:8px;">🔄 Start New Month Cycle</h3>
+            <button type="button" class="modal-close" data-modal-close>&times;</button>
+        </div>
+        <form method="post" action="<?= url('clients', ['action' => 'reset_cycle']) ?>">
+            <?= Csrf::field() ?>
+            <input type="hidden" name="client_id" value="<?= $client['id'] ?>">
+            <div class="modal-body" style="padding:16px;">
+                <p style="margin-bottom:14px; font-size:13.5px;">
+                    Start a fresh monthly cycle for <strong><?= e($client['name']) ?></strong>.
+                </p>
+                
+                <div style="background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:10px 14px; margin-bottom:16px; font-size:12.5px;">
+                    <div style="font-weight:600; margin-bottom:4px; color:var(--text);">Current Billing Cycle:</div>
+                    <div class="text-muted">
+                        <?= format_date($client['start_date']) ?: 'No start date' ?> &rarr; 
+                        <?= format_date($client['renewal_date']) ?: 'No renewal date' ?>
+                    </div>
+                </div>
+
+                <?php
+                    $suggestedStart = !empty($client['renewal_date']) ? $client['renewal_date'] : date('Y-m-d');
+                    $suggestedRenewal = date('Y-m-d', strtotime('+1 month', strtotime($suggestedStart)));
+                    $suggestedRetention = !empty($client['retention_date']) ? date('Y-m-d', strtotime('+1 month', strtotime($client['retention_date']))) : '';
+                ?>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>New Start Date *</label>
+                        <input type="date" name="start_date" value="<?= e($suggestedStart) ?>" required>
+                    </div>
+                    <div class="form-group">
+                        <label>New Renewal Date *</label>
+                        <input type="date" name="renewal_date" value="<?= e($suggestedRenewal) ?>" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>New Retention Date (Optional)</label>
+                    <input type="date" name="retention_date" value="<?= e($suggestedRetention) ?>">
+                </div>
+
+                <div style="background:#eef2ff; border:1px solid #c7d2fe; border-radius:6px; padding:10px 12px; margin-top:14px; font-size:12px; color:#3730a3;">
+                    <strong>✨ What happens when you confirm:</strong>
+                    <ul style="margin:4px 0 0 16px; padding:0;">
+                        <li>Reels completed resets to <strong>0</strong>.</li>
+                        <li>Posts completed resets to <strong>0</strong>.</li>
+                        <li>All work requirements completed counts reset to <strong>0</strong>.</li>
+                        <li>Existing required targets, deliverables, and team assignments are fully preserved.</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding:12px 16px; display:flex; justify-content:flex-end; gap:8px;">
+                <button type="button" class="btn" data-modal-close>Cancel</button>
+                <button type="submit" class="btn btn-primary" style="background:#4f46e5; border-color:#4f46e5;">Confirm &amp; Reset to 0</button>
             </div>
         </form>
     </div>

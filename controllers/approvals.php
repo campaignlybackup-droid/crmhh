@@ -41,12 +41,17 @@ switch ($action) {
         $approval = ApprovalModel::find($id);
         if (!$approval) fatal_error('Approval request not found.');
         
-        $isReviewer = Auth::hasRole('founder') || Auth::hasRole('manager');
+        $isFounder = Auth::hasRole('founder') || Auth::isFounder();
+        $isManager = Auth::hasRole('manager') || !empty(UserModel::managedTeamsFor(Auth::id()));
         $isSender = (int)$approval['user_id'] === Auth::id();
+        $isEditor = (int)$approval['editor_id'] === Auth::id() || (empty($approval['editor_id']) && $approval['stage'] === 'pending_editor');
+        $managesSender = Permission::manages(Auth::id(), (int)$approval['user_id']);
         
-        if (!$isReviewer && !$isSender) {
+        $canView = $isFounder || $isSender || $isEditor || ($isManager && $managesSender) || (int)$approval['reviewer_id'] === Auth::id();
+        if (!$canView) {
             Permission::deny();
         }
+        $isReviewer = $isFounder || ($isManager && $managesSender) || (int)$approval['reviewer_id'] === Auth::id();
         
         render_page('approvals/view', compact('approval', 'isReviewer', 'isSender'), 'Approval Details');
         break;
@@ -77,8 +82,11 @@ switch ($action) {
         $approval = ApprovalModel::find($id);
         if (!$approval) fatal_error('Approval request not found.');
         
-        $isReviewer = Auth::hasRole('founder') || Auth::hasRole('manager');
-        if (!$isReviewer) Permission::deny();
+        $isFounder = Auth::hasRole('founder') || Auth::isFounder();
+        $isManager = Auth::hasRole('manager') || !empty(UserModel::managedTeamsFor(Auth::id()));
+        $managesSender = Permission::manages(Auth::id(), (int)$approval['user_id']);
+        $canReview = $isFounder || ($isManager && $managesSender) || (int)$approval['reviewer_id'] === Auth::id();
+        if (!$canReview) Permission::deny();
         
         $status = $_POST['status'] === 'approved' ? 'approved' : 'rejected';
         ApprovalModel::updateStatus($id, $status, Auth::id(), $_POST['reviewer_notes'] ?? null);

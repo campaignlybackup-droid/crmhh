@@ -108,7 +108,7 @@ function openDayModal(day) {
         if (ev.related_type === 'task') link = `<a href="<?= url('tasks') ?>?search=${ev.related_id}" class="btn btn-sm" style="padding:2px 8px; font-size:12px;">View Task</a>`;
         if (ev.related_type === 'lead') link = `<a href="<?= url('leads') ?>?search=${ev.related_id}" class="btn btn-sm" style="padding:2px 8px; font-size:12px;">View Lead</a>`;
         
-        const time = new Date(ev.start_datetime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const time = ev.formatted_time || (ev.start_datetime ? ev.start_datetime.substring(11, 16) : 'All Day');
         
         html += `
         <div class="card" style="margin-bottom:12px; padding:16px; border-left: 4px solid var(--primary);">

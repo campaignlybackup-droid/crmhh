@@ -28,31 +28,27 @@ if ($action === 'delete') {
 $year = (int)($_GET['y'] ?? date('Y'));
 $month = (int)($_GET['m'] ?? date('n'));
 $viewUserId = Auth::id();
-if (Permission::has('calendar.view_all') && !empty($_GET['user_id'])) {
+$isFounder = Auth::hasRole('founder') || Auth::isFounder();
+$isManager = Auth::hasRole('manager') || !empty(UserModel::managedTeamsFor(Auth::id()));
+
+if (!empty($_GET['user_id'])) {
     if ($_GET['user_id'] === 'all') {
-        $viewUserId = 'all';
+        if ($isFounder || $isManager || Permission::has('calendar.view_all')) {
+            $viewUserId = 'all';
+        }
     } else {
-        $viewUserId = (int)$_GET['user_id'];
+        $reqUser = (int)$_GET['user_id'];
+        if ($isFounder || Permission::has('calendar.view_all') || ($isManager && Permission::manages(Auth::id(), $reqUser))) {
+            $viewUserId = $reqUser;
+        }
     }
 }
 
 $events = CalendarModel::eventsForMonth($viewUserId, $year, $month);
 
 $users = [];
-if (Permission::has('calendar.view_all')) {
-    $allUsers = UserModel::activeSelectList();
-    $isFounder = Auth::hasRole('founder');
-    if ($isFounder) {
-        $users = $allUsers;
-    } else {
-        // Filter out founder from the list
-        foreach ($allUsers as $u) {
-            $isUFounder = (int)Database::scalar('SELECT COUNT(*) FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ? AND r.slug = ?', [$u['id'], 'founder']);
-            if (!$isUFounder) {
-                $users[] = $u;
-            }
-        }
-    }
+if ($isFounder || $isManager || Permission::has('calendar.view_all')) {
+    $users = UserModel::scopedSelectList(Auth::id());
 }
 
 $prevMonth = $month - 1; $prevYear = $year;

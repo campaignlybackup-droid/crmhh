@@ -184,10 +184,21 @@ class OperationsIssueModel
         $params = [];
 
         // Scoping
-        if (!Auth::hasRole('founder') && !Auth::hasRole('manager')) {
+        $userId = Auth::id() ?: 1;
+        $isFounder = Auth::hasRole('founder') || Auth::isFounder();
+        $isManager = Auth::hasRole('manager') || !empty(UserModel::managedTeamsFor($userId));
+
+        if ($isFounder) {
+            // Founder sees all issues
+        } elseif ($isManager) {
+            $managedIds = Permission::managedUserIds($userId);
+            $ph = implode(',', array_fill(0, count($managedIds), '?'));
+            $where[] = "(oi.responsible_id IN ($ph) OR oi.noticed_by_id = ?)";
+            $params = array_merge($params, $managedIds, [$userId]);
+        } else {
             $where[] = '(oi.responsible_id = ? OR oi.noticed_by_id = ?)';
-            $params[] = Auth::id();
-            $params[] = Auth::id();
+            $params[] = $userId;
+            $params[] = $userId;
         }
 
         if (!empty($filters['status'])) {
@@ -239,9 +250,30 @@ class OperationsIssueModel
         return [$rows, $p];
     }
 
-    public static function allDelayedOrAtRisk(): array
+    public static function allDelayedOrAtRisk(?int $userId = null): array
     {
         try {
+            $userId = $userId ?? Auth::id();
+            $where = ["oi.status NOT IN ('corrected', 'closed')", "(oi.is_delayed = 1 OR oi.status = 'escalated_to_founder' OR (oi.due_date IS NOT NULL AND oi.due_date < CURDATE()))"];
+            $params = [];
+
+            if ($userId) {
+                $isFounder = Auth::hasRole('founder', $userId) || (Auth::user()['is_founder'] ?? 0) == 1;
+                $isManager = Auth::hasRole('manager', $userId) || !empty(UserModel::managedTeamsFor($userId));
+                if (!$isFounder) {
+                    if ($isManager) {
+                        $managedIds = Permission::managedUserIds($userId);
+                        $ph = implode(',', array_fill(0, count($managedIds), '?'));
+                        $where[] = "(oi.responsible_id IN ($ph) OR oi.noticed_by_id = ?)";
+                        $params = array_merge($managedIds, [$userId]);
+                    } else {
+                        $where[] = "(oi.responsible_id = ? OR oi.noticed_by_id = ?)";
+                        $params = [$userId, $userId];
+                    }
+                }
+            }
+
+            $whereSql = implode(' AND ', $where);
             return Database::all(
                 "SELECT oi.*, 
                         u_noticed.name AS noticed_by_name, 
@@ -251,9 +283,9 @@ class OperationsIssueModel
                  JOIN users u_noticed ON u_noticed.id = oi.noticed_by_id
                  JOIN users u_resp ON u_resp.id = oi.responsible_id
                  LEFT JOIN clients c ON c.id = oi.client_id
-                 WHERE oi.status NOT IN ('corrected', 'closed')
-                   AND (oi.is_delayed = 1 OR oi.status = 'escalated_to_founder' OR (oi.due_date IS NOT NULL AND oi.due_date < CURDATE()))
-                 ORDER BY oi.created_at ASC"
+                 WHERE $whereSql
+                 ORDER BY oi.created_at ASC",
+                $params
             );
         } catch (Throwable $e) {
             return [];

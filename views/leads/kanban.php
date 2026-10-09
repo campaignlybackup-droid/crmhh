@@ -42,7 +42,7 @@ if (empty($kanbanColumns['unassigned']['leads'])) {
         <label>Search</label>
         <input type="text" name="search" value="<?= e($filters['search']) ?>" placeholder="Name, phone, email, code&hellip;">
     </div>
-    <?php if (Permission::has('leads.view_all')): ?>
+    <?php if (Auth::isFounder() || Auth::hasRole('founder') || Auth::hasRole('manager') || !empty(UserModel::managedTeamsFor(Auth::id()))): ?>
     <div class="form-group">
         <label>Assigned To</label>
         <select name="assigned_user_id"><option value="">All</option>

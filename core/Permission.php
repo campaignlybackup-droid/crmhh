@@ -130,18 +130,41 @@ class Permission
         return array_values(array_unique($ids));
     }
 
+    public static function isFounder(?int $userId = null): bool
+    {
+        $userId = $userId ?? Auth::id();
+        if (!$userId) return false;
+        if ($userId === Auth::id() && Auth::isFounder()) return true;
+        $user = Database::one('SELECT is_founder FROM users WHERE id=?', [$userId]);
+        if (!empty($user) && (int)$user['is_founder'] === 1) return true;
+        return in_array('founder', UserModel::roleSlugsFor($userId), true);
+    }
+
+    public static function isManager(?int $userId = null): bool
+    {
+        $userId = $userId ?? Auth::id();
+        if (!$userId) return false;
+        if (self::isFounder($userId)) return false;
+        if (!empty(UserModel::managedTeamsFor($userId))) return true;
+        return in_array('manager', UserModel::roleSlugsFor($userId), true);
+    }
+
     /**
-     * Returns null when the user can see everything (holds $viewAllSlug),
-     * otherwise an array of user ids whose records are visible to them
-     * (self + anyone they manage).
+     * Returns null when the user is Founder (can see everything),
+     * otherwise an array of user ids whose records are visible to them:
+     * for managers, themselves + managed team members; for regular members, only themselves.
      */
     public static function scopeIds(string $viewAllSlug, ?int $userId = null): ?array
     {
         $userId = $userId ?? Auth::id();
-        if (self::has($viewAllSlug, $userId)) {
-            return null;
+        if (!$userId) return [];
+        if (self::isFounder($userId)) {
+            return null; // Founder sees everything
         }
-        return self::managedUserIds($userId);
+        if (self::isManager($userId)) {
+            return self::managedUserIds($userId);
+        }
+        return [$userId];
     }
 
     /** Whether $managerId manages $targetUserId (or is the same person). */
@@ -151,30 +174,44 @@ class Permission
     }
 
     /**
-     * Builds a SQL fragment (with params) restricting client rows to ones
-     * the given user is allowed to see, for use inside a WHERE clause.
-     * Returns ['sql' => '(1=1)' or 'EXISTS(...)', 'params' => []].
+     * Builds a SQL fragment restricting clients to ones assigned to the user or their managed team.
+     * ONLY the founder gets 1=1 (all clients).
+     * Non-founders only see clients where they or their team have active service assignments, tasks, or content deliverables.
      */
     public static function clientVisibility(?int $userId = null): array
     {
         $userId = $userId ?? Auth::id();
-        if (self::has('clients.view_all', $userId)) {
+        if (!$userId) return ['sql' => '0=1', 'params' => []];
+
+        if (self::isFounder($userId)) {
             return ['sql' => '1=1', 'params' => []];
         }
-        $ids = self::managedUserIds($userId);
+
+        $ids = self::isManager($userId) ? self::managedUserIds($userId) : [$userId];
         if (empty($ids)) {
             return ['sql' => '0=1', 'params' => []];
         }
+
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $sql = "EXISTS (
+        $sql = "(EXISTS (
                     SELECT 1 FROM client_services cs
                     LEFT JOIN client_service_assignments csa ON csa.client_service_id = cs.id
                     WHERE cs.client_id = clients.id
                       AND cs.deleted_at IS NULL
                       AND (cs.manager_id IN ($placeholders) OR csa.user_id IN ($placeholders))
                 )
-                OR clients.created_by IN ($placeholders)";
-        return ['sql' => $sql, 'params' => array_merge($ids, $ids, $ids)];
+                OR EXISTS (
+                    SELECT 1 FROM tasks t
+                    WHERE t.client_id = clients.id
+                      AND t.deleted_at IS NULL
+                      AND (t.assigned_user_id IN ($placeholders) OR t.assigned_by IN ($placeholders))
+                )
+                OR EXISTS (
+                    SELECT 1 FROM content_calendar cc
+                    WHERE cc.client_id = clients.id
+                      AND (cc.assigned_to IN ($placeholders) OR cc.editor_checked_by IN ($placeholders))
+                ))";
+        return ['sql' => $sql, 'params' => array_merge($ids, $ids, $ids, $ids, $ids, $ids)];
     }
 
     public static function canAccessClient(int $clientId, ?int $userId = null): bool

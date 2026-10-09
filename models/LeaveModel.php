@@ -13,7 +13,7 @@ class LeaveModel
         $lr = Database::one('SELECT user_id FROM leave_requests WHERE id = ?', [$id]);
         if (!$lr) return false;
         if ((int)$lr['user_id'] === $userId) return true;
-        if (Permission::has('leave.approve_all', $userId)) return true;
+        if (Permission::isFounder($userId)) return true;
         if (Permission::has('leave.approve_team', $userId) && Permission::manages($userId, (int)$lr['user_id'])) return true;
         return false;
     }
@@ -61,7 +61,8 @@ class LeaveModel
         $where = ['1=1'];
         $params = [];
 
-        if (Permission::has('leave.approve_all', $userId)) {
+        $isFounder = Permission::isFounder($userId);
+        if ($isFounder) {
             // all
         } elseif (Permission::has('leave.approve_team', $userId)) {
             $ids = array_values(array_unique(array_merge([$userId], Permission::managedUserIds($userId))));

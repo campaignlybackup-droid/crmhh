@@ -72,16 +72,12 @@ class LeadModel
     {
         $userId = $userId ?? Auth::id();
         if (!$userId) return false;
-        $isFounder = Auth::hasRole('founder', $userId) || (Auth::user()['is_founder'] ?? 0) == 1;
-        if ($isFounder) return true;
+        if (Permission::isFounder($userId)) return true;
         
         $lead = Database::one('SELECT assigned_user_id, created_by, folder_id FROM leads WHERE id = ? AND deleted_at IS NULL', [$leadId]);
         if (!$lead) return false;
 
-        $canViewAll = Permission::has('leads.view_all', $userId);
-        if ($canViewAll) return true;
-
-        $isManager = Auth::hasRole('manager', $userId) || !empty(UserModel::managedTeamsFor($userId));
+        $isManager = Permission::isManager($userId);
         
         // Check folder access if folder is set
         if ($lead['folder_id']) {
@@ -116,8 +112,7 @@ class LeadModel
 
     public static function getCustomFolders(int $userId): array
     {
-        $isFounder = Auth::hasRole('founder', $userId) || (Auth::user()['is_founder'] ?? 0) == 1;
-        if ($isFounder || Permission::has('leads.view_all', $userId)) {
+        if (Permission::isFounder($userId)) {
             return Database::all('SELECT lf.*, (SELECT COUNT(*) FROM leads l WHERE l.folder_id = lf.id AND l.deleted_at IS NULL) as lead_count FROM lead_folders lf ORDER BY lf.name');
         }
 
@@ -138,8 +133,8 @@ class LeadModel
 
     public static function getFolderStats(int $userId): array
     {
-        $isFounder = Auth::hasRole('founder', $userId) || (Auth::user()['is_founder'] ?? 0) == 1;
-        $isManager = Auth::hasRole('manager', $userId) || !empty(UserModel::managedTeamsFor($userId));
+        $isFounder = Permission::isFounder($userId);
+        $isManager = Permission::isManager($userId);
         if (!$isFounder && !$isManager) return [];
         
         $sql = "SELECT u.id, u.name, COUNT(l.id) AS lead_count 
@@ -165,9 +160,9 @@ class LeadModel
     public static function getDashboardStats(array $filters, ?int $userId = null): array
     {
         $userId = $userId ?? Auth::id();
-        $isFounder = Auth::hasRole('founder', $userId) || (Auth::user()['is_founder'] ?? 0) == 1;
-        $isManager = Auth::hasRole('manager', $userId) || !empty(UserModel::managedTeamsFor($userId));
-        $canViewAll = Permission::has('leads.view_all', $userId);
+        $isFounder = Permission::isFounder($userId);
+        $isManager = Permission::isManager($userId);
+        $canViewAll = $isFounder;
         
         $where = ['l.deleted_at IS NULL'];
         $params = [];
@@ -253,9 +248,9 @@ class LeadModel
         $where = ['l.deleted_at IS NULL'];
         $params = [];
         
-        $isFounder = Auth::hasRole('founder', $userId) || (Auth::user()['is_founder'] ?? 0) == 1;
-        $isManager = Auth::hasRole('manager', $userId) || !empty(UserModel::managedTeamsFor($userId));
-        $canViewAll = Permission::has('leads.view_all', $userId);
+        $isFounder = Permission::isFounder($userId);
+        $isManager = Permission::isManager($userId);
+        $canViewAll = $isFounder;
         
         $assignedUserId = $filters['assigned_user_id'] ?? '';
         $folderId = $filters['folder_id'] ?? '';

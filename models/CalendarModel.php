@@ -13,22 +13,22 @@ class CalendarModel
         // Determine allowed target user IDs to completely prevent cross-team leakage
         $targetUserIds = [];
         if ($userId === 'all') {
-            if ($isFounder || Permission::has('calendar.view_all')) {
+            if ($isFounder) {
                 $targetUserIds = null; // Unrestricted for founder
             } elseif ($isManager) {
                 $targetUserIds = Permission::managedUserIds($currentUserId);
             } else {
-                $targetUserIds = Permission::teamUserIds($currentUserId);
+                $targetUserIds = [$currentUserId];
             }
         } else {
             $reqId = (int)$userId;
-            if ($isFounder || Permission::has('calendar.view_all')) {
+            if ($isFounder) {
                 $targetUserIds = [$reqId];
             } elseif ($isManager) {
                 $managed = Permission::managedUserIds($currentUserId);
                 $targetUserIds = in_array($reqId, $managed, true) ? [$reqId] : [$currentUserId];
             } else {
-                $targetUserIds = ($reqId === $currentUserId) ? [$currentUserId] : [$currentUserId];
+                $targetUserIds = [$currentUserId];
             }
         }
 

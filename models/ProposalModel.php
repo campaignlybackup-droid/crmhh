@@ -72,15 +72,19 @@ class ProposalModel
         $where = ['1=1'];
         $params = [];
 
-        if (Permission::has('proposals.manage', $userId)) {
+        $isFounder = Permission::isFounder($userId);
+        $isManager = Permission::isManager($userId);
+        if ($isFounder) {
             // Can see all
-        } elseif (Permission::has('proposals.view', $userId)) {
-            // Only see assigned
-            $where[] = "p.assigned_user_id = ?";
-            $params[] = $userId;
+        } elseif ($isManager) {
+            $managedIds = Permission::managedUserIds($userId);
+            $ph = implode(',', array_fill(0, count($managedIds), '?'));
+            $where[] = "(p.assigned_user_id IN ($ph) OR p.created_by = ?)";
+            $params = array_merge($managedIds, [$userId]);
         } else {
-            // Should not reach here due to controller protection
-            $where[] = "1=0";
+            // Only see assigned to self or created by self
+            $where[] = "(p.assigned_user_id = ? OR p.created_by = ?)";
+            $params = [$userId, $userId];
         }
 
         if (!empty($filters['status'])) {

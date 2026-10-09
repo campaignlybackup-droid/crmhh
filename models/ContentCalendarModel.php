@@ -2,8 +2,9 @@
 
 class ContentCalendarModel
 {
-    public static function all(?int $clientId = null, ?int $assignedTo = null, ?string $contentType = null): array
+    public static function all(?int $clientId = null, ?int $assignedTo = null, ?string $contentType = null, ?int $userId = null): array
     {
+        $userId = $userId ?? Auth::id();
         $params = [];
         $sql = 'SELECT cc.*, c.name AS client_name, s.name AS service_name, sub.name AS subcategory_name, 
                        u.name AS assignee_name, u_ed.name AS editor_name, u_mgr.name AS manager_name 
@@ -29,7 +30,24 @@ class ContentCalendarModel
             $params[] = $contentType;
         }
 
-        $vis = Permission::clientVisibility(Auth::id());
+        // Strict role & assignment scoping: Everyone must ONLY see info assigned to them, except Founder
+        if ($userId) {
+            if (!Permission::isFounder($userId)) {
+                if (Permission::isManager($userId)) {
+                    $managedIds = Permission::managedUserIds($userId);
+                    $ph = implode(',', array_fill(0, count($managedIds), '?'));
+                    $sql .= " AND (cc.assigned_to IN ($ph) OR cc.editor_checked_by IN ($ph) OR cc.manager_reviewed_by = ? OR EXISTS (SELECT 1 FROM client_services cs WHERE cs.client_id = cc.client_id AND cs.manager_id = ?))";
+                    $params = array_merge($params, $managedIds, $managedIds, [$userId, $userId]);
+                } else {
+                    // Regular team members (e.g. Ansh): ONLY see items assigned to them
+                    $sql .= " AND (cc.assigned_to = ? OR cc.editor_checked_by = ?)";
+                    $params[] = $userId;
+                    $params[] = $userId;
+                }
+            }
+        }
+
+        $vis = Permission::clientVisibility($userId);
         $sql .= " AND ({$vis['sql']})";
         $params = array_merge($params, $vis['params']);
 
@@ -262,9 +280,10 @@ class ContentCalendarModel
         }
     }
 
-    public static function forClientGrouped(int $clientId): array
+    public static function forClientGrouped(int $clientId, ?int $userId = null): array
     {
-        $items = self::all($clientId);
+        $userId = $userId ?? Auth::id();
+        $items = self::all($clientId, null, null, $userId);
         $reels = [];
         $posts = [];
         $others = [];
@@ -360,16 +379,18 @@ class ContentCalendarModel
             'posts_completed' => $compPosts,
         ];
     }
-    public static function clientsWithDeliverables(): array
+    public static function clientsWithDeliverables(?int $userId = null): array
     {
-        $vis = Permission::clientVisibility(Auth::id());
+        $userId = $userId ?? Auth::id();
+        $isFounder = Permission::isFounder($userId);
+        $vis = Permission::clientVisibility($userId);
         $clients = Database::all("SELECT id, name, company FROM clients WHERE deleted_at IS NULL AND ({$vis['sql']}) ORDER BY name ASC", $vis['params']);
         $result = [];
 
         foreach ($clients as $c) {
-            $grouped = self::forClientGrouped((int)$c['id']);
+            $grouped = self::forClientGrouped((int)$c['id'], $userId);
             $totalCount = count($grouped['reels']) + count($grouped['posts']) + count($grouped['others']);
-            if ($totalCount > 0 || $grouped['reels_required'] > 0 || $grouped['posts_required'] > 0) {
+            if ($totalCount > 0 || ($isFounder && ($grouped['reels_required'] > 0 || $grouped['posts_required'] > 0))) {
                 $c['reels'] = $grouped['reels'];
                 $c['posts'] = $grouped['posts'];
                 $c['reels_required'] = $grouped['reels_required'];

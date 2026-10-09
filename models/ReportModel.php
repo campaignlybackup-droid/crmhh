@@ -31,7 +31,8 @@ class ReportModel
         $where = ['1=1'];
         $params = [];
 
-        if (Permission::has('reports.view_all', $userId)) {
+        $isFounder = Permission::isFounder($userId);
+        if ($isFounder) {
             // no restriction
         } elseif (Permission::has('reports.view_team', $userId)) {
             $ids = array_values(array_unique(array_merge([$userId], Permission::managedUserIds($userId))));

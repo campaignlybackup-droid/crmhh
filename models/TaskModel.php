@@ -20,13 +20,13 @@ class TaskModel
 
     public static function canAccess(int $taskId, ?int $userId = null): bool
     {
-        $userId = $userId ?? Auth::id();
-        if (Permission::has('tasks.view_all', $userId)) return true;
+        $userId = $userId ?? (Auth::id() ?: 1);
+        if (Permission::isFounder($userId)) return true;
         $task = Database::one('SELECT assigned_user_id, assigned_by, is_private FROM tasks WHERE id = ? AND deleted_at IS NULL', [$taskId]);
         if (!$task) return false;
         $ids = Permission::managedUserIds($userId);
         if ((int)$task['is_private'] === 1) {
-            return in_array((int)$task['assigned_user_id'], [$userId], true) || (int)$task['assigned_by'] === $userId;
+            return (int)$task['assigned_user_id'] === $userId || (int)$task['assigned_by'] === $userId;
         }
         return in_array((int)$task['assigned_user_id'], $ids, true) || (int)$task['assigned_by'] === $userId;
     }

@@ -296,7 +296,7 @@ try {
     // C. Follow-ups due tomorrow
     $leadsTomorrowWhere = "l.next_followup_date = ? AND l.deleted_at IS NULL AND ls.is_won = 0 AND ls.is_lost = 0";
     $leadsTomorrowParams = [$tomorrowDate];
-    if (!$isFounder && !Permission::has('leads.view_all')) {
+    if (!$isFounder) {
         if ($isManager) {
             $managedIds = Permission::managedUserIds($userId);
             $ph = implode(',', array_fill(0, count($managedIds), '?'));
@@ -431,7 +431,7 @@ try {
 $masterPendingActions = [];
 try {
     $leadFilter = "1=1";
-    if (!$isFounder && !Permission::has('leads.view_all')) {
+    if (!$isFounder) {
         if ($isManager) {
             $managedIds = Permission::managedUserIds($userId);
             $ph = implode(',', array_fill(0, count($managedIds), '?'));

@@ -13,7 +13,10 @@ switch ($action) {
         // manager/founder-level privilege. A plain executor role that merely has
         // an assignment on this client (e.g. an Editor) is visible above via
         // canAccessClient(), but must only ever see their own scoped work.
-        $fullAccess = Permission::hasAny(['clients.view_all', 'clients.edit', 'clients.manage_services']);
+        $currentUserId = Auth::id() ?: 1;
+        $isFounder = Permission::isFounder($currentUserId);
+        $isManager = Permission::isManager($currentUserId);
+        $fullAccess = $isFounder || ($isManager && Permission::hasAny(['clients.manage_services', 'clients.edit']));
         $client = ClientModel::find($id);
         if (!$client) fatal_error('Client not found.');
 
@@ -24,8 +27,7 @@ switch ($action) {
             }
             unset($svc);
         } else {
-            $services = ClientModel::servicesForEmployee($id, Auth::id());
-            if (empty($services)) Permission::deny();
+            $services = ClientModel::servicesForEmployee($id, $currentUserId);
         }
         $timeline = $fullAccess ? ActivityModel::timeline('client', $id) : [];
         
@@ -34,15 +36,16 @@ switch ($action) {
         if (!$fullAccess) {
             $taskWhere .= " AND (t.is_private = 0 OR t.assigned_user_id = ? OR t.assigned_by = ?)";
             $taskWhere .= " AND (t.assigned_user_id = ? OR t.assigned_by = ?)";
-            array_push($taskParams, Auth::id(), Auth::id(), Auth::id(), Auth::id());
+            array_push($taskParams, $currentUserId, $currentUserId, $currentUserId, $currentUserId);
         }
         $tasks = Database::all(
             "SELECT t.*, u.name AS assigned_name FROM tasks t LEFT JOIN users u ON u.id = t.assigned_user_id
              WHERE $taskWhere ORDER BY (t.deadline IS NULL), t.deadline ASC LIMIT 20",
             $taskParams
         );
-        $contentItems = ContentCalendarModel::all($id);
-        $clientDeliverables = ContentCalendarModel::forClientGrouped($id);
+        $contentUserId = $fullAccess ? null : $currentUserId;
+        $contentItems = ContentCalendarModel::all($id, null, null, $contentUserId);
+        $clientDeliverables = ContentCalendarModel::forClientGrouped($id, $contentUserId);
         
         $proposals = [];
         if (Permission::hasAny(['proposals.view', 'proposals.manage'])) {

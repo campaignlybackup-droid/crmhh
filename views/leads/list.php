@@ -319,19 +319,19 @@
 
 <script>
 var _inlineToastTimer = null;
+var _inlineDebounceTimers = {};
+
 function showToast(msg, type) {
     var el = document.getElementById('inline-toast');
+    if (!el) return;
     el.textContent = msg;
     el.className = 'show ' + (type || 'ok');
     if (_inlineToastTimer) clearTimeout(_inlineToastTimer);
-    _inlineToastTimer = setTimeout(function() { el.className = ''; }, 2500);
-}
-
-function handleEnter(e, inp) {
-    if (e.keyCode === 13 || e.key === 'Enter') { inp.blur(); }
+    _inlineToastTimer = setTimeout(function() { el.className = ''; }, 2200);
 }
 
 function setOriginalValue(inp) {
+    if (!inp) return;
     if (!inp.hasAttribute('data-original-value')) {
         var val = inp.type === 'checkbox' ? (inp.checked ? '1' : '0') : inp.value;
         inp.setAttribute('data-original-value', val);
@@ -341,6 +341,50 @@ function setOriginalValue(inp) {
 function getClosestRow(el) {
     while (el && el.tagName !== 'TR') { el = el.parentNode; }
     return el;
+}
+
+function getInputKey(inp) {
+    var row = getClosestRow(inp);
+    var rowId = row ? (row.id || '') : '';
+    var field = inp.getAttribute('data-field') || inp.getAttribute('data-cf-id') || inp.name || '';
+    return rowId + '_' + field;
+}
+
+function scheduleInlineEdit(inp, delay) {
+    setOriginalValue(inp);
+    var key = getInputKey(inp);
+    if (_inlineDebounceTimers[key]) {
+        clearTimeout(_inlineDebounceTimers[key]);
+    }
+    _inlineDebounceTimers[key] = setTimeout(function() {
+        handleInlineEdit(inp);
+    }, delay !== undefined ? delay : 450);
+}
+
+function flushInlineEdit(inp) {
+    var key = getInputKey(inp);
+    if (_inlineDebounceTimers[key]) {
+        clearTimeout(_inlineDebounceTimers[key]);
+        delete _inlineDebounceTimers[key];
+    }
+    handleInlineEdit(inp);
+}
+
+function handleEnter(e, inp) {
+    if (e.keyCode === 13 || e.key === 'Enter') {
+        flushInlineEdit(inp);
+        var row = getClosestRow(inp);
+        if (row && row.nextElementSibling) {
+            var fieldSelector = inp.getAttribute('data-field') 
+                ? '[data-field="' + inp.getAttribute('data-field') + '"]'
+                : (inp.getAttribute('data-cf-id') ? '[data-cf-id="' + inp.getAttribute('data-cf-id') + '"]' : null);
+            if (fieldSelector) {
+                var nextInp = row.nextElementSibling.querySelector(fieldSelector);
+                if (nextInp) { nextInp.focus(); return; }
+            }
+        }
+        inp.blur();
+    }
 }
 
 function handleInlineEdit(inp) {
@@ -359,58 +403,65 @@ function handleInlineEdit(inp) {
         if (originalValue === null) originalValue = inp.defaultValue;
         if (newValue === originalValue) return; // no change
 
-        inp.disabled = true;
-        var originalBg = inp.style.backgroundColor || '';
-        inp.style.backgroundColor = '#f0f0f0';
+        // Visual saving pulse without disabling inputs
+        inp.setAttribute('data-saving', '1');
+        inp.style.transition = 'box-shadow 0.2s ease, border-color 0.2s ease';
+        inp.style.borderColor = '#6366f1';
+        inp.style.boxShadow = '0 0 0 2px rgba(99, 102, 241, 0.25)';
 
         var xhr = new XMLHttpRequest();
         xhr.open('POST', '<?= url('leads', ['action' => 'api_update_inline']) ?>', true);
         xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.setRequestHeader('X-CSRF-TOKEN', '<?= e(Csrf::token()) ?>');
+
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== 4) return;
-            inp.disabled = false;
+            inp.removeAttribute('data-saving');
+
             if (xhr.status === 200) {
                 try {
                     var json = JSON.parse(xhr.responseText);
                     if (json.success) {
                         var finalVal = (json.new_value !== null && json.new_value !== undefined) ? json.new_value : newValue;
                         inp.setAttribute('data-original-value', finalVal);
-                        if (inp.type !== 'checkbox') inp.value = finalVal;
-                        inp.style.backgroundColor = '#d4edda';
-                        setTimeout(function() { inp.style.backgroundColor = originalBg; }, 800);
                         
+                        // Subtle success flash
+                        inp.style.borderColor = '#22c55e';
+                        inp.style.boxShadow = '0 0 0 2px rgba(34, 197, 94, 0.3)';
+                        setTimeout(function() {
+                            inp.style.borderColor = '';
+                            inp.style.boxShadow = '';
+                        }, 700);
+
                         // Live update row color when status changes
                         if (field === 'status_id' && json.status_color) {
                             row.style.background = 'color-mix(in srgb, ' + json.status_color + ' 13%, var(--surface, #ffffff))';
                             row.style.borderLeft = '5px solid ' + json.status_color;
                         }
 
-                        showToast('✅ Saved', 'ok');
+                        showToast('✓ Saved in real time', 'ok');
                     } else {
                         showToast('❌ ' + (json.error || 'Save failed'), 'error');
-                        if (inp.type === 'checkbox') inp.checked = originalValue === '1';
-                        else inp.value = originalValue;
-                        inp.setAttribute('data-original-value', originalValue);
-                        inp.style.backgroundColor = '#f8d7da';
-                        setTimeout(function() { inp.style.backgroundColor = originalBg; }, 800);
+                        inp.style.borderColor = '#ef4444';
+                        inp.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.3)';
+                        setTimeout(function() {
+                            inp.style.borderColor = '';
+                            inp.style.boxShadow = '';
+                        }, 1200);
                     }
                 } catch(err) {
-                    showToast('❌ Server error — change reverted', 'error');
-                    if (inp.type === 'checkbox') inp.checked = originalValue === '1';
-                    else inp.value = originalValue;
-                    inp.setAttribute('data-original-value', originalValue);
-                    inp.style.backgroundColor = '#f8d7da';
-                    setTimeout(function() { inp.style.backgroundColor = originalBg; }, 800);
+                    showToast('❌ Server error (' + err.message + ')', 'error');
+                    inp.style.borderColor = '#ef4444';
+                    setTimeout(function() { inp.style.borderColor = ''; inp.style.boxShadow = ''; }, 1200);
                 }
             } else {
                 showToast('❌ Network error (HTTP ' + xhr.status + ')', 'error');
-                if (inp.type === 'checkbox') inp.checked = originalValue === '1';
-                else inp.value = originalValue;
-                inp.setAttribute('data-original-value', originalValue);
-                inp.style.backgroundColor = '#f8d7da';
-                setTimeout(function() { inp.style.backgroundColor = originalBg; }, 800);
+                inp.style.borderColor = '#ef4444';
+                setTimeout(function() { inp.style.borderColor = ''; inp.style.boxShadow = ''; }, 1200);
             }
         };
+
         var payload = 'id='       + encodeURIComponent(leadId)   +
                       '&field='   + encodeURIComponent(field)     +
                       '&new_value=' + encodeURIComponent(newValue) +
@@ -421,20 +472,27 @@ function handleInlineEdit(inp) {
     }
 }
 
-
 function quickAddLead() {
+    var nameInput = document.getElementById('qa_name');
+    if (!nameInput || !nameInput.value.trim()) {
+        if (nameInput) nameInput.focus();
+        showToast('Please enter lead name', 'error');
+        return;
+    }
+
     var data = {
-        name: document.getElementById('qa_name').value,
-        phone: document.getElementById('qa_phone').value,
-        email: document.getElementById('qa_email').value,
-        company: document.getElementById('qa_company').value,
-        source: document.getElementById('qa_source').value,
-        status_id: document.getElementById('qa_status_id').value,
+        name: nameInput.value.trim(),
+        phone: document.getElementById('qa_phone') ? document.getElementById('qa_phone').value.trim() : '',
+        email: document.getElementById('qa_email') ? document.getElementById('qa_email').value.trim() : '',
+        company: document.getElementById('qa_company') ? document.getElementById('qa_company').value.trim() : '',
+        source: document.getElementById('qa_source') ? document.getElementById('qa_source').value.trim() : '',
+        status_id: document.getElementById('qa_status_id') ? document.getElementById('qa_status_id').value : '',
         assigned_user_id: document.getElementById('qa_assigned_user_id') ? document.getElementById('qa_assigned_user_id').value : '',
-        next_followup_date: document.getElementById('qa_next_followup_date').value,
-        next_step: document.getElementById('qa_next_step').value,
-        notes: document.getElementById('qa_notes').value,
-        folder_id: document.getElementById('qa_folder_id') ? document.getElementById('qa_folder_id').value : ''
+        next_followup_date: document.getElementById('qa_next_followup_date') ? document.getElementById('qa_next_followup_date').value : '',
+        next_step: document.getElementById('qa_next_step') ? document.getElementById('qa_next_step').value.trim() : '',
+        notes: document.getElementById('qa_notes') ? document.getElementById('qa_notes').value.trim() : '',
+        folder_id: document.getElementById('qa_folder_id') ? document.getElementById('qa_folder_id').value : '<?= !empty($filters['folder_id']) && $filters['folder_id'] !== 'all' ? (int)$filters['folder_id'] : '' ?>',
+        _csrf: '<?= e(Csrf::token()) ?>'
     };
     
     var cfInputs = document.querySelectorAll('#quick-add-row .cf-input');
@@ -444,37 +502,62 @@ function quickAddLead() {
     }
     data.custom_fields = cf;
 
-    if (!data.name) return alert('Name is required');
-    
     var btn = document.querySelector('#quick-add-row .btn-primary');
-    if (btn) { btn.innerText = '...'; btn.disabled = true; }
+    if (btn) { btn.innerText = 'Saving...'; btn.disabled = true; }
     
     var xhr = new XMLHttpRequest();
     xhr.open('POST', '<?= url('leads', ['action' => 'api_create']) ?>', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    xhr.setRequestHeader('X-CSRF-TOKEN', '<?= e(Csrf::token()) ?>');
+
     xhr.onreadystatechange = function() {
         if (xhr.readyState === 4) {
             if (xhr.status === 200) {
                 try {
                     var json = JSON.parse(xhr.responseText);
                     if (json.success) {
-                        window.location.reload();
+                        showToast('✓ Lead created successfully!', 'ok');
+                        setTimeout(function() { window.location.reload(); }, 400);
                     } else {
-                        alert('Error: ' + json.error);
+                        showToast('❌ ' + (json.error || 'Failed to create lead'), 'error');
                         if (btn) { btn.innerText = '+ Add'; btn.disabled = false; }
                     }
                 } catch(e) {
-                    alert('Error: Failed to parse response as JSON. The server might have returned an HTML error.');
+                    showToast('❌ Server error while saving lead', 'error');
                     if (btn) { btn.innerText = '+ Add'; btn.disabled = false; }
                 }
             } else {
-                alert('Error: Network request failed with status ' + xhr.status);
+                showToast('❌ Network error (HTTP ' + xhr.status + ')', 'error');
                 if (btn) { btn.innerText = '+ Add'; btn.disabled = false; }
             }
         }
     };
     xhr.send(JSON.stringify(data));
 }
+
+// Automatically bind real-time event delegation
+document.addEventListener('input', function(e) {
+    if (e.target && e.target.classList.contains('edit-input')) {
+        scheduleInlineEdit(e.target, 450);
+    }
+});
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.classList.contains('edit-input')) {
+        flushInlineEdit(e.target);
+    }
+});
+document.addEventListener('blur', function(e) {
+    if (e.target && e.target.classList.contains('edit-input')) {
+        flushInlineEdit(e.target);
+    }
+}, true);
+document.addEventListener('focusin', function(e) {
+    if (e.target && e.target.classList.contains('edit-input')) {
+        setOriginalValue(e.target);
+    }
+});
+
 
 function toggleAllLeads(source) {
     var checkboxes = document.querySelectorAll('.lead-checkbox');

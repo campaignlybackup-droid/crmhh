@@ -740,10 +740,14 @@ function toggleClientDeliverableStatus(id) {
     const formData = new FormData();
     formData.append('id', id);
     formData.append('csrf_token', '<?= Csrf::token() ?>');
+    formData.append('_csrf', '<?= Csrf::token() ?>');
 
     fetch('<?= url("content_calendar", ["action" => "toggle_done"]) ?>', {
         method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        headers: { 
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': '<?= e(Csrf::token()) ?>'
+        },
         body: formData
     })
     .then(r => r.json())
@@ -759,4 +763,36 @@ function toggleClientDeliverableStatus(id) {
         alert('Network error while updating status.');
     });
 }
+
+document.addEventListener('submit', function(e) {
+    if (e.target && e.target.action && e.target.action.indexOf('update_deliverable_completed') !== -1) {
+        e.preventDefault();
+        var form = e.target;
+        var btn = form.querySelector('button');
+        var origText = btn ? btn.innerText : '';
+        if (btn) { btn.innerText = '✓'; btn.disabled = true; }
+        var fd = new FormData(form);
+        fetch(form.action, {
+            method: 'POST',
+            headers: { 
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': '<?= e(Csrf::token()) ?>'
+            },
+            body: fd
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                if (btn) { btn.innerText = origText; btn.disabled = false; }
+                alert(data.error || 'Save failed');
+            }
+        })
+        .catch(err => {
+            if (btn) { btn.innerText = origText; btn.disabled = false; }
+            form.submit();
+        });
+    }
+});
 </script>

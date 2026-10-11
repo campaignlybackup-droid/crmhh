@@ -47,7 +47,7 @@ class ContentCalendarModel
             }
         }
 
-        $vis = Permission::clientVisibility($userId);
+        $vis = Permission::clientVisibility($userId, 'c.id');
         $sql .= " AND ({$vis['sql']})";
         $params = array_merge($params, $vis['params']);
 

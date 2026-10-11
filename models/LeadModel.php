@@ -78,33 +78,34 @@ class LeadModel
         if (!$lead) return false;
 
         $isManager = Permission::isManager($userId);
-        
-        // Check folder access if folder is set
-        if ($lead['folder_id']) {
+        $assignedId = (int)($lead['assigned_user_id'] ?? 0);
+        $createdById = (int)($lead['created_by'] ?? 0);
+
+        // 1. Direct assignment or creator
+        if ($assignedId === $userId || $createdById === $userId) {
+            return true;
+        }
+
+        // 2. Manager managing assigned user or creator
+        if ($isManager) {
+            if ($assignedId && Permission::manages($userId, $assignedId)) return true;
+            if ($createdById && Permission::manages($userId, $createdById)) return true;
+        }
+
+        // 3. Folder access: if the lead belongs to a folder
+        if (!empty($lead['folder_id'])) {
             $folderId = (int)$lead['folder_id'];
             $isPublicFolder = ((int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ?', [$folderId])) === 0;
             $hasFolderAccess = (int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ? AND user_id = ?', [$folderId, $userId]) > 0;
             
-            if (!$isPublicFolder && !$hasFolderAccess) {
-                if ($isManager) {
-                    $assignedId = (int)$lead['assigned_user_id'];
-                    if (!$assignedId || !Permission::manages($userId, $assignedId)) {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
+            if ($isPublicFolder || $hasFolderAccess) {
+                return true;
             }
         }
 
-        $ownerId = (int)$lead['assigned_user_id'] ?: (int)$lead['created_by'];
-        if ($ownerId === $userId) return true;
-
-        if ($isManager) {
-            $assignedId = (int)$lead['assigned_user_id'];
-            $createdById = (int)$lead['created_by'];
-            if ($assignedId && Permission::manages($userId, $assignedId)) return true;
-            if ($createdById && Permission::manages($userId, $createdById)) return true;
+        // 4. Unassigned leads in the general pool (no folder)
+        if (!$assignedId && empty($lead['folder_id'])) {
+            return true;
         }
         
         return false;

@@ -95,8 +95,13 @@ async function createFolder() {
     
     try {
         const res = await fetch('<?= url('leads', ['action' => 'api_create_folder']) ?>', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ name, users })
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': '<?= e(Csrf::token()) ?>'
+            },
+            body: JSON.stringify({ name, users, _csrf: '<?= e(Csrf::token()) ?>' })
         });
         
         let json;

@@ -1,6 +1,5 @@
 <?php
-
-Permission::requireAny(['leads.view', 'leads.view_all']);
+Auth::requireLogin();
 
 $action = $_GET['action'] ?? 'index';
 
@@ -386,30 +385,40 @@ switch ($action) {
     }
 
     case 'api_create': {
-        Permission::require('leads.create');
+        if (!Csrf::verify()) {
+            echo json_encode(['success' => false, 'error' => 'CSRF verification failed']); exit;
+        }
         $json = json_decode(file_get_contents('php://input'), true);
         if (!$json) { echo json_encode(['success' => false, 'error' => 'Invalid JSON']); exit; }
         
-        $v = Validator::make($json)->required('name', 'Name')->email('email', 'Email');
-        if ($v->fails()) { echo json_encode(['success' => false, 'error' => $v->firstError()]); exit; }
+        $name = trim($json['name'] ?? '');
+        if ($name === '') {
+            echo json_encode(['success' => false, 'error' => 'Name is required']); exit;
+        }
+        
+        $email = trim($json['email'] ?? '');
+        if ($email !== '' && !valid_email($email)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid email address']); exit;
+        }
         
         $folderId = !empty($json['folder_id']) ? (int)$json['folder_id'] : null;
-        $dup = LeadModel::findByPhoneOrEmail($json['phone'] ?? null, $json['email'] ?? null, $folderId);
-        if ($dup) { echo json_encode(['success' => false, 'error' => 'Lead with this phone/email already exists.']); exit; }
+        if (!empty($json['phone']) || !empty($email)) {
+            $dup = LeadModel::findByPhoneOrEmail($json['phone'] ?? null, $email ?: null, $folderId);
+            if ($dup) { echo json_encode(['success' => false, 'error' => 'Lead with this phone/email already exists.']); exit; }
+        }
         
         $assignedUserId = Auth::id(); // Default to self
-        if (!empty($json['assigned_user_id']) && Permission::has('leads.assign')) {
+        if (!empty($json['assigned_user_id']) && (Permission::has('leads.assign') || Permission::isFounder() || Permission::isManager())) {
             $assignedUserId = (int)$json['assigned_user_id'];
         }
-        $folderId = !empty($json['folder_id']) ? (int)$json['folder_id'] : null;
-        if ($folderId && !Auth::hasRole('founder') && !Auth::hasRole('manager') && !Permission::has('leads.manage')) {
+        if ($folderId && !Permission::isFounder() && !Permission::isManager() && !Permission::has('leads.manage')) {
             $hasAccess = (int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ? AND user_id = ?', [$folderId, Auth::id()]);
             $isPublic = ((int)Database::scalar('SELECT COUNT(*) FROM lead_folder_users WHERE folder_id = ?', [$folderId])) === 0;
             if (!$hasAccess && !$isPublic) { echo json_encode(['success' => false, 'error' => 'Access denied to this folder']); exit; }
         }
         
         $id = LeadModel::create([
-            'name' => trim($json['name']), 'phone' => trim($json['phone'] ?? ''), 'email' => trim($json['email'] ?? ''),
+            'name' => $name, 'phone' => trim($json['phone'] ?? ''), 'email' => $email,
             'company' => trim($json['company'] ?? ''), 'source' => trim($json['source'] ?? ''),
             'status_id' => $json['status_id'] ?? null, 'assigned_user_id' => $assignedUserId,
             'next_followup_date' => $json['next_followup_date'] ?: null, 'next_step' => $json['next_step'] ?? '', 'notes' => $json['notes'] ?? '',
@@ -426,25 +435,43 @@ switch ($action) {
     }
 
     case 'api_update': {
+        if (!Csrf::verify()) {
+            echo json_encode(['success' => false, 'error' => 'CSRF verification failed']); exit;
+        }
         $json = json_decode(file_get_contents('php://input'), true);
         $id = (int)($json['id'] ?? 0);
         if (!$id || !LeadModel::canAccess($id)) { echo json_encode(['success' => false, 'error' => 'Access denied']); exit; }
-        Permission::require('leads.edit');
         
-        $v = Validator::make($json)->required('name', 'Name')->email('email', 'Email');
-        if ($v->fails()) { echo json_encode(['success' => false, 'error' => $v->firstError()]); exit; }
+        $name = trim($json['name'] ?? '');
+        if ($name === '') {
+            echo json_encode(['success' => false, 'error' => 'Name is required']); exit;
+        }
+        
+        $email = trim($json['email'] ?? '');
+        if ($email !== '' && !valid_email($email)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid email address']); exit;
+        }
         
         $existingLead = LeadModel::find($id);
         $folderId = $existingLead['folder_id'];
-        $dup = LeadModel::findByPhoneOrEmail($json['phone'] ?? null, $json['email'] ?? null, $folderId);
-        if ($dup && (int)$dup['id'] !== $id) { echo json_encode(['success' => false, 'error' => 'Phone/email belongs to another lead.']); exit; }
+        if (!empty($json['phone']) || !empty($email)) {
+            $dup = LeadModel::findByPhoneOrEmail($json['phone'] ?? null, $email ?: null, $folderId);
+            if ($dup && (int)$dup['id'] !== $id) { echo json_encode(['success' => false, 'error' => 'Phone/email belongs to another lead.']); exit; }
+        }
         
+        $assignedUser = $json['assigned_user_id'] ?? null;
+        if ($assignedUser !== null && (int)$assignedUser !== (int)$existingLead['assigned_user_id'] && (int)$assignedUser !== Auth::id()) {
+            if (!Permission::isFounder() && !Permission::isManager() && !Permission::has('leads.assign')) {
+                $assignedUser = $existingLead['assigned_user_id'];
+            }
+        }
+
         LeadModel::update($id, [
-            'name' => trim($json['name']), 'phone' => trim($json['phone'] ?? ''), 'email' => trim($json['email'] ?? ''),
+            'name' => $name, 'phone' => trim($json['phone'] ?? ''), 'email' => $email,
             'company' => trim($json['company'] ?? ''), 'source' => trim($json['source'] ?? ''),
             'status_id' => $json['status_id'] ?? null, 'next_followup_date' => $json['next_followup_date'] ?: null,
             'next_step' => $json['next_step'] ?? null, 'notes' => $json['notes'] ?? null,
-            'assigned_user_id' => $json['assigned_user_id'] ?? null,
+            'assigned_user_id' => $assignedUser,
             'folder_id' => !empty($json['folder_id']) ? $json['folder_id'] : null
         ]);
         
@@ -458,7 +485,7 @@ switch ($action) {
     }
 
     case 'api_update_inline': {
-        if (($_POST['_csrf'] ?? '') !== Csrf::token()) {
+        if (!Csrf::verify()) {
             echo json_encode(['success' => false, 'error' => 'CSRF verification failed']); exit;
         }
 
@@ -468,16 +495,21 @@ switch ($action) {
         
         if (!$id || !$field) { echo json_encode(['success' => false, 'error' => 'Invalid parameters']); exit; }
         if (!LeadModel::canAccess($id)) { echo json_encode(['success' => false, 'error' => 'Access denied']); exit; }
-        Permission::require('leads.edit');
         
-        if ($field === 'email' && $newValue !== '' && !valid_email($newValue)) {
+        if ($field === 'assigned_user_id' && (int)$newValue !== Auth::id() && (int)$newValue !== 0) {
+            if (!Permission::isFounder() && !Permission::isManager() && !Permission::has('leads.assign')) {
+                echo json_encode(['success' => false, 'error' => 'You do not have permission to assign leads to other members.']); exit;
+            }
+        }
+        
+        if ($field === 'email' && $newValue !== '' && $newValue !== null && !valid_email($newValue)) {
             echo json_encode(['success' => false, 'error' => 'Invalid email address']); exit;
         }
         if ($field === 'name' && trim((string)$newValue) === '') {
             echo json_encode(['success' => false, 'error' => 'Name is required']); exit;
         }
         
-        if ($field === 'email' || $field === 'phone') {
+        if (($field === 'email' || $field === 'phone') && $newValue !== '' && $newValue !== null) {
             $existingLead = LeadModel::find($id);
             $dup = LeadModel::findByPhoneOrEmail($field === 'phone' ? $newValue : null, $field === 'email' ? $newValue : null, $existingLead['folder_id']);
             if ($dup && (int)$dup['id'] !== $id) { echo json_encode(['success' => false, 'error' => 'Phone/email belongs to another lead.']); exit; }
@@ -489,7 +521,7 @@ switch ($action) {
     }
 
     case 'api_update_status_color': {
-        if (($_POST['_csrf'] ?? '') !== Csrf::token()) {
+        if (!Csrf::verify()) {
             echo json_encode(['success' => false, 'error' => 'CSRF verification failed']); exit;
         }
         if (!Auth::hasRole('founder') && !Auth::hasRole('manager')) {

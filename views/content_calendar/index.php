@@ -631,10 +631,14 @@ function toggleDeliverableStatus(id) {
     const formData = new FormData();
     formData.append('id', id);
     formData.append('csrf_token', '<?= Csrf::token() ?>');
+    formData.append('_csrf', '<?= Csrf::token() ?>');
 
     fetch('<?= url("content_calendar", ["action" => "toggle_done"]) ?>', {
         method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        headers: { 
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': '<?= e(Csrf::token()) ?>'
+        },
         body: formData
     })
     .then(r => r.json())

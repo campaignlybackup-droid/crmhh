@@ -71,8 +71,8 @@ class Permission
         http_response_code(403);
         AuditLog::record('access_denied', 'permission', null, null, $_SERVER['REQUEST_URI'] ?? null);
         if (self::isAjax()) {
-            header('Content-Type: application/json');
-            echo json_encode(['error' => 'Forbidden']);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'error' => 'Permission denied: You do not have permission to perform this action.']);
             exit;
         }
         fatal_error('You do not have permission to perform this action.');
@@ -80,7 +80,11 @@ class Permission
 
     private static function isAjax(): bool
     {
-        return (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest');
+        return (strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest')
+            || str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json')
+            || str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'application/json')
+            || str_contains($_SERVER['REQUEST_URI'] ?? '', 'api_')
+            || str_contains($_SERVER['REQUEST_URI'] ?? '', 'api=');
     }
 
     /**
@@ -178,7 +182,7 @@ class Permission
      * ONLY the founder gets 1=1 (all clients).
      * Non-founders only see clients where they or their team have active service assignments, tasks, or content deliverables.
      */
-    public static function clientVisibility(?int $userId = null): array
+    public static function clientVisibility(?int $userId = null, string $clientColumn = 'clients.id'): array
     {
         $userId = $userId ?? Auth::id();
         if (!$userId) return ['sql' => '0=1', 'params' => []];
@@ -196,19 +200,19 @@ class Permission
         $sql = "(EXISTS (
                     SELECT 1 FROM client_services cs
                     LEFT JOIN client_service_assignments csa ON csa.client_service_id = cs.id
-                    WHERE cs.client_id = clients.id
+                    WHERE cs.client_id = {$clientColumn}
                       AND cs.deleted_at IS NULL
                       AND (cs.manager_id IN ($placeholders) OR csa.user_id IN ($placeholders))
                 )
                 OR EXISTS (
                     SELECT 1 FROM tasks t
-                    WHERE t.client_id = clients.id
+                    WHERE t.client_id = {$clientColumn}
                       AND t.deleted_at IS NULL
                       AND (t.assigned_user_id IN ($placeholders) OR t.assigned_by IN ($placeholders))
                 )
                 OR EXISTS (
                     SELECT 1 FROM content_calendar cc
-                    WHERE cc.client_id = clients.id
+                    WHERE cc.client_id = {$clientColumn}
                       AND (cc.assigned_to IN ($placeholders) OR cc.editor_checked_by IN ($placeholders))
                 ))";
         return ['sql' => $sql, 'params' => array_merge($ids, $ids, $ids, $ids, $ids, $ids)];

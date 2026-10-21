@@ -4,6 +4,10 @@ function nav_active(string $p, string $current): string { return $p === $current
 $canTeams = Permission::has('teams.manage') || !empty(UserModel::managedTeamsFor(Auth::id()));
 ?>
 <nav class="sidebar" id="sidebar">
+    <div class="sidebar-mobile-header">
+        <div class="sidebar-brand-mobile"><?= e(config('app')['name'] ?? 'Agency CRM') ?></div>
+        <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Close navigation">&times;</button>
+    </div>
     <ul>
         <li class="<?= nav_active('dashboard', $page) ?>"><a href="<?= url('dashboard') ?>"><span class="nav-ico">&#9632;</span> Dashboard</a></li>
         <li class="<?= nav_active('announcements', $page) ?>"><a href="<?= url('announcements') ?>"><span class="nav-ico">&#128227;</span> Announcements</a></li>

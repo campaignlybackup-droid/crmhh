@@ -93,6 +93,11 @@
         <label>Created To</label>
         <input type="date" name="date_to" value="<?= e($filters['date_to']) ?>">
     </div>
+    <div class="form-group" style="display:flex;align-items:center;margin-top:auto;padding-bottom:6px;">
+        <label style="font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin:0;color:var(--text, #333);">
+            <input type="checkbox" name="hide_dead" value="1" <?= !empty($filters['hide_dead']) ? 'checked' : '' ?> onchange="this.form.submit()"> Hide Dead Leads
+        </label>
+    </div>
     <button class="btn btn-primary btn-sm">Filter</button>
     <a href="<?= url('leads') ?>" class="btn btn-sm">Reset</a>
 </form>
@@ -268,13 +273,24 @@
 
         <td data-label="Status">
             <select class="edit-input" style="width:100%;min-width:100px;" data-field="status_id" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)">
-                <?php foreach ($statuses as $s): ?><option value="<?= $s['id'] ?>" <?= $s['id']==$r['status_id']?'selected':'' ?>><?= e($s['name']) ?></option><?php endforeach; ?>
+                <?php 
+                $statusMatched = false;
+                foreach ($statuses as $s): 
+                    if ((int)$s['id'] === (int)$r['status_id']) $statusMatched = true;
+                ?>
+                    <option value="<?= $s['id'] ?>" <?= (int)$s['id'] === (int)$r['status_id'] ? 'selected' : '' ?>><?= e($s['name']) ?></option>
+                <?php endforeach; ?>
+                <?php if (!$statusMatched && !empty($r['status_id'])): ?>
+                    <option value="<?= $r['status_id'] ?>" selected><?= e($r['status_name'] ?: 'Current Status') ?></option>
+                <?php endif; ?>
             </select>
         </td>
         <td data-label="Assigned">
             <select class="edit-input" style="width:100%;min-width:100px;" data-field="assigned_user_id" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)">
                 <option value="">Unassigned</option>
-                <?php foreach ($users as $u): ?><option value="<?= $u['id'] ?>" <?= $u['id']==$r['assigned_user_id']?'selected':'' ?>><?= e($u['name']) ?></option><?php endforeach; ?>
+                <?php foreach ($users as $u): ?>
+                    <option value="<?= $u['id'] ?>" <?= (int)$u['id'] === (int)$r['assigned_user_id'] ? 'selected' : '' ?>><?= !empty($u['is_founder']) ? '⭐ ' : '' ?><?= e($u['name']) ?><?= !empty($u['is_founder']) ? ' (Founder)' : '' ?></option>
+                <?php endforeach; ?>
             </select>
         </td>
         <td data-label="Follow-up">
@@ -287,6 +303,7 @@
             <input type="text" class="edit-input" style="width:100%;min-width:120px;" data-field="notes" value="<?= e($r['notes'] ?? '') ?>" onfocus="setOriginalValue(this)" onchange="handleInlineEdit(this)" onkeydown="handleEnter(event, this)">
         </td>
         <td data-label="Actions" style="white-space:nowrap;">
+            <button type="button" class="btn btn-sm" style="padding: 2px 7px; font-size: 11px; margin-right: 4px; border: 1px solid #f59e0b; color: #b45309; background: #fffbeb; border-radius: 4px; cursor: pointer; font-weight: 600;" onclick="escalateLead(<?= $r['id'] ?>, '<?= e(addslashes($r['name'])) ?>')" title="Escalate this lead to Founder">🚨 Escalate</button>
             <?php if (Permission::has('leads.delete') || Auth::hasRole('founder')): ?>
             <form method="post" action="<?= url('leads', ['action' => 'delete']) ?>" style="display:inline;" data-confirm="Delete this lead?">
                 <?= Csrf::field() ?><input type="hidden" name="id" value="<?= $r['id'] ?>">
@@ -665,6 +682,43 @@ function saveStatusColor(statusId, colorInput) {
         }
     };
     xhr.send('status_id=' + encodeURIComponent(statusId) + '&color=' + encodeURIComponent(color) + '&_csrf=<?= e(Csrf::token()) ?>');
+}
+
+function escalateLead(id, name) {
+    var reason = prompt("Enter escalation issue/notes for Founder on '" + name + "':", "Stuck with lead / Need Founder assistance");
+    if (reason === null) return;
+    
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '<?= url('leads', ['action' => 'api_escalate']) ?>', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+                try {
+                    var res = JSON.parse(xhr.responseText);
+                    if (res.success) {
+                        showToast('✅ Lead escalated to Founder!', 'ok');
+                        var row = document.getElementById('row_' + id);
+                        if (row) {
+                            var assignSelect = row.querySelector('select[data-field="assigned_user_id"]');
+                            if (assignSelect && res.assigned_user_id) {
+                                assignSelect.value = res.assigned_user_id;
+                            }
+                        }
+                    } else {
+                        showToast('❌ ' + (res.error || 'Escalation failed'), 'error');
+                    }
+                } catch(e) {
+                    showToast('✅ Lead escalated to Founder!', 'ok');
+                    setTimeout(function() { location.reload(); }, 600);
+                }
+            } else {
+                showToast('❌ Escalation failed (HTTP ' + xhr.status + ')', 'error');
+            }
+        }
+    };
+    xhr.send('id=' + encodeURIComponent(id) + '&reason=' + encodeURIComponent(reason) + '&_csrf=<?= e(Csrf::token()) ?>');
 }
 </script>
 

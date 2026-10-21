@@ -57,15 +57,21 @@
         <div class="card">
             <div class="card-title">Assigned To</div>
             <p><?= e($task['assigned_name'] ?? 'Unassigned') ?></p>
-            <?php if (Permission::has('tasks.assign')): ?>
             <form method="post" action="<?= url('tasks', ['action' => 'reassign']) ?>">
                 <?= Csrf::field() ?><input type="hidden" name="id" value="<?= $task['id'] ?>">
-                <select name="assigned_user_id" class="quick-edit-select">
+                <select name="assigned_user_id" class="quick-edit-select" onchange="this.form.submit()">
                     <option value="">— Select —</option>
-                    <?php foreach ($users as $u): ?><option value="<?= $u['id'] ?>" <?= $u['id']==$task['assigned_user_id']?'selected':'' ?>><?= e($u['name']) ?></option><?php endforeach; ?>
+                    <?php foreach ($users as $u): ?>
+                        <option value="<?= $u['id'] ?>" <?= (int)$u['id'] === (int)$task['assigned_user_id'] ? 'selected' : '' ?>><?= !empty($u['is_founder']) ? '⭐ ' : '' ?><?= e($u['name']) ?><?= !empty($u['is_founder']) ? ' (Founder)' : '' ?></option>
+                    <?php endforeach; ?>
                 </select>
             </form>
-            <?php endif; ?>
+            <hr style="margin: 12px 0;">
+            <form method="post" action="<?= url('tasks', ['action' => 'escalate']) ?>">
+                <?= Csrf::field() ?>
+                <input type="hidden" name="id" value="<?= $task['id'] ?>">
+                <button type="submit" class="btn btn-sm" style="width: 100%; font-weight: 600; background: #fffbeb; border: 1px solid #f59e0b; color: #b45309; padding: 6px;" onclick="var r = prompt('Reason for escalating this task to Founder:'); if (r === null) return false; this.form.appendChild(Object.assign(document.createElement('input'), {type:'hidden', name:'reason', value:r})); return true;">🚨 Escalate to Founder</button>
+            </form>
         </div>
     </div>
 </div>

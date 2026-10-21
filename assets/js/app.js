@@ -27,14 +27,22 @@
         var old = notifBtn.querySelector('.badge-dot');
         if (old) old.remove();
 
+        var mobBadge = document.getElementById('mobileMenuBadge');
+
         if (count > 0) {
           var dot = document.createElement('span');
           dot.className = 'badge-dot';
           dot.textContent = count > 9 ? '9+' : count;
           notifBtn.appendChild(dot);
+          if (mobBadge) {
+            mobBadge.textContent = count > 9 ? '9+' : count;
+            mobBadge.style.display = 'inline-block';
+          }
           // Subtle pulse to hint new notifications
           notifBtn.classList.add('notif-pulse');
           setTimeout(function(){ notifBtn.classList.remove('notif-pulse'); }, 1200);
+        } else {
+          if (mobBadge) mobBadge.style.display = 'none';
         }
       })
       .catch(function(){});
@@ -75,14 +83,37 @@
     if (userBtn) userBtn.addEventListener('click', function (e) { e.stopPropagation(); closeAll(userMenu); toggle(userMenu); });
     document.addEventListener('click', function () { closeAll(); });
 
-    if (sidebarToggle) sidebarToggle.addEventListener('click', function (e) {
-      e.stopPropagation();
+    window.toggleSidebarMenu = function() {
+      if (!sidebar) return;
       sidebar.classList.toggle('show');
       if (sidebarBackdrop) sidebarBackdrop.classList.toggle('show');
+    };
+
+    if (sidebarToggle) sidebarToggle.addEventListener('click', function (e) {
+      e.stopPropagation();
+      window.toggleSidebarMenu();
     });
     if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', function () {
-      sidebar.classList.remove('show');
-      sidebarBackdrop.classList.remove('show');
+      if (sidebar) sidebar.classList.remove('show');
+      if (sidebarBackdrop) sidebarBackdrop.classList.remove('show');
+    });
+
+    var sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
+    if (sidebarCloseBtn) {
+      sidebarCloseBtn.addEventListener('click', function() {
+        if (sidebar) sidebar.classList.remove('show');
+        if (sidebarBackdrop) sidebarBackdrop.classList.remove('show');
+      });
+    }
+
+    // Auto-close mobile sidebar when navigating to a section
+    document.querySelectorAll('#sidebar a').forEach(function(link) {
+      link.addEventListener('click', function() {
+        if (window.innerWidth <= 900 && sidebar) {
+          sidebar.classList.remove('show');
+          if (sidebarBackdrop) sidebarBackdrop.classList.remove('show');
+        }
+      });
     });
 
     // ─── Navigation loading bar ─────────────────────────────────────────────
@@ -192,6 +223,58 @@
         setTimeout(function(){ flash.style.display = 'none'; }, 500);
       }, 5000);
     }
+
+    // ─── Collapsible Filter Bars on Mobile ───────────────────────────────────
+    (function setupMobileFilters() {
+      var filterForms = document.querySelectorAll('form.filters-bar');
+      filterForms.forEach(function(form) {
+        if (form.querySelector('.filters-fields-wrap')) return;
+
+        var children = Array.prototype.slice.call(form.children);
+        var wrap = document.createElement('div');
+        wrap.className = 'filters-fields-wrap';
+
+        var activeCount = 0;
+        children.forEach(function(el) {
+          if (el.tagName === 'INPUT' && el.type === 'hidden') return;
+          if (el.classList.contains('form-group')) {
+            var input = el.querySelector('input, select');
+            if (input) {
+              if (input.type === 'checkbox') {
+                if (input.checked) activeCount++;
+              } else if (input.value && input.value !== '' && input.value !== 'all') {
+                activeCount++;
+              }
+            }
+          }
+          wrap.appendChild(el);
+        });
+
+        var toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = 'mobile-filter-toggle';
+        var label = '<span>🔍 Search &amp; Filters';
+        if (activeCount > 0) {
+          label += ' <span class="filter-count-badge">' + activeCount + ' active</span>';
+        }
+        label += '</span><span class="filter-chevron">▾</span>';
+        toggleBtn.innerHTML = label;
+
+        // On mobile, collapse filter fields to preserve valuable screen height
+        if (window.innerWidth <= 900) {
+          wrap.classList.add('mobile-collapsed');
+        }
+
+        toggleBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          var isCollapsed = wrap.classList.toggle('mobile-collapsed');
+          toggleBtn.classList.toggle('expanded', !isCollapsed);
+        });
+
+        form.appendChild(toggleBtn);
+        form.appendChild(wrap);
+      });
+    })();
   });
 })();
 

@@ -45,23 +45,40 @@ class UserModel
         return Database::all("SELECT id, name, employee_code FROM users WHERE deleted_at IS NULL AND status='active' ORDER BY name ASC");
     }
 
+    public static function founderId(): ?int
+    {
+        $id = Database::scalar("SELECT id FROM users WHERE is_founder = 1 AND deleted_at IS NULL AND status='active' ORDER BY id ASC LIMIT 1");
+        return $id ? (int)$id : 1;
+    }
+
+    public static function founders(): array
+    {
+        return Database::all("SELECT id, name, email FROM users WHERE is_founder = 1 AND deleted_at IS NULL AND status='active' ORDER BY id ASC");
+    }
+
     /**
      * Returns active users visible/assignable to the current user.
      * Founder/users.manage sees all active users; managers see their managed users + self;
-     * team members see members of their own teams + self.
+     * team members see members of their own teams + self, plus Founders for escalation.
      */
     public static function scopedSelectList(?int $userId = null): array
     {
         $userId = $userId ?? Auth::id();
         if (!$userId || Auth::isFounder() || Auth::hasRole('founder') || Permission::has('users.manage', $userId)) {
-            return self::activeSelectList();
+            return Database::all("SELECT id, name, employee_code, is_founder FROM users WHERE deleted_at IS NULL AND status='active' ORDER BY is_founder DESC, name ASC");
         }
         $isManager = Auth::hasRole('manager') || !empty(self::managedTeamsFor($userId));
         $allowedIds = $isManager ? Permission::managedUserIds($userId) : Permission::teamUserIds($userId);
+        
+        // Always include Founder accounts so any team member can escalate or assign directly to Founder
+        $founderIds = Database::all("SELECT id FROM users WHERE is_founder = 1 AND deleted_at IS NULL AND status='active'");
+        $fIds = array_map('intval', array_column($founderIds, 'id'));
+        $allowedIds = array_values(array_unique(array_merge($allowedIds, $fIds)));
+
         if (empty($allowedIds)) return [];
         $ph = implode(',', array_fill(0, count($allowedIds), '?'));
         return Database::all(
-            "SELECT id, name, employee_code FROM users WHERE deleted_at IS NULL AND status='active' AND id IN ($ph) ORDER BY name ASC",
+            "SELECT id, name, employee_code, is_founder FROM users WHERE deleted_at IS NULL AND status='active' AND id IN ($ph) ORDER BY is_founder DESC, name ASC",
             $allowedIds
         );
     }

@@ -2,21 +2,64 @@
 
 class LeadModel
 {
+    public const DEFAULT_STATUS_PALETTE = [
+        'new-leads' => '#3b82f6',
+        'new' => '#3b82f6',
+        'cold-lead' => '#64748b',
+        'warm-lead' => '#eab308',
+        'contacted' => '#06b6d4',
+        'in-discussion' => '#06b6d4',
+        'call-scheduled' => '#0d9488',
+        'follow-up' => '#f97316',
+        'meeting-scheduled' => '#8b5cf6',
+        'meet' => '#8b5cf6',
+        'long-nurture' => '#14b8a6',
+        'almost-closed' => '#0284c7',
+        'closed' => '#10b981',
+        'won' => '#10b981',
+        'dead' => '#ef4444',
+        'lost' => '#ef4444',
+    ];
+
+    public static function getDefaultStatusColor(?string $statusNameOrSlug, ?string $currentColor = null): string
+    {
+        if (!empty($currentColor) && $currentColor !== '#6c757d' && $currentColor !== '#ffffff' && $currentColor !== '#000000') {
+            return $currentColor;
+        }
+        if (!$statusNameOrSlug) return '#64748b';
+        $normalized = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '-', $statusNameOrSlug), '-'));
+        
+        foreach (self::DEFAULT_STATUS_PALETTE as $key => $color) {
+            if ($normalized === $key || str_contains($normalized, $key)) {
+                return $color;
+            }
+        }
+        return '#64748b';
+    }
+
     public static function statuses(?int $folderId = null): array
     {
-        if ($folderId !== null) {
-            return Database::all('SELECT * FROM lead_statuses WHERE folder_id = ? ORDER BY sort_order ASC', [$folderId]);
+        $rows = [];
+        if ($folderId !== null && $folderId > 0) {
+            $rows = Database::all('SELECT * FROM lead_statuses WHERE folder_id = ? ORDER BY sort_order ASC', [$folderId]);
         }
-        return Database::all('SELECT * FROM lead_statuses WHERE folder_id IS NULL ORDER BY sort_order ASC');
+        if (empty($rows)) {
+            $rows = Database::all('SELECT * FROM lead_statuses WHERE folder_id IS NULL ORDER BY sort_order ASC');
+        }
+        foreach ($rows as &$r) {
+            $r['color'] = self::getDefaultStatusColor($r['slug'] ?? $r['name'], $r['color'] ?? null);
+        }
+        unset($r);
+        return $rows;
     }
 
     public static function defaultStatusId(?int $folderId = null): ?int
     {
-        if ($folderId !== null) {
+        if ($folderId !== null && $folderId > 0) {
             $row = Database::one("SELECT id FROM lead_statuses WHERE is_default = 1 AND folder_id = ? LIMIT 1", [$folderId]);
             if ($row) return (int)$row['id'];
             $row = Database::one("SELECT id FROM lead_statuses WHERE folder_id = ? ORDER BY sort_order ASC LIMIT 1", [$folderId]);
-            return $row ? (int)$row['id'] : null;
+            if ($row) return (int)$row['id'];
         }
         $row = Database::one("SELECT id FROM lead_statuses WHERE is_default = 1 AND folder_id IS NULL LIMIT 1");
         if ($row) return (int)$row['id'];
@@ -56,7 +99,7 @@ class LeadModel
 
     public static function find(int $id): ?array
     {
-        return Database::one(
+        $lead = Database::one(
             'SELECT l.*, ls.name AS status_name, ls.slug AS status_slug, ls.color AS status_color,
                     u.name AS assigned_name, c.name AS created_by_name
              FROM leads l
@@ -66,6 +109,10 @@ class LeadModel
              WHERE l.id = ? AND l.deleted_at IS NULL',
             [$id]
         );
+        if ($lead) {
+            $lead['status_color'] = self::getDefaultStatusColor($lead['status_slug'] ?? $lead['status_name'], $lead['status_color'] ?? null);
+        }
+        return $lead;
     }
 
     public static function canAccess(int $leadId, ?int $userId = null): bool
@@ -306,7 +353,12 @@ class LeadModel
             }
         }
 
-        if (!empty($filters['status_id'])) { $where[] = 'l.status_id = ?'; $params[] = $filters['status_id']; }
+        if (!empty($filters['status_id'])) { 
+            $where[] = 'l.status_id = ?'; 
+            $params[] = $filters['status_id']; 
+        } elseif (!empty($filters['hide_dead'])) {
+            $where[] = "(ls.slug NOT IN ('dead', 'lost') AND LOWER(ls.name) NOT LIKE '%dead%' AND ls.is_lost = 0)";
+        }
         if (!empty($filters['source'])) { $where[] = 'l.source = ?'; $params[] = $filters['source']; }
         if (!empty($filters['followup']) && $filters['followup'] === 'today') { $where[] = 'l.next_followup_date = CURDATE()'; }
         if (!empty($filters['followup']) && $filters['followup'] === 'overdue') { $where[] = 'l.next_followup_date < CURDATE()'; }
@@ -320,16 +372,24 @@ class LeadModel
         }
 
         $whereSql = implode(' AND ', $where);
-        $total = (int)Database::scalar("SELECT COUNT(*) FROM leads l WHERE $whereSql", $params);
+        $total = (int)Database::scalar("SELECT COUNT(*) FROM leads l LEFT JOIN lead_statuses ls ON ls.id = l.status_id WHERE $whereSql", $params);
         $p = paginate_params($total, $page, $perPage);
         $rows = Database::all(
-            "SELECT l.*, ls.name AS status_name, ls.color AS status_color, u.name AS assigned_name
+            "SELECT l.*, ls.name AS status_name, ls.slug AS status_slug, ls.color AS status_color, u.name AS assigned_name
              FROM leads l
              JOIN lead_statuses ls ON ls.id = l.status_id
              LEFT JOIN users u ON u.id = l.assigned_user_id
-             WHERE $whereSql ORDER BY l.created_at DESC LIMIT {$p['perPage']} OFFSET {$p['offset']}",
+             WHERE $whereSql 
+             ORDER BY 
+                (CASE WHEN LOWER(ls.slug) IN ('dead', 'lost') OR LOWER(ls.name) LIKE '%dead%' OR ls.is_lost = 1 THEN 1 ELSE 0 END) ASC,
+                l.created_at DESC 
+             LIMIT {$p['perPage']} OFFSET {$p['offset']}",
             $params
         );
+        foreach ($rows as &$r) {
+            $r['status_color'] = self::getDefaultStatusColor($r['status_slug'] ?? $r['status_name'], $r['status_color'] ?? null);
+        }
+        unset($r);
         return [$rows, $p];
     }
 
@@ -447,9 +507,9 @@ class LeadModel
 
             if ($field === 'status_id') {
                 $oldName = Database::scalar('SELECT name FROM lead_statuses WHERE id = ?', [(int)$oldValue]);
-                $statusRow = Database::one('SELECT name, color FROM lead_statuses WHERE id = ?', [(int)$newValue]);
+                $statusRow = Database::one('SELECT name, slug, color FROM lead_statuses WHERE id = ?', [(int)$newValue]);
                 $newName = $statusRow['name'] ?? 'Unknown';
-                $statusColor = $statusRow['color'] ?? '#6c757d';
+                $statusColor = self::getDefaultStatusColor($statusRow['slug'] ?? $newName, $statusRow['color'] ?? null);
                 Database::run('UPDATE leads SET status_id = ? WHERE id = ?', [$newValue, $id]);
                 ActivityModel::log('lead', $id, 'status_changed', "Changed Status", (string)$oldName, (string)$newName);
                 Database::run('UPDATE leads SET updated_at = NOW() WHERE id = ?', [$id]);
@@ -462,7 +522,13 @@ class LeadModel
                 ActivityModel::log('lead', $id, 'reassigned', "Reassigned Lead", (string)$oldName, (string)$newName);
                 if ($newValue) {
                     $lead = Database::one('SELECT lead_code, name FROM leads WHERE id=?', [$id]);
-                    Notifier::send((int)$newValue, 'lead_assigned', 'Lead assigned: ' . $lead['name'], "Lead {$lead['lead_code']} has been assigned to you.", 'lead', $id);
+                    $isFounder = (int)Database::scalar('SELECT COUNT(*) FROM users WHERE id = ? AND is_founder = 1', [(int)$newValue]) > 0;
+                    if ($isFounder && !Permission::isFounder() && !Permission::isManager()) {
+                        ActivityModel::log('lead', $id, 'escalated', "Lead escalated to Founder ($newName) by " . (Auth::user()['name'] ?? 'User'));
+                        Notifier::send((int)$newValue, 'lead_escalated', '🚨 Lead Escalation: ' . $lead['name'], "Lead {$lead['lead_code']} ({$lead['name']}) has been escalated to you by " . (Auth::user()['name'] ?? 'User') . ".", 'lead', $id);
+                    } else {
+                        Notifier::send((int)$newValue, 'lead_assigned', 'Lead assigned: ' . $lead['name'], "Lead {$lead['lead_code']} has been assigned to you.", 'lead', $id);
+                    }
                 }
             } elseif ($field === 'folder_id') {
                 $oldName = $oldValue ? Database::scalar('SELECT name FROM lead_folders WHERE id=?', [$oldValue]) : 'Main';
@@ -551,5 +617,19 @@ class LeadModel
     public static function updateStatusColor(int $statusId, string $color): void
     {
         Database::run('UPDATE lead_statuses SET color = ? WHERE id = ?', [$color, $statusId]);
+    }
+
+    public static function applyDefaultPaletteAcrossAllSheets(?array $palette = null): array
+    {
+        $statuses = Database::all('SELECT id, name, slug, color, folder_id FROM lead_statuses');
+        $updated = 0;
+        foreach ($statuses as $st) {
+            $newColor = self::getDefaultStatusColor($st['slug'] ?? $st['name']);
+            if ($newColor && $newColor !== ($st['color'] ?? '')) {
+                Database::run('UPDATE lead_statuses SET color = ? WHERE id = ?', [$newColor, $st['id']]);
+                $updated++;
+            }
+        }
+        return ['success' => true, 'updated_count' => $updated];
     }
 }

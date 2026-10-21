@@ -28,7 +28,7 @@ if (empty($kanbanColumns['unassigned']['leads'])) {
         </div>
     </div>
     <div class="btn-group">
-        <?php if (!empty($filters['folder_id']) && Auth::hasRole('founder')): ?>
+        <?php if (!empty($filters['folder_id']) && (Auth::hasRole('founder') || Auth::hasRole('manager') || Permission::has('leads.manage'))): ?>
         <a href="<?= url('folder_settings', ['folder_id' => $filters['folder_id']]) ?>" class="btn btn-secondary">Folder Settings</a>
         <?php endif; ?>
         <?php if (Permission::has('leads.create')): ?><a href="<?= url('leads', ['action' => 'create']) ?>" class="btn btn-primary">+ New Lead</a><?php endif; ?>
@@ -55,6 +55,11 @@ if (empty($kanbanColumns['unassigned']['leads'])) {
         <select name="source"><option value="">All</option>
             <?php foreach ($sources as $s): ?><option value="<?= e($s) ?>" <?= $filters['source'] === $s ? 'selected' : '' ?>><?= e($s) ?></option><?php endforeach; ?>
         </select>
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;margin-top:auto;padding-bottom:6px;">
+        <label style="font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin:0;color:var(--text, #333);">
+            <input type="checkbox" name="hide_dead" value="1" <?= !empty($filters['hide_dead']) ? 'checked' : '' ?> onchange="this.form.submit()"> Hide Dead Leads
+        </label>
     </div>
     <div class="form-actions">
         <button type="submit" class="btn btn-primary">Filter</button>

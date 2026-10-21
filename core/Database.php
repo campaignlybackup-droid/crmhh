@@ -32,7 +32,7 @@ class Database
     }
     public static function autoMigrate(): void
     {
-        $targetVersion = 10;
+        $targetVersion = 11;
         if (!isset($_GET['migrate']) && ($_SESSION['db_migrated_v'] ?? 0) >= $targetVersion) {
             return;
         }
@@ -180,6 +180,34 @@ class Database
                         } catch (Throwable $e) {}
                     }
                 }
+            }
+        } catch (Throwable $e) {}
+
+        // 7. Performance Composite Indexes (100% Non-destructive: checks existing indexes first)
+        try {
+            $existingLeadIndexes = $pdo->query("SHOW INDEX FROM `leads`")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $leadIndexNames = array_column($existingLeadIndexes, 'Key_name');
+            if (!in_array('idx_leads_folder_deleted', $leadIndexNames, true)) {
+                $pdo->exec("ALTER TABLE `leads` ADD INDEX `idx_leads_folder_deleted` (`folder_id`, `deleted_at`)");
+            }
+            if (!in_array('idx_leads_assigned_deleted', $leadIndexNames, true)) {
+                $pdo->exec("ALTER TABLE `leads` ADD INDEX `idx_leads_assigned_deleted` (`assigned_user_id`, `deleted_at`)");
+            }
+        } catch (Throwable $e) {}
+
+        try {
+            $existingTaskIndexes = $pdo->query("SHOW INDEX FROM `tasks`")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $taskIndexNames = array_column($existingTaskIndexes, 'Key_name');
+            if (!in_array('idx_tasks_assigned_status', $taskIndexNames, true)) {
+                $pdo->exec("ALTER TABLE `tasks` ADD INDEX `idx_tasks_assigned_status` (`assigned_user_id`, `status`)");
+            }
+        } catch (Throwable $e) {}
+
+        try {
+            $existingCcIndexes = $pdo->query("SHOW INDEX FROM `content_calendar`")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $ccIndexNames = array_column($existingCcIndexes, 'Key_name');
+            if (!in_array('idx_cc_client_date', $ccIndexNames, true)) {
+                $pdo->exec("ALTER TABLE `content_calendar` ADD INDEX `idx_cc_client_date` (`client_id`, `post_date`)");
             }
         } catch (Throwable $e) {}
 

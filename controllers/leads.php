@@ -111,13 +111,68 @@ switch ($action) {
     case 'assign': {
         $id = (int)($_POST['id'] ?? 0);
         if (!LeadModel::canAccess($id)) Permission::deny();
-        Permission::require('leads.assign');
         csrf_check_or_die();
         $newUserId = (int)($_POST['assigned_user_id'] ?? 0);
+        $isTargetFounder = $newUserId && (int)Database::scalar('SELECT COUNT(*) FROM users WHERE id = ? AND is_founder = 1', [$newUserId]) > 0;
+        if (!Permission::isFounder() && !Permission::isManager() && !Permission::has('leads.assign') && !$isTargetFounder) {
+            Permission::deny();
+        }
         if ($newUserId) {
             LeadModel::assign($id, $newUserId, $_POST['note'] ?? null);
-            Flash::success('Lead reassigned.');
+            if ($isTargetFounder && !Permission::isFounder() && !Permission::isManager()) {
+                $lead = LeadModel::find($id);
+                $userName = Auth::user()['name'] ?? 'Team member';
+                ActivityModel::log('lead', $id, 'escalated', "Lead escalated to Founder by $userName: " . ($_POST['note'] ?? 'Escalated'));
+                Notifier::send($newUserId, 'lead_escalated', '🚨 Lead Escalation: ' . $lead['name'], "Lead {$lead['lead_code']} ({$lead['name']}) has been assigned/escalated to you by $userName.", 'lead', $id);
+                Flash::success('Lead escalated to Founder.');
+            } else {
+                Flash::success('Lead reassigned.');
+            }
         }
+        redirect(url('leads', ['action' => 'view', 'id' => $id]));
+        break;
+    }
+
+    case 'escalate':
+    case 'api_escalate': {
+        $isJson = str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') || (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json'));
+        $json = $isJson ? json_decode(file_get_contents('php://input'), true) : [];
+        $id = (int)($isJson ? ($json['id'] ?? 0) : ($_POST['id'] ?? 0));
+        
+        if (!$id || !LeadModel::canAccess($id)) {
+            if ($isJson) { echo json_encode(['success' => false, 'error' => 'Access denied']); exit; }
+            Permission::deny();
+        }
+        if (!Csrf::verify()) {
+            if ($isJson) { echo json_encode(['success' => false, 'error' => 'CSRF verification failed']); exit; }
+            fatal_error('CSRF verification failed.');
+        }
+
+        $reason = trim($isJson ? ($json['reason'] ?? '') : ($_POST['reason'] ?? ''));
+        if (!$reason) $reason = 'Stuck with lead / Founder assistance requested';
+        
+        $founderId = UserModel::founderId();
+        if (!$founderId) {
+            if ($isJson) { echo json_encode(['success' => false, 'error' => 'No Founder account found']); exit; }
+            Flash::error('No Founder account found.');
+            redirect(url('leads', ['action' => 'view', 'id' => $id]));
+        }
+
+        $lead = LeadModel::find($id);
+        $oldAssigned = $lead['assigned_name'] ?? 'Unassigned';
+        $founder = UserModel::find($founderId);
+        $userName = Auth::user()['name'] ?? 'Team member';
+
+        Database::run('UPDATE leads SET assigned_user_id = ? WHERE id = ?', [$founderId, $id]);
+        ActivityModel::log('lead', $id, 'escalated', "Lead escalated to Founder ({$founder['name']}) by $userName: $reason");
+        AuditLog::record('escalate', 'lead', $id, $oldAssigned, $founder['name'], $reason);
+        Notifier::send($founderId, 'lead_escalated', '🚨 Lead Escalation: ' . $lead['name'], "Lead {$lead['lead_code']} ({$lead['name']}) has been escalated to you by $userName.\nReason: $reason", 'lead', $id);
+
+        if ($isJson) {
+            echo json_encode(['success' => true, 'assigned_user_id' => $founderId, 'assigned_name' => $founder['name']]);
+            exit;
+        }
+        Flash::success('Lead successfully escalated to Founder.');
         redirect(url('leads', ['action' => 'view', 'id' => $id]));
         break;
     }
@@ -497,8 +552,9 @@ switch ($action) {
         if (!LeadModel::canAccess($id)) { echo json_encode(['success' => false, 'error' => 'Access denied']); exit; }
         
         if ($field === 'assigned_user_id' && (int)$newValue !== Auth::id() && (int)$newValue !== 0) {
-            if (!Permission::isFounder() && !Permission::isManager() && !Permission::has('leads.assign')) {
-                echo json_encode(['success' => false, 'error' => 'You do not have permission to assign leads to other members.']); exit;
+            $isTargetFounder = (int)$newValue > 0 && (int)Database::scalar('SELECT COUNT(*) FROM users WHERE id = ? AND is_founder = 1', [(int)$newValue]) > 0;
+            if (!Permission::isFounder() && !Permission::isManager() && !Permission::has('leads.assign') && !$isTargetFounder) {
+                echo json_encode(['success' => false, 'error' => 'You do not have permission to assign leads to other members. (You can assign to Founder to escalate).']); exit;
             }
         }
         
@@ -554,6 +610,17 @@ switch ($action) {
                 Database::run('INSERT IGNORE INTO lead_folder_users (folder_id, user_id) VALUES (?, ?)', [$folderId, (int)$uid]);
             }
         }
+
+        // Seed default statuses with automated colors for the new folder
+        $defaultStatuses = Database::all('SELECT * FROM lead_statuses WHERE folder_id IS NULL ORDER BY sort_order ASC');
+        foreach ($defaultStatuses as $ds) {
+            $statusColor = LeadModel::getDefaultStatusColor($ds['slug'] ?? $ds['name'], $ds['color'] ?? null);
+            Database::run(
+                'INSERT INTO lead_statuses (name, slug, color, sort_order, is_won, is_lost, is_default, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [$ds['name'], $ds['slug'], $statusColor, $ds['sort_order'], $ds['is_won'], $ds['is_lost'], $ds['is_default'], $folderId]
+            );
+        }
+
         echo json_encode(['success' => true]);
         exit;
     }
@@ -576,7 +643,7 @@ switch ($action) {
         $perPage = ($isKanban || !empty($filters['folder_id'])) ? 10000 : 25; // Load heavily for kanban or folder view
         [$rows, $p] = LeadModel::paginate($page, $perPage, $filters);
         
-        $folderId = isset($filters['folder_id']) && $filters['folder_id'] !== '' ? (int)$filters['folder_id'] : null;
+        $folderId = (isset($filters['folder_id']) && $filters['folder_id'] !== '' && $filters['folder_id'] !== 'all') ? (int)$filters['folder_id'] : null;
         $statuses = LeadModel::statuses($folderId);
         $customFields = LeadModel::getCustomFields($folderId);
         
@@ -622,6 +689,7 @@ function leads_filters_from_request(): array
         'date_from' => $_GET['date_from'] ?? '',
         'date_to' => $_GET['date_to'] ?? '',
         'folder_id' => $_GET['folder_id'] ?? '',
+        'hide_dead' => !empty($_GET['hide_dead']) ? 1 : 0,
     ];
 }
 

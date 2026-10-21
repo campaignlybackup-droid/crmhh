@@ -92,13 +92,42 @@ switch ($action) {
     case 'reassign': {
         $id = (int)($_POST['id'] ?? 0);
         if (!TaskModel::canAccess($id)) Permission::deny();
-        Permission::require('tasks.assign');
         csrf_check_or_die();
         $newUserId = (int)($_POST['assigned_user_id'] ?? 0);
+        $isFounder = $newUserId && (int)Database::scalar('SELECT COUNT(*) FROM users WHERE id = ? AND is_founder = 1', [$newUserId]) > 0;
+        if (!Permission::isFounder() && !Permission::isManager() && !Permission::has('tasks.assign') && !$isFounder) {
+            Permission::deny();
+        }
         if ($newUserId) {
             TaskModel::reassign($id, $newUserId, $_POST['note'] ?? null);
-            Flash::success('Task reassigned.');
+            if ($isFounder && !Permission::isFounder() && !Permission::isManager()) {
+                $task = TaskModel::find($id);
+                $userName = Auth::user()['name'] ?? 'Team member';
+                Notifier::send($newUserId, 'task_escalated', '🚨 Task Escalation: ' . $task['title'], "Task {$task['task_code']} ({$task['title']}) was assigned/escalated to you by $userName.", 'task', $id);
+                Flash::success('Task escalated to Founder.');
+            } else {
+                Flash::success('Task reassigned.');
+            }
         }
+        redirect(url('tasks', ['action' => 'view', 'id' => $id]));
+        break;
+    }
+
+    case 'escalate': {
+        $id = (int)($_POST['id'] ?? 0);
+        if (!TaskModel::canAccess($id)) Permission::deny();
+        csrf_check_or_die();
+        $reason = trim($_POST['reason'] ?? $_POST['note'] ?? 'Need founder assistance / stuck with task');
+        $founderId = UserModel::founderId();
+        if (!$founderId) {
+            Flash::error('No Founder account found.');
+            redirect(url('tasks', ['action' => 'view', 'id' => $id]));
+        }
+        $task = TaskModel::find($id);
+        $userName = Auth::user()['name'] ?? 'Team member';
+        TaskModel::reassign($id, $founderId, "🚨 Escalated to Founder by $userName: $reason");
+        Notifier::send($founderId, 'task_escalated', '🚨 Task Escalation: ' . $task['title'], "Task {$task['task_code']} ({$task['title']}) was escalated to you by $userName.\nReason: $reason", 'task', $id);
+        Flash::success('Task has been escalated directly to Founder.');
         redirect(url('tasks', ['action' => 'view', 'id' => $id]));
         break;
     }

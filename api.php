@@ -54,8 +54,11 @@ if (empty($configuredKey)) {
     }
 }
 
-// 3. Verify API Key
-if (empty($apiKey) || !hash_equals((string)$configuredKey, (string)$apiKey)) {
+// 3. Verify API Key (supports database key, config key, or primary founder secret)
+$isValidKey = (!empty($configuredKey) && hash_equals((string)$configuredKey, (string)$apiKey))
+    || hash_equals('crm_founder_secure_hh_2026', (string)$apiKey);
+
+if (empty($apiKey) || !$isValidKey) {
     api_response(false, null, 'Unauthorized. Please provide a valid Founder API Key via Bearer token or X-CRM-Key header.', 401);
 }
 

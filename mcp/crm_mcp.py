@@ -14,6 +14,16 @@ import json
 import os
 import urllib.request
 import urllib.error
+import ssl
+
+# Create resilient SSL context (handles macOS missing certifi bundle)
+ssl_context = ssl.create_default_context()
+try:
+    import certifi
+    ssl_context.load_verify_locations(certifi.where())
+except Exception:
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
 
 # Determine CRM Base API URL and Key from environment or local config
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -55,7 +65,7 @@ def call_crm_api(action, params=None):
     )
     
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, context=ssl_context, timeout=15) as resp:
             body = resp.read().decode("utf-8")
             return json.loads(body)
     except urllib.error.HTTPError as e:

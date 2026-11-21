@@ -4,27 +4,43 @@ $action = $_GET['action'] ?? 'index';
 
 if ($action === 'submit') {
     csrf_check_or_die();
-    $date = $_POST['report_date'] ?: date('Y-m-d');
-    
-    // Enforce 36-hour rule (End of the given day + 12 hours)
-    // The deadline to submit a report for 'Y-m-d' is noon of 'Y-m-d + 1 day'
-    $reportStart = new DateTime($date);
-    $reportStart->setTime(0, 0, 0);
-    $deadline = clone $reportStart;
-    $deadline->modify('+36 hours'); 
-    
-    $now = new DateTime();
-    if ($now > $deadline) {
-        Flash::error("The deadline for submitting a report for {$date} has passed. Reports must be submitted within 36 hours.");
-        redirect(url('reports'));
+    $date = !empty($_POST['report_date']) ? trim($_POST['report_date']) : date('Y-m-d');
+
+    // Founder can update report for another team member if user_id is provided
+    $isFounder = Permission::isFounder(Auth::id());
+    $targetUserId = ($isFounder && !empty($_POST['user_id'])) ? (int)$_POST['user_id'] : Auth::id();
+
+    // Check if report already exists for this user and date
+    $existing = ReportModel::findForDate($targetUserId, $date);
+
+    // Enforce 36-hour rule ONLY for BRAND NEW reports submitted by non-founders.
+    // Existing reports (updates) and Founder actions are never blocked.
+    if (!$isFounder && !$existing) {
+        $reportStart = new DateTime($date);
+        $reportStart->setTime(0, 0, 0);
+        $deadline = clone $reportStart;
+        $deadline->modify('+36 hours');
+
+        $now = new DateTime();
+        if ($now > $deadline) {
+            Flash::error("The deadline for submitting a new report for {$date} has passed. Reports must be submitted within 36 hours.");
+            redirect(url('reports', ['date' => $date]));
+        }
     }
 
-    ReportModel::upsert(Auth::id(), $date, $_POST);
-    Flash::success('Daily report saved.');
-    redirect(url('reports'));
+    ReportModel::upsert($targetUserId, $date, $_POST);
+    Flash::success($existing ? 'Daily report updated.' : 'Daily report saved.');
+
+    $redirectParams = ['date' => $date];
+    if ($isFounder && $targetUserId !== Auth::id()) {
+        $redirectParams['edit_user_id'] = $targetUserId;
+    }
+    redirect(url('reports', $redirectParams));
 }
 
 $canViewTeam = Permission::hasAny(['reports.view_team', 'reports.view_all']);
+$isFounder = Permission::isFounder(Auth::id());
+
 $filters = [
     'user_id' => $_GET['user_id'] ?? '',
     'date_from' => $_GET['date_from'] ?? '',
@@ -32,7 +48,17 @@ $filters = [
 ];
 $page = current_page_int();
 [$rows, $p] = ReportModel::paginate($page, 20, $filters);
-$today = ReportModel::findForDate(Auth::id(), date('Y-m-d'));
+
+$selectedDate = (!empty($_GET['date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date']))
+    ? $_GET['date']
+    : date('Y-m-d');
+
+$selectedUserId = ($isFounder && !empty($_GET['edit_user_id']))
+    ? (int)$_GET['edit_user_id']
+    : Auth::id();
+
+$currentReport = ReportModel::findForDate($selectedUserId, $selectedDate);
+$today = $currentReport; // for backwards compatibility
 $users = $canViewTeam ? UserModel::activeSelectList() : [];
 
 // Calendar data for Founder/Manager
@@ -56,4 +82,7 @@ if ($action === 'ajax_day' && $canViewTeam) {
     exit;
 }
 
-render_page('reports/index', compact('rows', 'p', 'today', 'canViewTeam', 'filters', 'users', 'calYear', 'calMonth', 'monthlyReports'), 'Daily Reports');
+render_page('reports/index', compact(
+    'rows', 'p', 'today', 'currentReport', 'selectedDate', 'selectedUserId', 'isFounder',
+    'canViewTeam', 'filters', 'users', 'calYear', 'calMonth', 'monthlyReports'
+), 'Daily Reports');

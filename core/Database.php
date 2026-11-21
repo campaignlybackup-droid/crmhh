@@ -32,7 +32,7 @@ class Database
     }
     public static function autoMigrate(): void
     {
-        $targetVersion = 11;
+        $targetVersion = 12;
         if (!isset($_GET['migrate']) && ($_SESSION['db_migrated_v'] ?? 0) >= $targetVersion) {
             return;
         }
@@ -208,6 +208,62 @@ class Database
             $ccIndexNames = array_column($existingCcIndexes, 'Key_name');
             if (!in_array('idx_cc_client_date', $ccIndexNames, true)) {
                 $pdo->exec("ALTER TABLE `content_calendar` ADD INDEX `idx_cc_client_date` (`client_id`, `post_date`)");
+            }
+        } catch (Throwable $e) {}
+
+        // 8. Daily reports table and column migration
+        try {
+            $tableExists = (int)$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'daily_reports'")->fetchColumn();
+            if ($tableExists === 0) {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS daily_reports (
+                    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT UNSIGNED NOT NULL,
+                    report_date DATE NOT NULL,
+                    work_completed TEXT DEFAULT NULL,
+                    tasks_worked_on TEXT DEFAULT NULL,
+                    pending_work TEXT DEFAULT NULL,
+                    blockers TEXT DEFAULT NULL,
+                    notes TEXT DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uniq_dr_user_date (user_id, report_date),
+                    CONSTRAINT fk_dr_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            } else {
+                $drCols = self::getTableColumns($pdo, 'daily_reports');
+
+                if (!in_array('work_completed', $drCols, true)) {
+                    $pdo->exec("ALTER TABLE daily_reports ADD COLUMN work_completed TEXT DEFAULT NULL");
+                    if (in_array('completed_tasks', $drCols, true)) {
+                        $pdo->exec("UPDATE daily_reports SET work_completed = completed_tasks WHERE work_completed IS NULL AND completed_tasks IS NOT NULL");
+                    }
+                }
+                if (!in_array('tasks_worked_on', $drCols, true)) {
+                    $pdo->exec("ALTER TABLE daily_reports ADD COLUMN tasks_worked_on TEXT DEFAULT NULL AFTER work_completed");
+                }
+                if (!in_array('pending_work', $drCols, true)) {
+                    $pdo->exec("ALTER TABLE daily_reports ADD COLUMN pending_work TEXT DEFAULT NULL AFTER tasks_worked_on");
+                    if (in_array('pending_tasks', $drCols, true)) {
+                        $pdo->exec("UPDATE daily_reports SET pending_work = pending_tasks WHERE pending_work IS NULL AND pending_tasks IS NOT NULL");
+                    }
+                }
+                if (!in_array('blockers', $drCols, true)) {
+                    $pdo->exec("ALTER TABLE daily_reports ADD COLUMN blockers TEXT DEFAULT NULL");
+                }
+                if (!in_array('notes', $drCols, true)) {
+                    $pdo->exec("ALTER TABLE daily_reports ADD COLUMN notes TEXT DEFAULT NULL");
+                }
+                if (!in_array('updated_at', $drCols, true)) {
+                    $pdo->exec("ALTER TABLE daily_reports ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+                }
+
+                $existingDrIndexes = $pdo->query("SHOW INDEX FROM `daily_reports`")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                $drIndexNames = array_column($existingDrIndexes, 'Key_name');
+                if (!in_array('uniq_dr_user_date', $drIndexNames, true)) {
+                    try {
+                        $pdo->exec("ALTER TABLE `daily_reports` ADD UNIQUE KEY `uniq_dr_user_date` (`user_id`, `report_date`)");
+                    } catch (Throwable $e) {}
+                }
             }
         } catch (Throwable $e) {}
 

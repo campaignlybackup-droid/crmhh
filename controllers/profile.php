@@ -31,8 +31,30 @@ if ($action === 'update' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect(url('profile'));
 }
 
+if ($action === 'regenerate_api_key' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check_or_die();
+    if (!Auth::isFounder()) {
+        Permission::deny();
+    }
+    $newKey = 'crm_founder_' . bin2hex(random_bytes(24));
+    Database::run("INSERT INTO app_settings (`key`, `value`) VALUES ('founder_api_key', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)", [$newKey]);
+    Flash::success('Founder API Key regenerated successfully.');
+    redirect(url('profile'));
+}
+
 $user = Auth::user();
 $roles = Auth::roles();
 $teams = UserModel::teamsFor($user['id']);
 
-render_page('profile/index', compact('user', 'roles', 'teams'), 'My Profile');
+$founderApiKey = null;
+if (Auth::isFounder()) {
+    try {
+        $founderApiKey = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'founder_api_key'");
+        if (empty($founderApiKey)) {
+            $founderApiKey = 'crm_founder_' . bin2hex(random_bytes(24));
+            Database::run("INSERT INTO app_settings (`key`, `value`) VALUES ('founder_api_key', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)", [$founderApiKey]);
+        }
+    } catch (Throwable $e) {}
+}
+
+render_page('profile/index', compact('user', 'roles', 'teams', 'founderApiKey'), 'My Profile');

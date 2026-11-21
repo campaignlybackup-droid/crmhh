@@ -218,6 +218,69 @@ try {
         }
     }
 
+    // 8. Daily reports table and column migration
+    $tableExists = (int)$db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'daily_reports'")->fetchColumn();
+    if ($tableExists === 0) {
+        $db->exec("CREATE TABLE IF NOT EXISTS daily_reports (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            report_date DATE NOT NULL,
+            work_completed TEXT DEFAULT NULL,
+            tasks_worked_on TEXT DEFAULT NULL,
+            pending_work TEXT DEFAULT NULL,
+            blockers TEXT DEFAULT NULL,
+            notes TEXT DEFAULT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_dr_user_date (user_id, report_date),
+            CONSTRAINT fk_dr_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        echo "✓ Created daily_reports table.\n";
+    } else {
+        $drCols = array_column($db->query("SHOW COLUMNS FROM `daily_reports`")->fetchAll(PDO::FETCH_ASSOC) ?: [], 'Field');
+
+        if (!in_array('work_completed', $drCols, true)) {
+            $db->exec("ALTER TABLE daily_reports ADD COLUMN work_completed TEXT DEFAULT NULL");
+            if (in_array('completed_tasks', $drCols, true)) {
+                $db->exec("UPDATE daily_reports SET work_completed = completed_tasks WHERE work_completed IS NULL AND completed_tasks IS NOT NULL");
+            }
+            echo "✓ Added work_completed to daily_reports.\n";
+        }
+        if (!in_array('tasks_worked_on', $drCols, true)) {
+            $db->exec("ALTER TABLE daily_reports ADD COLUMN tasks_worked_on TEXT DEFAULT NULL AFTER work_completed");
+            echo "✓ Added tasks_worked_on to daily_reports.\n";
+        }
+        if (!in_array('pending_work', $drCols, true)) {
+            $db->exec("ALTER TABLE daily_reports ADD COLUMN pending_work TEXT DEFAULT NULL AFTER tasks_worked_on");
+            if (in_array('pending_tasks', $drCols, true)) {
+                $db->exec("UPDATE daily_reports SET pending_work = pending_tasks WHERE pending_work IS NULL AND pending_tasks IS NOT NULL");
+            }
+            echo "✓ Added pending_work to daily_reports.\n";
+        }
+        if (!in_array('blockers', $drCols, true)) {
+            $db->exec("ALTER TABLE daily_reports ADD COLUMN blockers TEXT DEFAULT NULL");
+            echo "✓ Added blockers to daily_reports.\n";
+        }
+        if (!in_array('notes', $drCols, true)) {
+            $db->exec("ALTER TABLE daily_reports ADD COLUMN notes TEXT DEFAULT NULL");
+            echo "✓ Added notes to daily_reports.\n";
+        }
+        if (!in_array('updated_at', $drCols, true)) {
+            $db->exec("ALTER TABLE daily_reports ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+            echo "✓ Added updated_at to daily_reports.\n";
+        }
+
+        $existingDrIndexes = $db->query("SHOW INDEX FROM `daily_reports`")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $drIndexNames = array_column($existingDrIndexes, 'Key_name');
+        if (!in_array('uniq_dr_user_date', $drIndexNames, true)) {
+            try {
+                $db->exec("ALTER TABLE `daily_reports` ADD UNIQUE KEY `uniq_dr_user_date` (`user_id`, `report_date`)");
+                echo "✓ Added uniq_dr_user_date unique index to daily_reports.\n";
+            } catch (Throwable $e) {}
+        }
+        echo "✓ Checked daily_reports table structure.\n";
+    }
+
     echo "\n</pre><h3 style='color:green;'>Migration successfully completed with ZERO data loss!</h3>";
 } catch (Throwable $e) {
     echo "\n</pre><h3 style='color:red;'>Migration Error: " . htmlspecialchars($e->getMessage()) . "</h3>";

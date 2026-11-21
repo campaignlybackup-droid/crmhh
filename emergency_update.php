@@ -25,6 +25,8 @@ $files = [
     'controllers/leads.php',
     'controllers/teams.php',
     'controllers/folder_settings.php',
+    'controllers/reports.php',
+    'controllers/profile.php',
     'views/operations_issues/index.php',
     'views/operations_issues/form.php',
     'views/operations_issues/view.php',
@@ -36,7 +38,10 @@ $files = [
     'views/leads/folders.php',
     'views/teams/list.php',
     'views/teams/view.php',
+    'views/reports/index.php',
+    'views/profile/index.php',
     'views/layout/sidebar.php',
+    'api.php',
     'database/schema.sql',
     'migrate_deep_fixes.php'
 ];

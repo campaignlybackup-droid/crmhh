@@ -94,8 +94,8 @@ try {
             $leadsCount = (int)Database::scalar("SELECT COUNT(*) FROM leads WHERE deleted_at IS NULL");
             $leadsByStatus = Database::all("SELECT ls.name, COUNT(l.id) AS count FROM lead_statuses ls LEFT JOIN leads l ON l.status_id = ls.id AND l.deleted_at IS NULL GROUP BY ls.id, ls.name ORDER BY ls.sort_order ASC");
             
-            $tasksPending = (int)Database::scalar("SELECT COUNT(*) FROM tasks WHERE status != 'completed'");
-            $tasksOverdue = (int)Database::scalar("SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND due_date IS NOT NULL AND due_date < CURDATE()");
+            $tasksPending = (int)Database::scalar("SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND deleted_at IS NULL");
+            $tasksOverdue = (int)Database::scalar("SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND deadline IS NOT NULL AND deadline < NOW() AND deleted_at IS NULL");
             
             $today = date('Y-m-d');
             $reportsToday = Database::all("SELECT dr.*, u.name AS user_name FROM daily_reports dr JOIN users u ON u.id = dr.user_id WHERE DATE(dr.report_date) = ? ORDER BY u.name ASC", [$today]);
@@ -214,14 +214,22 @@ try {
             if ($title === '') {
                 api_response(false, null, 'Task "title" is required.', 400);
             }
+            $status = $input['status'] ?? 'not_started';
+            if ($status === 'pending') $status = 'not_started';
+            if (!in_array($status, ['not_started', 'in_progress', 'pending_review', 'completed', 'blocked', 'cancelled'], true)) {
+                $status = 'not_started';
+            }
+            $deadline = $input['deadline'] ?? $input['due_date'] ?? null;
             $taskData = [
                 'title'            => $title,
                 'description'      => trim($input['description'] ?? ''),
                 'assigned_user_id' => !empty($input['assigned_user_id']) ? (int)$input['assigned_user_id'] : $founder['id'],
                 'client_id'        => !empty($input['client_id']) ? (int)$input['client_id'] : null,
                 'priority'         => in_array($input['priority'] ?? '', ['low', 'medium', 'high', 'urgent'], true) ? $input['priority'] : 'medium',
-                'status'           => in_array($input['status'] ?? '', ['pending', 'in_progress', 'completed', 'cancelled'], true) ? $input['status'] : 'pending',
-                'due_date'         => !empty($input['due_date']) ? $input['due_date'] : null,
+                'status'           => $status,
+                'start_date'       => $input['start_date'] ?? null,
+                'deadline'         => $deadline,
+                'notes'            => $input['notes'] ?? null,
                 'created_by'       => $founder['id'],
             ];
             $taskId = TaskModel::create($taskData);
@@ -239,18 +247,25 @@ try {
                 api_response(false, null, "Task with ID $id not found.", 404);
             }
 
-            if (isset($input['status']) && in_array($input['status'], ['pending', 'in_progress', 'completed', 'cancelled'], true)) {
-                TaskModel::changeStatus($id, $input['status']);
+            if (isset($input['status'])) {
+                $status = $input['status'];
+                if ($status === 'pending') $status = 'not_started';
+                if (in_array($status, ['not_started', 'in_progress', 'pending_review', 'completed', 'blocked', 'cancelled'], true)) {
+                    TaskModel::changeStatus($id, $status);
+                }
             }
             if (isset($input['assigned_user_id'])) {
                 TaskModel::reassign($id, (int)$input['assigned_user_id'], 'Reassigned via Claude');
             }
 
             $updateData = [];
-            foreach (['title', 'description', 'priority', 'due_date'] as $f) {
+            foreach (['title', 'description', 'priority', 'notes', 'start_date'] as $f) {
                 if (isset($input[$f])) {
                     $updateData[$f] = $input[$f];
                 }
+            }
+            if (isset($input['deadline']) || isset($input['due_date'])) {
+                $updateData['deadline'] = $input['deadline'] ?? $input['due_date'];
             }
             if (!empty($updateData)) {
                 TaskModel::update($id, array_merge($existing, $updateData));

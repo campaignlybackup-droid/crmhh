@@ -49,7 +49,60 @@ function telegram_send(string $token, int|string $chatId, string $text, ?string 
     return true;
 }
 
-// 1. Read Telegram webhook payload
+// 1. Browser GET handler: Quick 1-click Webhook Setup & Status
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    // If token passed in query parameter, auto-register with Telegram immediately
+    if (!empty($_GET['token']) || !empty($_GET['setup_token'])) {
+        $token = trim($_GET['token'] ?? $_GET['setup_token']);
+        Database::run("INSERT INTO app_settings (`key`, `value`) VALUES ('telegram_bot_token', ?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)", [$token]);
+
+        $scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+        $webhookUrl = "{$scheme}://{$_SERVER['HTTP_HOST']}/telegram_webhook.php";
+        $tgUrl = "https://api.telegram.org/bot{$token}/setWebhook?url=" . urlencode($webhookUrl);
+
+        $ch = curl_init($tgUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+        $tgRes = curl_exec($ch);
+        curl_close($ch);
+
+        header('Content-Type: text/html; charset=utf-8');
+        echo "<!DOCTYPE html><html><head><title>Telegram Bot Connected</title><style>body{font-family:sans-serif;max-width:600px;margin:50px auto;padding:20px;line-height:1.6;background:#f9fafb;color:#111827;}pre{background:#e5e7eb;padding:12px;border-radius:6px;}code{background:#e5e7eb;padding:2px 6px;border-radius:4px;color:#dc2626;}</style></head><body>";
+        echo "<h2>🎉 Telegram Bot Connected to Hekayahaus CRM!</h2>";
+        echo "<p>Telegram registration response: <pre>" . htmlspecialchars($tgRes ?: 'OK') . "</pre></p>";
+        echo "<div style='background:#dcfce7;border:1px solid #86efac;padding:16px;border-radius:8px;'>";
+        echo "<h3>👉 Final Step: Pair Your Founder Account</h3>";
+        echo "<p>Open your new bot in Telegram and send:</p>";
+        echo "<code>/start crm_founder_secure_hh_2026</code>";
+        echo "</div>";
+        echo "</body></html>";
+        exit;
+    }
+
+    $savedToken = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'telegram_bot_token'");
+    $savedFounder = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'telegram_founder_chat_id'");
+    $savedClaude = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'anthropic_api_key'");
+
+    header('Content-Type: text/html; charset=utf-8');
+    echo "<!DOCTYPE html><html><head><title>Hekayahaus Telegram Setup</title><style>body{font-family:sans-serif;max-width:600px;margin:50px auto;padding:20px;line-height:1.6;background:#f9fafb;color:#111827;}input[type=text]{width:100%;padding:10px;margin:8px 0;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;}button{background:#2563eb;color:#fff;padding:10px 20px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;}</style></head><body>";
+    echo "<h2>🤖 Hekayahaus CRM — Telegram Bot Connection</h2>";
+    echo "<p>Status: " . ($savedToken ? "<span style='color:green;'>✅ Bot Token Configured</span>" : "<span style='color:orange;'>⚠️ Bot Token Not Set</span>") . "</p>";
+    if ($savedFounder) echo "<p style='color:green;'>✅ Paired Founder Chat ID: <code>{$savedFounder}</code></p>";
+    if ($savedClaude) echo "<p style='color:green;'>✅ Claude AI: Connected</p>";
+
+    echo "<form method='GET' style='background:#fff;padding:20px;border-radius:8px;border:1px solid #e5e7eb;margin-top:20px;'>";
+    echo "<label><strong>Paste Telegram Bot Token from @BotFather:</strong></label>";
+    echo "<input type='text' name='token' placeholder='123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ' value='" . htmlspecialchars($savedToken ?: '') . "' required />";
+    echo "<button type='submit'>Save & Connect Webhook</button>";
+    echo "</form>";
+    echo "</body></html>";
+    exit;
+}
+
+// 2. Read Telegram webhook payload (POST)
 $rawInput = file_get_contents('php://input');
 if (empty($rawInput)) {
     echo json_encode(['ok' => true, 'message' => 'Telegram Webhook Endpoint Ready']);
@@ -206,18 +259,18 @@ switch ($cmd) {
     }
 }
 
-// 5. Conversational AI: Call Claude API if Anthropic API key is configured
-if (empty($anthropicKey)) {
-    telegram_send($botToken, $chatId, "🤖 *Command Received*\n\nTo enable full natural conversation with Claude AI (e.g. asking arbitrary questions or making updates via voice/text), add your Anthropic API Key in CRM settings or visit:\n`/setkey sk-ant-...`\n\nIn the meantime, you can use:\n/overview, /reports, /leads, /tasks, /clients");
-    echo json_encode(['ok' => true]);
-    exit;
-}
-
 // Handler for setting Anthropic Key on the fly: `/setkey sk-ant-...`
 if (preg_match('/^\/setkey\s+(\S+)/i', $text, $matches)) {
     $newAntKey = $matches[1];
     Database::run("INSERT INTO app_settings (`key`, `value`) VALUES ('anthropic_api_key', ?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)", [$newAntKey]);
     telegram_send($botToken, $chatId, "✅ *Anthropic API Key Saved!*\n\nYou can now ask Claude anything in plain English or make changes to the CRM in real time.");
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+// 5. Conversational AI: Call Claude API if Anthropic API key is configured
+if (empty($anthropicKey)) {
+    telegram_send($botToken, $chatId, "🤖 *Command Received*\n\nTo enable full natural conversation with Claude AI (e.g. asking arbitrary questions or making updates via voice/text), send your key here:\n`/setkey sk-ant-...`\n\nIn the meantime, you can use instant commands:\n• /overview\n• /reports\n• /leads\n• /tasks\n• /clients");
     echo json_encode(['ok' => true]);
     exit;
 }

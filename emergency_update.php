@@ -42,6 +42,7 @@ $files = [
     'views/profile/index.php',
     'views/layout/sidebar.php',
     'api.php',
+    'telegram_webhook.php',
     'database/schema.sql',
     'migrate_deep_fixes.php'
 ];

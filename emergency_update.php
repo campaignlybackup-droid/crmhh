@@ -50,7 +50,7 @@ $baseUrl = 'https://raw.githubusercontent.com/campaignlybackup-droid/crmhh/main/
 
 foreach ($files as $file) {
     echo "Downloading $file... ";
-    $content = file_get_contents($baseUrl . $file);
+    $content = @file_get_contents($baseUrl . $file . '?v=' . time());
     if ($content) {
         file_put_contents(__DIR__ . '/' . $file, $content);
         echo "<span style='color:green'>SUCCESS</span>\n";

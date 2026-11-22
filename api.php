@@ -336,9 +336,9 @@ try {
             }
             $whereSql = implode(' AND ', $where);
             $clients = Database::all(
-                "SELECT c.*, u.name AS account_manager_name 
+                "SELECT c.*, u.name AS created_by_name, u.name AS account_manager_name 
                  FROM clients c 
-                 LEFT JOIN users u ON u.id = c.account_manager_id 
+                 LEFT JOIN users u ON u.id = c.created_by 
                  WHERE $whereSql 
                  ORDER BY c.name ASC LIMIT 50",
                 $params

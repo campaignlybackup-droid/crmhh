@@ -125,6 +125,7 @@ $senderName  = 'Team Member';
 $evoUrl      = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_evolution_url'");
 $evoKey      = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_evolution_key'");
 $evoInstance = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_evolution_instance'") ?: 'hekayahaus';
+$wahaUrl     = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_waha_url'");
 $founderPhone= Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_founder_phone'");
 $anthropicKey= Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'anthropic_api_key'") ?: (config('app')['anthropic_api_key'] ?? '');
 
@@ -134,7 +135,29 @@ $rawInput = file_get_contents('php://input');
 if (!empty($rawInput)) {
     $data = json_decode($rawInput, true);
 
-    if (isset($data['event']) && strpos($data['event'], 'messages.upsert') !== false) {
+    // 1. WAHA (WhatsApp HTTP API) Payload
+    if (isset($data['event']) && strpos($data['event'], 'message') !== false && isset($data['payload'])) {
+        $source = 'waha';
+        $payload = $data['payload'] ?? [];
+        if (!empty($payload['fromMe'])) {
+            echo json_encode(['ok' => true]);
+            exit;
+        }
+        $fromJid = $payload['from'] ?? '';
+        $replyToJid = $fromJid;
+        $isGroup = (strpos($fromJid, '@g.us') !== false);
+        if ($isGroup) {
+            $groupId = $fromJid;
+            $rawParticipant = $payload['participant'] ?? $fromJid;
+            $from = preg_replace('/[^0-9]/', '', explode('@', $rawParticipant)[0]);
+        } else {
+            $from = preg_replace('/[^0-9]/', '', explode('@', $fromJid)[0]);
+        }
+        $senderName = $payload['_data']['notifyName'] ?? ($payload['pushName'] ?? 'Team Member');
+        $text = trim($payload['body'] ?? '');
+    }
+    // 2. Evolution API Payload
+    elseif (isset($data['event']) && strpos($data['event'], 'messages.upsert') !== false) {
         $source = 'evolution';
         $msgData = $data['data'] ?? [];
         $key = $msgData['key'] ?? [];
@@ -195,6 +218,30 @@ if (empty($from) || empty($text)) {
 // Helper to send WhatsApp messages back
 function wa_send_message(string $source, string $targetJid, string $replyText, ?string $evoUrl, ?string $evoKey, ?string $evoInstance): void {
     if (trim($replyText) === '' || trim($replyText) === '[NO_REPLY]') {
+        return;
+    }
+
+    $wahaUrl = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_waha_url'");
+
+    // WAHA reply
+    if ($source === 'waha' || (!empty($wahaUrl) && $source !== 'evolution')) {
+        $url = rtrim($wahaUrl, '/') . "/api/sendText";
+        $payload = [
+            'chatId'  => $targetJid,
+            'text'    => $replyText,
+            'session' => 'default'
+        ];
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($payload),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 15,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+        curl_exec($ch);
+        curl_close($ch);
         return;
     }
 

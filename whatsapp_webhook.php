@@ -222,6 +222,7 @@ function wa_send_message(string $source, string $targetJid, string $replyText, ?
     }
 
     $wahaUrl = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_waha_url'");
+    $wahaKey = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_waha_key'") ?: 'admin123';
 
     // WAHA reply
     if ($source === 'waha' || (!empty($wahaUrl) && $source !== 'evolution')) {
@@ -231,11 +232,15 @@ function wa_send_message(string $source, string $targetJid, string $replyText, ?
             'text'    => $replyText,
             'session' => 'default'
         ];
+        $headers = ['Content-Type: application/json'];
+        if (!empty($wahaKey)) {
+            $headers[] = 'X-Api-Key: ' . $wahaKey;
+        }
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => json_encode($payload),
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 15,
             CURLOPT_SSL_VERIFYPEER => false,

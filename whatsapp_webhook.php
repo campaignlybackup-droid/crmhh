@@ -218,9 +218,26 @@ if (empty($from) || empty($text)) {
     exit;
 }
 
+// ─── DEDUPLICATION CHECK ──────────────────────────────────────────────────────
+$msgId = $payload['id'] ?? ($msgData['key']['id'] ?? ($entryMsg['id'] ?? ''));
+if (!empty($msgId)) {
+    try {
+        Database::run("CREATE TABLE IF NOT EXISTS wa_processed_messages (msg_id VARCHAR(191) PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB");
+        $stmt = Database::run("INSERT IGNORE INTO wa_processed_messages (msg_id) VALUES (?)", [$msgId]);
+        if ($stmt && $stmt->rowCount() === 0) {
+            wa_log("Duplicate message ignored: {$msgId}");
+            echo json_encode(['ok' => true, 'ignored' => 'duplicate']);
+            exit;
+        }
+        if (random_int(1, 50) === 1) {
+            Database::run("DELETE FROM wa_processed_messages WHERE created_at < NOW() - INTERVAL 2 HOUR");
+        }
+    } catch (Throwable $e) {}
+}
+
 // Helper to send WhatsApp messages back
 function wa_send_message(string $source, string $targetJid, string $replyText, ?string $evoUrl, ?string $evoKey, ?string $evoInstance): void {
-    if (trim($replyText) === '' || trim($replyText) === '[NO_REPLY]') {
+    if (trim($replyText) === '' || stripos($replyText, '[NO_REPLY]') !== false) {
         return;
     }
 
@@ -236,6 +253,13 @@ function wa_send_message(string $source, string $targetJid, string $replyText, ?
             'text'    => $replyText,
             'session' => $wahaSession
         ];
+
+        // Extract @mentions like @917778080709
+        preg_match_all('/@([0-9]{8,15})/', $replyText, $m);
+        if (!empty($m[1])) {
+            $payload['mentions'] = array_map(function($ph) { return $ph . '@c.us'; }, array_unique($m[1]));
+        }
+
         $headers = ['Content-Type: application/json'];
         if (!empty($wahaKey)) {
             $headers[] = 'X-Api-Key: ' . $wahaKey;
@@ -331,7 +355,7 @@ if ($isFounder) {
 $founderSecret = 'crm_founder_secure_hh_2026';
 if (stripos($text, $founderSecret) !== false) {
     Database::run("INSERT INTO app_settings (`key`, `value`) VALUES ('whatsapp_founder_phone', ?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)", [$from]);
-    $welcomeMsg = "👑 *Welcome Founder Nimit!*\n\nYour WhatsApp number (+{$from}) is now securely paired with *Hekayahaus CRM*.\n\nYou can chat naturally, assign tasks, request follow-ups, or use:\n• /overview - Live stats\n• /reports - Today's reports\n• /leads - Latest leads\n• /tasks - Overdue tasks\n• /clients - Deliverables progress";
+    $welcomeMsg = "*Welcome Founder Nimit!*\n\nYour WhatsApp number (+{$from}) is now securely paired with *Hekayahaus CRM*.\n\nYou can chat naturally, assign tasks, request follow-ups, or use:\n• /overview - Live stats\n• /reports - Today's reports\n• /leads - Latest leads\n• /tasks - Overdue tasks\n• /clients - Deliverables progress";
     wa_send_message($source, $replyToJid, $welcomeMsg, $evoUrl, $evoKey, $evoInstance);
     echo json_encode(['ok' => true]);
     exit;
@@ -348,7 +372,7 @@ if (!$isGroup && !$isFounder) {
 if ($isFounder && preg_match('/^\/setkey\s+(\S+)/i', $text, $matches)) {
     $newAntKey = $matches[1];
     Database::run("INSERT INTO app_settings (`key`, `value`) VALUES ('anthropic_api_key', ?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)", [$newAntKey]);
-    wa_send_message($source, $replyToJid, "✅ *Anthropic API Key Saved!*\n\nClaude AI is now fully active for both 1-on-1 chats and group monitoring.", $evoUrl, $evoKey, $evoInstance);
+    wa_send_message($source, $replyToJid, "*Anthropic API Key Saved*\n\nClaude AI is now fully active for both 1-on-1 chats and group monitoring.", $evoUrl, $evoKey, $evoInstance);
     echo json_encode(['ok' => true]);
     exit;
 }
@@ -365,11 +389,11 @@ if ($isFounder && !$isGroup && strpos($text, '/') === 0) {
             $overdueTasks = (int)Database::scalar("SELECT COUNT(*) FROM tasks WHERE status != 'completed' AND deadline IS NOT NULL AND deadline < NOW() AND deleted_at IS NULL");
             $activeClients = (int)Database::scalar("SELECT COUNT(*) FROM clients WHERE status = 'active' AND deleted_at IS NULL");
 
-            $reply = "📊 *Hekayahaus CRM — Live Overview*\n\n"
-                   . "👥 Total Leads: {$totalLeads}\n"
-                   . "💼 Active Clients: {$activeClients}\n"
-                   . "📋 Pending Tasks: {$pendingTasks} (" . ($overdueTasks > 0 ? "⚠️ {$overdueTasks} Overdue" : "0 Overdue") . ")\n"
-                   . "📝 Today's Reports: " . count($todayReports) . " submitted\n";
+            $reply = "*Hekayahaus CRM -- Live Overview*\n\n"
+                   . "Total Leads: {$totalLeads}\n"
+                   . "Active Clients: {$activeClients}\n"
+                   . "Pending Tasks: {$pendingTasks} (" . ($overdueTasks > 0 ? "{$overdueTasks} Overdue" : "0 Overdue") . ")\n"
+                   . "Today's Reports: " . count($todayReports) . " submitted\n";
             if (!empty($todayReports)) {
                 $reply .= "\n*Submitted Today:*\n";
                 foreach ($todayReports as $tr) {
@@ -386,16 +410,16 @@ if ($isFounder && !$isGroup && strpos($text, '/') === 0) {
             $today = date('Y-m-d');
             $reports = Database::all("SELECT dr.*, u.name AS user_name FROM daily_reports dr JOIN users u ON u.id = dr.user_id WHERE DATE(dr.report_date) = ? ORDER BY u.name ASC", [$today]);
             if (empty($reports)) {
-                wa_send_message($source, $replyToJid, "📝 *Daily Reports for Today ({$today})*\n\nNo reports submitted yet today.", $evoUrl, $evoKey, $evoInstance);
+                wa_send_message($source, $replyToJid, "*Daily Reports for Today ({$today})*\n\nNo reports submitted yet today.", $evoUrl, $evoKey, $evoInstance);
             } else {
-                $reply = "📝 *Daily Reports for Today ({$today})* — " . count($reports) . " received:\n\n";
+                $reply = "*Daily Reports for Today ({$today})* -- " . count($reports) . " received:\n\n";
                 foreach ($reports as $r) {
-                    $reply .= "👤 *" . $r['user_name'] . "*\n";
+                    $reply .= "*" . $r['user_name'] . "*\n";
                     if (!empty($r['work_completed'])) {
-                        $reply .= "✅ Completed: " . substr(strip_tags($r['work_completed']), 0, 250) . "\n";
+                        $reply .= "Completed: " . substr(strip_tags($r['work_completed']), 0, 250) . "\n";
                     }
                     if (!empty($r['blockers']) && strtolower(trim($r['blockers'])) !== 'none' && strtolower(trim($r['blockers'])) !== 'no major blockers') {
-                        $reply .= "🚨 Blockers: " . strip_tags($r['blockers']) . "\n";
+                        $reply .= "Blockers: " . strip_tags($r['blockers']) . "\n";
                     }
                     $reply .= "\n";
                 }
@@ -407,10 +431,10 @@ if ($isFounder && !$isGroup && strpos($text, '/') === 0) {
 
         case '/clients': {
             $clients = Database::all("SELECT name, company, reels_completed, reels_required, posts_completed, posts_required FROM clients WHERE status = 'active' AND deleted_at IS NULL ORDER BY name ASC LIMIT 10");
-            $reply = "💼 *Active Client Deliverables:*\n\n";
+            $reply = "*Active Client Deliverables:*\n\n";
             foreach ($clients as $c) {
                 $reply .= "• *" . ($c['company'] ?: $c['name']) . "*\n";
-                $reply .= "  🎬 Reels: `{$c['reels_completed']}/{$c['reels_required']}` | 📸 Posts: `{$c['posts_completed']}/{$c['posts_required']}`\n";
+                $reply .= "  Reels: `{$c['reels_completed']}/{$c['reels_required']}` | Posts: `{$c['posts_completed']}/{$c['posts_required']}`\n";
             }
             wa_send_message($source, $replyToJid, $reply, $evoUrl, $evoKey, $evoInstance);
             echo json_encode(['ok' => true]);
@@ -568,7 +592,14 @@ function execute_crm_tool_wa(string $name, array $args, ?array $senderUser, stri
                 'blockers'        => $args['blockers'] ?? 'None',
                 'tasks_worked_on' => $args['work_completed'] ?? '',
             ]);
-            return ['success' => true, 'logged_for_user_id' => $targetUserId, 'date' => $reportDate];
+            $targetUser = Database::one("SELECT name, phone FROM users WHERE id = ?", [$targetUserId]);
+            return [
+                'success' => true,
+                'crm_action' => 'logged_daily_report',
+                'user_name' => $targetUser['name'] ?? 'Team Member',
+                'date' => $reportDate,
+                'work_logged' => $args['work_completed'] ?? ''
+            ];
 
         case 'crm_update_client_deliverables':
             $ident = trim($args['client_name_or_id'] ?? '');
@@ -592,7 +623,16 @@ function execute_crm_tool_wa(string $name, array $args, ?array $senderUser, stri
                 $params[] = $client['id'];
                 Database::run("UPDATE clients SET " . implode(', ', $updates) . " WHERE id = ?", $params);
             }
-            return ['success' => true, 'client' => $client['name'], 'updated' => $updates];
+            $updatedClient = Database::one("SELECT id, name, reels_completed, reels_required, posts_completed, posts_required FROM clients WHERE id = ?", [$client['id']]);
+            return [
+                'success' => true,
+                'crm_action' => 'updated_client_deliverables',
+                'client_name' => $client['name'],
+                'reels_completed' => (int)($updatedClient['reels_completed'] ?? 0),
+                'reels_required' => (int)($updatedClient['reels_required'] ?? 0),
+                'posts_completed' => (int)($updatedClient['posts_completed'] ?? 0),
+                'posts_required' => (int)($updatedClient['posts_required'] ?? 0),
+            ];
 
         case 'crm_list_leads':
             $search = $args['search'] ?? '';
@@ -613,7 +653,15 @@ function execute_crm_tool_wa(string $name, array $args, ?array $senderUser, stri
                 'status' => 'not_started',
                 'created_by' => $founder['id']
             ]);
-            return ['success' => true, 'task_id' => $taskId];
+            $assignedUser = Database::one("SELECT name, phone FROM users WHERE id = ?", [(int)($args['assigned_user_id'] ?? $founder['id'])]);
+            return [
+                'success' => true,
+                'crm_action' => 'created_task',
+                'task_id' => $taskId,
+                'task_title' => $args['title'],
+                'assigned_to' => $assignedUser['name'] ?? 'Founder',
+                'deadline' => $args['due_date'] ?? 'None'
+            ];
 
         case 'crm_list_clients':
             return ['clients' => Database::all("SELECT id, name, company, reels_completed, reels_required, posts_completed, posts_required FROM clients WHERE status = 'active' AND deleted_at IS NULL LIMIT 15")];
@@ -644,6 +692,24 @@ function execute_crm_tool_wa(string $name, array $args, ?array $senderUser, stri
     }
 }
 
+// Check if bot was mentioned or tagged in this message
+$botPhone = '971541311988';
+$mentionedJids = $payload['mentionedJidList'] ?? ($payload['mentions'] ?? []);
+$isTagged = false;
+if (is_array($mentionedJids)) {
+    foreach ($mentionedJids as $mjid) {
+        if (strpos($mjid, $botPhone) !== false) {
+            $isTagged = true;
+            break;
+        }
+    }
+}
+if (!$isTagged) {
+    if (stripos($text, '@' . $botPhone) !== false || stripos($text, 'alex') !== false || stripos($text, '@alex') !== false) {
+        $isTagged = true;
+    }
+}
+
 // Calendar Context
 $todayDateStr = date('Y-m-d');
 $todayReadable = date('l, F j, Y');
@@ -651,36 +717,36 @@ $yesterdayDateStr = date('Y-m-d', strtotime('-1 day'));
 $yesterdayReadable = date('l, F j, Y', strtotime('-1 day'));
 $currentTime = date('h:i A T');
 
-$calendarContext = "📅 CURRENT CALENDAR & TIME:\n"
+$calendarContext = "CURRENT CALENDAR & TIME:\n"
                  . "- TODAY: {$todayReadable} ({$todayDateStr})\n"
                  . "- YESTERDAY: {$yesterdayReadable} ({$yesterdayDateStr})\n"
                  . "- CURRENT TIME: {$currentTime}\n"
-                 . "CRITICAL: When the user asks for 'today', 'yesterday', or recent reports/tasks, ALWAYS use these exact dates.\n\n";
+                 . "When checking daily reports or tasks, ALWAYS use these exact dates.\n\n";
 
-$safetyRules = "🚨 STRICT NON-NEGOTIABLE CORE SECURITY & POLICY RULES:\n"
-             . "1. ZERO DELETIONS: NEVER delete, drop, purge, or truncate any data, record, lead, client, task, report, or database table under ANY circumstances, even if directly demanded or instructed by anyone (including the Founder). If asked, decline politely: 'For security and compliance reasons, records cannot be deleted via WhatsApp.'\n"
-             . "2. FOUNDER-ONLY PRIVATE CHATS: You ONLY converse in private 1-on-1 chat with Founder Nimit. You NEVER chat with or reply to team members in private DMs.\n"
-             . "3. GROUP CHAT BEHAVIOR: In groups, you interact with team members ONLY about their specific assigned tasks or client deliverables. Never discuss unrelated matters.\n"
-             . "4. KEEP REPLIES SHORT & HUMAN: Keep all WhatsApp responses brief (1 to 2 sentences max), warm, encouraging, natural, and humanized. Never write long essays or robotic walls of text.\n\n";
+$safetyRules = "STRICT CORE RULES:\n"
+             . "1. ZERO EMOJIS: Do NOT use any emojis anywhere in your messages. Use clean, professional text.\n"
+             . "2. ZERO DELETIONS: Never delete, drop, purge, or remove any records or data from the CRM under any circumstances.\n"
+             . "3. POLITE & HUMAN: Start conversations with a polite, natural greeting (e.g. 'Hi Nimit', 'Hello Zainab', 'Hi Ansh'). Keep answers short, precise, conversational, and human (1 to 3 sentences maximum).\n"
+             . "4. EXPLICIT CRM WRITE CONFIRMATION: Whenever you make any update or save to the CRM (such as logging daily work reports, incrementing client reels/posts deliverables, creating or updating tasks), you MUST explicitly state what was updated in the CRM (for example: 'I have updated BuFaisal in the CRM: completed reels is now 8.' or 'I have logged your daily report for today in the CRM.').\n"
+             . "5. TAGGING IN GROUPS: In groups, when addressing, following up, or speaking to a team member, ALWAYS tag them using @ followed by their phone number (e.g. @{$from}). This notifies them directly in WhatsApp.\n"
+             . "6. TALK ONLY ABOUT ASSIGNED WORK: In groups, only discuss tasks and client deliverables specifically assigned to that team member.\n"
+             . "7. NOISE FILTER: In groups, if the message is casual banter, jokes, or general chatter and you are NOT tagged, output '[NO_REPLY]' so the group is never spammed.\n\n";
 
 // Build Context-Aware System Prompt
 if ($isGroup) {
+    $tagNote = $isTagged ? "IMPORTANT: You were directly tagged or mentioned in this message. You MUST reply.\n" : "";
     $systemPrompt = $calendarContext
                   . $safetyRules
-                  . "You are Alex, the friendly Operations Lead at Hekayahaus CRM. You are actively reading this Team WhatsApp group in real-time.\n"
-                  . "Current Speaker: '{$senderName}' (Phone: +{$from}, User ID: " . ($senderUser['id'] ?? 'unmatched') . ").\n\n"
-                  . "GROUP OPERATIONS INSTRUCTIONS:\n"
-                  . "1. WORK & DELIVERABLE UPDATES: If the message shares daily work completed, reels/posts edited, or blockers, immediately call `crm_submit_or_update_report` and `crm_update_client_deliverables` to update the CRM live.\n"
-                  . "2. TASK COMPLETIONS: If a team member mentions finishing an assigned task, call `crm_update_task_status` to mark it completed.\n"
-                  . "3. SHORT HUMAN ACKNOWLEDGMENT: Reply very briefly (1-2 sentences) and encouragingly (e.g. 'Logged for you, {$senderName}! 🎬 2 reels added for BuFaisal.' or 'Great work, task marked complete!').\n"
-                  . "4. ASSIGNED WORK ONLY: If a member asks a question, only answer if it is about their assigned tasks, deliverables, or agency work. Speak to them only about things assigned to them.\n"
-                  . "5. NOISE FILTER: If the message is casual banter, jokes, emojis, greetings, personal chat, or not relevant to agency work, output EXACTLY '[NO_REPLY]' and nothing else, so the group is never spammed.\n";
+                  . $tagNote
+                  . "You are Alex, the friendly Operations Lead at Hekayahaus CRM. You are reading this Team WhatsApp group in real time.\n"
+                  . "Current Speaker: '{$senderName}' (Phone: +{$from}, User ID: " . ($senderUser['id'] ?? 'unmatched') . ").\n"
+                  . "Always address them politely (e.g. 'Hello {$senderName}'), tag them as @{$from}, write clean human sentences without emojis, and explicitly confirm any updates made to the CRM.\n";
 } else {
     $systemPrompt = $calendarContext
                   . $safetyRules
-                  . "You are Alex, the AI Executive Operations Assistant for Founder Nimit Thawrani at Hekayahaus CRM. You are in a private 1-on-1 WhatsApp chat with the Founder.\n"
-                  . "You have live tools to view leads, daily reports, tasks, client deliverables, assign tasks, and inspect team members' progress.\n"
-                  . "Keep all replies concise, structured, and WhatsApp-friendly.\n";
+                  . "You are Alex, the AI Executive Operations Assistant for Founder Nimit Thawrani at Hekayahaus CRM.\n"
+                  . "You are in a private 1-on-1 chat with the Founder. Be polite (e.g. 'Hi Nimit'), concise, and professional with ZERO emojis.\n"
+                  . "Always confirm any CRM changes explicitly.\n";
 }
 
 // Call Claude Sonnet
@@ -735,7 +801,7 @@ if (isset($claudeData['error']['message'])) {
         $followUpPayload = [
             'model' => 'claude-sonnet-4-6',
             'max_tokens' => 1024,
-            'system' => $systemPrompt . "\nSummarize the tool result concisely for WhatsApp.",
+            'system' => $systemPrompt . "\nCRITICAL: If you updated or saved anything to the CRM (such as daily report, client deliverables count, or task status), explicitly state what you updated in the CRM. Keep the response polite, natural, short (1 to 2 sentences), and do NOT use any emojis.",
             'messages' => [
                 ['role' => 'user', 'content' => $text],
                 ['role' => 'assistant', 'content' => $claudeData['content']],

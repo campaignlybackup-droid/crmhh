@@ -305,6 +305,13 @@ if (stripos($text, $founderSecret) !== false) {
     exit;
 }
 
+// Strict Privacy Guard: The bot NEVER speaks to anyone on private 1-on-1 chat except the Founder
+if (!$isGroup && !$isFounder) {
+    wa_log("Ignored private DM from non-founder (+{$from})");
+    echo json_encode(['ok' => true, 'ignored' => 'non_founder_private_chat']);
+    exit;
+}
+
 // Handle `/setkey sk-ant-...`
 if ($isFounder && preg_match('/^\/setkey\s+(\S+)/i', $text, $matches)) {
     $newAntKey = $matches[1];
@@ -467,15 +474,26 @@ $claudeTools = [
         'input_schema' => ['type' => 'object', 'properties' => (object)[]]
     ],
     [
-        'name' => 'whatsapp_send_dm',
-        'description' => 'Send an outbound 1-on-1 WhatsApp message to a team member (used for proactive follow-ups on Founder command).',
+        'name' => 'crm_get_member_tasks',
+        'description' => 'Get active tasks and deadlines assigned to a specific team member.',
         'input_schema' => [
             'type' => 'object',
             'properties' => [
-                'phone_or_user_id' => ['type' => 'string', 'description' => 'Team member phone number with country code or user ID'],
-                'message' => ['type' => 'string', 'description' => 'Friendly, human message text to send to them']
+                'user_id' => ['type' => 'integer', 'description' => 'User ID of the team member'],
+                'user_name' => ['type' => 'string', 'description' => 'Name of the member if user ID is unknown']
+            ]
+        ]
+    ],
+    [
+        'name' => 'crm_update_task_status',
+        'description' => 'Update status of an assigned task (e.g. mark completed when staff reports finish).',
+        'input_schema' => [
+            'type' => 'object',
+            'properties' => [
+                'task_id' => ['type' => 'integer', 'description' => 'ID of the task to update'],
+                'status' => ['type' => 'string', 'enum' => ['not_started', 'in_progress', 'completed']]
             ],
-            'required' => ['phone_or_user_id', 'message']
+            'required' => ['task_id', 'status']
         ]
     ]
 ];
@@ -568,19 +586,26 @@ function execute_crm_tool_wa(string $name, array $args, ?array $senderUser, stri
         case 'crm_list_clients':
             return ['clients' => Database::all("SELECT id, name, company, reels_completed, reels_required, posts_completed, posts_required FROM clients WHERE status = 'active' AND deleted_at IS NULL LIMIT 15")];
 
-        case 'whatsapp_send_dm':
-            $target = trim($args['phone_or_user_id'] ?? '');
-            $targetPhone = preg_replace('/[^0-9]/', '', $target);
-            if (is_numeric($target) && strlen($target) < 6) {
-                $u = Database::one("SELECT phone FROM users WHERE id = ?", [(int)$target]);
-                if (!empty($u['phone'])) $targetPhone = preg_replace('/[^0-9]/', '', $u['phone']);
+        case 'crm_get_member_tasks':
+            $targetUserId = null;
+            if (!empty($args['user_id'])) {
+                $targetUserId = (int)$args['user_id'];
+            } elseif (!empty($args['user_name'])) {
+                $u = Database::one("SELECT id FROM users WHERE name LIKE ? AND status = 'active' LIMIT 1", ['%' . trim($args['user_name']) . '%']);
+                if ($u) $targetUserId = (int)$u['id'];
+            } elseif ($senderUser) {
+                $targetUserId = (int)$senderUser['id'];
             }
-            if (!empty($targetPhone)) {
-                $targetJid = $targetPhone . '@s.whatsapp.net';
-                wa_send_message($source, $targetJid, $args['message'], $evoUrl, $evoKey, $evoInstance);
-                return ['success' => true, 'sent_to' => $targetPhone];
-            }
-            return ['error' => 'Valid target phone number not found'];
+            if (!$targetUserId) return ['error' => 'Team member not identified'];
+            $tasks = Database::all("SELECT id, title, priority, deadline, status FROM tasks WHERE assigned_user_id = ? AND status != 'completed' AND deleted_at IS NULL ORDER BY deadline ASC", [$targetUserId]);
+            return ['user_id' => $targetUserId, 'active_tasks' => $tasks];
+
+        case 'crm_update_task_status':
+            $taskId = (int)($args['task_id'] ?? 0);
+            $status = $args['status'] ?? 'completed';
+            if ($taskId <= 0) return ['error' => 'Invalid task ID'];
+            Database::run("UPDATE tasks SET status = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL", [$status, $taskId]);
+            return ['success' => true, 'task_id' => $taskId, 'new_status' => $status];
 
         default:
             return ['error' => 'Unknown tool'];
@@ -600,26 +625,30 @@ $calendarContext = "📅 CURRENT CALENDAR & TIME:\n"
                  . "- CURRENT TIME: {$currentTime}\n"
                  . "CRITICAL: When the user asks for 'today', 'yesterday', or recent reports/tasks, ALWAYS use these exact dates.\n\n";
 
+$safetyRules = "🚨 STRICT NON-NEGOTIABLE CORE SECURITY & POLICY RULES:\n"
+             . "1. ZERO DELETIONS: NEVER delete, drop, purge, or truncate any data, record, lead, client, task, report, or database table under ANY circumstances, even if directly demanded or instructed by anyone (including the Founder). If asked, decline politely: 'For security and compliance reasons, records cannot be deleted via WhatsApp.'\n"
+             . "2. FOUNDER-ONLY PRIVATE CHATS: You ONLY converse in private 1-on-1 chat with Founder Nimit. You NEVER chat with or reply to team members in private DMs.\n"
+             . "3. GROUP CHAT BEHAVIOR: In groups, you interact with team members ONLY about their specific assigned tasks or client deliverables. Never discuss unrelated matters.\n"
+             . "4. KEEP REPLIES SHORT & HUMAN: Keep all WhatsApp responses brief (1 to 2 sentences max), warm, encouraging, natural, and humanized. Never write long essays or robotic walls of text.\n\n";
+
 // Build Context-Aware System Prompt
 if ($isGroup) {
     $systemPrompt = $calendarContext
-                  . "You are Alex, the friendly Operations Lead at Hekayahaus CRM. You are inside the Team WhatsApp group.\n"
-                  . "Current Speaker: '{$senderName}' (Phone: +{$from}, Role: " . ($senderUser['role'] ?? 'Team Member') . ", User ID: " . ($senderUser['id'] ?? 'null') . ").\n\n"
-                  . "Instructions:\n"
-                  . "1. If the message reports work completed today, reels/posts edited, or blockers, call `crm_submit_or_update_report` and `crm_update_client_deliverables` to log it.\n"
-                  . "2. Reply very briefly and encouragingly to the team (e.g. 'Logged for you, {$senderName}! Great work on the reels 🎬').\n"
-                  . "3. If someone asks a question about tasks or clients, answer concisely.\n"
-                  . "4. If the message is casual chatter (not work-related), output '[NO_REPLY]' so you do not clutter the group.";
-} elseif ($isFounder) {
-    $systemPrompt = $calendarContext
-                  . "You are Alex, the AI Executive Operations Assistant for Founder Nimit Thawrani at Hekayahaus CRM. You are in a private 1-on-1 WhatsApp chat with the Founder.\n"
-                  . "You have live tools to view leads, daily reports, tasks, client deliverables, and assign tasks.\n"
-                  . "If the Founder asks you to take a follow-up from any team member (e.g., 'Take a follow-up from Rahul about the reels'), use the `whatsapp_send_dm` tool to message that team member warmly and politely, then let the Founder know you have reached out.\n"
-                  . "Keep all replies concise, structured, and WhatsApp-friendly.";
+                  . $safetyRules
+                  . "You are Alex, the friendly Operations Lead at Hekayahaus CRM. You are actively reading this Team WhatsApp group in real-time.\n"
+                  . "Current Speaker: '{$senderName}' (Phone: +{$from}, User ID: " . ($senderUser['id'] ?? 'unmatched') . ").\n\n"
+                  . "GROUP OPERATIONS INSTRUCTIONS:\n"
+                  . "1. WORK & DELIVERABLE UPDATES: If the message shares daily work completed, reels/posts edited, or blockers, immediately call `crm_submit_or_update_report` and `crm_update_client_deliverables` to update the CRM live.\n"
+                  . "2. TASK COMPLETIONS: If a team member mentions finishing an assigned task, call `crm_update_task_status` to mark it completed.\n"
+                  . "3. SHORT HUMAN ACKNOWLEDGMENT: Reply very briefly (1-2 sentences) and encouragingly (e.g. 'Logged for you, {$senderName}! 🎬 2 reels added for BuFaisal.' or 'Great work, task marked complete!').\n"
+                  . "4. ASSIGNED WORK ONLY: If a member asks a question, only answer if it is about their assigned tasks, deliverables, or agency work. Speak to them only about things assigned to them.\n"
+                  . "5. NOISE FILTER: If the message is casual banter, jokes, emojis, greetings, personal chat, or not relevant to agency work, output EXACTLY '[NO_REPLY]' and nothing else, so the group is never spammed.\n";
 } else {
     $systemPrompt = $calendarContext
-                  . "You are Alex, the friendly Operations Lead at Hekayahaus. You are in a private 1-on-1 chat with team member '{$senderName}'.\n"
-                  . "Be warm, polite, and helpful. If they report their daily work, call `crm_submit_or_update_report` to save it. If they ask about their tasks, check their tasks.";
+                  . $safetyRules
+                  . "You are Alex, the AI Executive Operations Assistant for Founder Nimit Thawrani at Hekayahaus CRM. You are in a private 1-on-1 WhatsApp chat with the Founder.\n"
+                  . "You have live tools to view leads, daily reports, tasks, client deliverables, assign tasks, and inspect team members' progress.\n"
+                  . "Keep all replies concise, structured, and WhatsApp-friendly.\n";
 }
 
 // Call Claude Sonnet
@@ -715,7 +744,7 @@ if (isset($claudeData['error']['message'])) {
     }
 }
 
-if (!empty($finalText) && trim($finalText) !== '[NO_REPLY]') {
+if (!empty($finalText) && stripos($finalText, '[NO_REPLY]') === false) {
     wa_send_message($source, $replyToJid, $finalText, $evoUrl, $evoKey, $evoInstance);
 }
 

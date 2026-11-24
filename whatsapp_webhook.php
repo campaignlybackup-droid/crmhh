@@ -236,7 +236,7 @@ if (!empty($msgId)) {
 }
 
 // Helper to send WhatsApp messages back
-function wa_send_message(string $source, string $targetJid, string $replyText, ?string $evoUrl, ?string $evoKey, ?string $evoInstance): void {
+function wa_send_message(string $source, string $targetJid, string $replyText, ?string $evoUrl, ?string $evoKey, ?string $evoInstance, array $extraMentions = []): void {
     if (trim($replyText) === '' || stripos($replyText, '[NO_REPLY]') !== false) {
         return;
     }
@@ -254,10 +254,16 @@ function wa_send_message(string $source, string $targetJid, string $replyText, ?
             'session' => $wahaSession
         ];
 
-        // Extract @mentions like @917778080709
+        // Collect mentions
+        $mentions = $extraMentions;
         preg_match_all('/@([0-9]{8,15})/', $replyText, $m);
         if (!empty($m[1])) {
-            $payload['mentions'] = array_map(function($ph) { return $ph . '@c.us'; }, array_unique($m[1]));
+            foreach ($m[1] as $ph) {
+                $mentions[] = $ph . '@c.us';
+            }
+        }
+        if (!empty($mentions)) {
+            $payload['mentions'] = array_values(array_unique($mentions));
         }
 
         $headers = ['Content-Type: application/json'];
@@ -316,13 +322,47 @@ function wa_send_message(string $source, string $targetJid, string $replyText, ?
 $cleanFrom = preg_replace('/[^0-9]/', '', $from);
 $last9 = strlen($cleanFrom) >= 9 ? substr($cleanFrom, -9) : $cleanFrom;
 
-// Lookup user by phone
-$senderUser = Database::one(
-    "SELECT * FROM users WHERE (REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '-', '') LIKE ? OR phone LIKE ?) AND status = 'active' LIMIT 1",
-    ["%$last9%", "%$cleanFrom%"]
-);
-if ($senderUser && empty($senderName)) {
+// 1. Try matching by WhatsApp LID (if sender has an @lid identity in group)
+$senderUser = null;
+$participantLid = null;
+if (!empty($rawParticipant) && strpos($rawParticipant, '@lid') !== false) {
+    $participantLid = preg_replace('/[^0-9]/', '', explode('@', $rawParticipant)[0]);
+    if (!empty($participantLid)) {
+        $senderUser = Database::one("SELECT * FROM users WHERE whatsapp_lid = ? AND status = 'active' LIMIT 1", [$participantLid]);
+    }
+}
+
+// 2. Try matching by phone number
+if (!$senderUser && !empty($cleanFrom)) {
+    $senderUser = Database::one(
+        "SELECT * FROM users WHERE (REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '-', '') LIKE ? OR phone LIKE ?) AND status = 'active' LIMIT 1",
+        ["%$last9%", "%$cleanFrom%"]
+    );
+}
+
+// 3. Try matching by sender's name (e.g. notifyName or pushName like 'Ansh' or 'Zainab')
+if (!$senderUser && !empty($senderName) && $senderName !== 'Team Member') {
+    $senderUser = Database::one(
+        "SELECT * FROM users WHERE (name LIKE ? OR name = ?) AND status = 'active' LIMIT 1",
+        ['%' . trim($senderName) . '%', trim($senderName)]
+    );
+    // If matched by name and we have an LID, link it permanently
+    if ($senderUser && !empty($participantLid)) {
+        Database::run("UPDATE users SET whatsapp_lid = ? WHERE id = ?", [$participantLid, $senderUser['id']]);
+    }
+}
+
+// If user is matched, normalize their name and phone so LIDs are NEVER exposed
+if ($senderUser) {
     $senderName = $senderUser['name'];
+    if (!empty($senderUser['phone'])) {
+        $realPhone = preg_replace('/[^0-9]/', '', $senderUser['phone']);
+        if (!empty($realPhone)) {
+            $from = $realPhone;
+            $cleanFrom = $realPhone;
+            $last9 = substr($realPhone, -9);
+        }
+    }
 }
 
 // Authorized Founder Phone Numbers (Both of Nimit's numbers + any database-paired phone)
@@ -576,12 +616,20 @@ function execute_crm_tool_wa(string $name, array $args, ?array $senderUser, stri
                 $parsed = strtotime($rawDate);
                 $date = $parsed ? date('Y-m-d', $parsed) : date('Y-m-d');
             }
-            $reports = Database::all("SELECT dr.*, u.name AS user_name FROM daily_reports dr JOIN users u ON u.id = dr.user_id WHERE DATE(dr.report_date) = ? ORDER BY u.name ASC", [$date]);
+            $reports = Database::all("SELECT dr.*, u.name AS user_name, u.phone AS user_phone FROM daily_reports dr JOIN users u ON u.id = dr.user_id WHERE DATE(dr.report_date) = ? ORDER BY u.name ASC", [$date]);
+            $yesterdayDate = date('Y-m-d', strtotime('-1 day'));
+            $yesterdayReports = [];
+            if ($date === date('Y-m-d')) {
+                $yesterdayReports = Database::all("SELECT dr.*, u.name AS user_name, u.phone AS user_phone FROM daily_reports dr JOIN users u ON u.id = dr.user_id WHERE DATE(dr.report_date) = ? ORDER BY u.name ASC", [$yesterdayDate]);
+            }
             return [
                 'target_date' => $date,
                 'target_day_name' => date('l, F j, Y', strtotime($date)),
                 'reports_found' => count($reports),
-                'reports' => $reports
+                'reports' => $reports,
+                'yesterday_date' => $yesterdayDate,
+                'yesterday_reports_count' => count($yesterdayReports),
+                'yesterday_reports' => $yesterdayReports
             ];
 
         case 'crm_submit_or_update_report':
@@ -705,10 +753,19 @@ if (is_array($mentionedJids)) {
     }
 }
 if (!$isTagged) {
-    if (stripos($text, '@' . $botPhone) !== false || stripos($text, 'alex') !== false || stripos($text, '@alex') !== false) {
-        $isTagged = true;
+    $botKeywords = ['971541311988', 'crm bot', 'crmbot', 'crm_bot', '@crm', '@bot', 'bot', 'alex', '@alex'];
+    foreach ($botKeywords as $kw) {
+        if (stripos($text, $kw) !== false) {
+            $isTagged = true;
+            break;
+        }
     }
 }
+
+// Check if message is a simple greeting
+$cleanTextNoTags = trim(preg_replace('/@[a-zA-Z0-9_\-\.\s]+/i', '', $text));
+$isGreetingOnly = preg_match('/^(hi|hello|hey|good\s+morning|good\s+afternoon|good\s+evening)\b/i', $cleanTextNoTags)
+    && strlen($cleanTextNoTags) < 15;
 
 // Calendar Context
 $todayDateStr = date('Y-m-d');
@@ -726,21 +783,24 @@ $calendarContext = "CURRENT CALENDAR & TIME:\n"
 $safetyRules = "STRICT CORE RULES:\n"
              . "1. ZERO EMOJIS: Do NOT use any emojis anywhere in your messages. Use clean, professional text.\n"
              . "2. ZERO DELETIONS: Never delete, drop, purge, or remove any records or data from the CRM under any circumstances.\n"
-             . "3. POLITE & HUMAN: Start conversations with a polite, natural greeting (e.g. 'Hi Nimit', 'Hello Zainab', 'Hi Ansh'). Keep answers short, precise, conversational, and human (1 to 3 sentences maximum).\n"
-             . "4. EXPLICIT CRM WRITE CONFIRMATION: Whenever you make any update or save to the CRM (such as logging daily work reports, incrementing client reels/posts deliverables, creating or updating tasks), you MUST explicitly state what was updated in the CRM (for example: 'I have updated BuFaisal in the CRM: completed reels is now 8.' or 'I have logged your daily report for today in the CRM.').\n"
-             . "5. TAGGING IN GROUPS: In groups, when addressing, following up, or speaking to a team member, ALWAYS tag them using @ followed by their phone number (e.g. @{$from}). This notifies them directly in WhatsApp.\n"
-             . "6. TALK ONLY ABOUT ASSIGNED WORK: In groups, only discuss tasks and client deliverables specifically assigned to that team member.\n"
-             . "7. NOISE FILTER: In groups, if the message is casual banter, jokes, or general chatter and you are NOT tagged, output '[NO_REPLY]' so the group is never spammed.\n\n";
+             . "3. GREETINGS: If the user sends a greeting (e.g. 'Hi', 'Hello @Crm Bot'), reply with a warm, friendly greeting like 'Hi {$senderName}! How can I help you today?' Do NOT query reports, deliverables, or tasks for a simple greeting.\n"
+             . "4. POLITE & HUMAN: Start conversations with a polite, natural greeting (e.g. 'Hi Nimit', 'Hello Zainab', 'Hi Ansh'). Keep answers short, precise, conversational, and human (1 to 2 sentences maximum).\n"
+             . "5. EXPLICIT CRM WRITE CONFIRMATION: Whenever you make any update or save to the CRM (such as logging daily work reports, incrementing client reels/posts deliverables, creating or updating tasks), you MUST explicitly state what was updated in the CRM (for example: 'I have updated BuFaisal in the CRM: completed reels is now 8.' or 'I have logged your daily report for today in the CRM.').\n"
+             . "6. TAGGING IN GROUPS: In groups, address team members naturally by their name (e.g. 'Hi {$senderName}'). If tagging, use @{$senderName} or their real phone number @{$from}. NEVER invent or write strange international numbers or LID codes like +256.\n"
+             . "7. TALK ONLY ABOUT ASSIGNED WORK: In groups, only discuss tasks and client deliverables specifically assigned to that team member.\n"
+             . "8. NOISE FILTER: In groups, if the message is casual banter, jokes, or general chatter and you are NOT tagged, output '[NO_REPLY]' so the group is never spammed.\n\n";
 
 // Build Context-Aware System Prompt
 if ($isGroup) {
     $tagNote = $isTagged ? "IMPORTANT: You were directly tagged or mentioned in this message. You MUST reply.\n" : "";
+    $greetingNote = $isGreetingOnly ? "NOTE: This message is a greeting only. Reply with a warm, friendly greeting: 'Hi {$senderName}! How can I help you today?' Do NOT call tools.\n" : "";
     $systemPrompt = $calendarContext
                   . $safetyRules
                   . $tagNote
+                  . $greetingNote
                   . "You are Alex, the friendly Operations Lead at Hekayahaus CRM. You are reading this Team WhatsApp group in real time.\n"
                   . "Current Speaker: '{$senderName}' (Phone: +{$from}, User ID: " . ($senderUser['id'] ?? 'unmatched') . ").\n"
-                  . "Always address them politely (e.g. 'Hello {$senderName}'), tag them as @{$from}, write clean human sentences without emojis, and explicitly confirm any updates made to the CRM.\n";
+                  . "Always address them politely as {$senderName}, write clean human sentences without emojis, and explicitly confirm any updates made to the CRM.\n";
 } else {
     $systemPrompt = $calendarContext
                   . $safetyRules
@@ -843,7 +903,11 @@ if (isset($claudeData['error']['message'])) {
 }
 
 if (!empty($finalText) && stripos($finalText, '[NO_REPLY]') === false) {
-    wa_send_message($source, $replyToJid, $finalText, $evoUrl, $evoKey, $evoInstance);
+    $mentionsList = [];
+    if (!empty($rawParticipant) && strpos($rawParticipant, '@') !== false) {
+        $mentionsList[] = $rawParticipant;
+    }
+    wa_send_message($source, $replyToJid, $finalText, $evoUrl, $evoKey, $evoInstance, $mentionsList);
 }
 
 echo json_encode(['ok' => true]);

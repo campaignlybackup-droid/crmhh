@@ -406,6 +406,126 @@ try {
             }
         }
 
+        // ─── WHATSAPP INTEGRATION (FOUNDER ONLY) ──────────────────────────────
+        case 'send_whatsapp_message': {
+            $recipient = trim($input['recipient'] ?? '');
+            $message = trim($input['message'] ?? '');
+
+            if (empty($recipient)) {
+                api_response(false, null, 'Recipient is required (e.g. "group", "Ansh", "Zainab", "Founder", or phone number with country code).', 400);
+            }
+            if (empty($message)) {
+                api_response(false, null, 'Message text is required.', 400);
+            }
+
+            $wahaUrl = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_waha_url'") ?: 'https://waha-production-fe986294.up.railway.app';
+            $wahaKey = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_waha_key'") ?: 'admin123';
+            $wahaSession = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_waha_session'") ?: 'new1';
+
+            $targetJid = null;
+            $lowerRecip = strtolower($recipient);
+
+            // Group alias resolution
+            if (in_array($lowerRecip, ['group', 'team', 'team group', 'agency group'], true)) {
+                $latestGroup = Database::scalar("SELECT chat_id FROM wa_chat_history WHERE chat_id LIKE '%@g.us' ORDER BY id DESC LIMIT 1");
+                if ($latestGroup) {
+                    $targetJid = $latestGroup;
+                } else {
+                    api_response(false, null, 'No active group found in chat history. Please provide the explicit group JID.', 404);
+                }
+            } elseif (strpos($recipient, '@g.us') !== false || strpos($recipient, '@c.us') !== false || strpos($recipient, '@s.whatsapp.net') !== false) {
+                $targetJid = $recipient;
+            } else {
+                // Team member name resolution
+                if (strpos($lowerRecip, 'ansh') !== false) {
+                    $targetJid = '919306260247@c.us';
+                } elseif (strpos($lowerRecip, 'zainab') !== false) {
+                    $targetJid = '917778080709@c.us';
+                } elseif (strpos($lowerRecip, 'nimit') !== false || strpos($lowerRecip, 'founder') !== false) {
+                    $targetJid = '971552489492@c.us';
+                } else {
+                    $cleanDigits = preg_replace('/[^0-9]/', '', $recipient);
+                    if (strlen($cleanDigits) >= 9) {
+                        $targetJid = $cleanDigits . '@c.us';
+                    } else {
+                        api_response(false, null, "Could not resolve recipient: '$recipient'. Use a valid phone with country code, or 'Ansh', 'Zainab', 'group'.", 400);
+                    }
+                }
+            }
+
+            // Call WAHA sendText endpoint
+            $url = rtrim($wahaUrl, '/') . '/api/sendText';
+            $payload = [
+                'chatId'  => $targetJid,
+                'text'    => $message,
+                'session' => $wahaSession
+            ];
+
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => json_encode($payload),
+                CURLOPT_HTTPHEADER     => [
+                    'Content-Type: application/json',
+                    'X-Api-Key: ' . $wahaKey
+                ],
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 15,
+                CURLOPT_SSL_VERIFYPEER => false,
+            ]);
+            $res = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlErr = curl_error($ch);
+            curl_close($ch);
+
+            if ($httpCode >= 200 && $httpCode < 300) {
+                try {
+                    Database::run(
+                        "INSERT INTO wa_chat_history (chat_id, sender_name, sender_phone, message, is_bot) VALUES (?, 'Claude Code (Founder)', '971541311988', ?, 1)",
+                        [$targetJid, $message]
+                    );
+                } catch (Throwable $e) {}
+
+                AuditLog::record('send_whatsapp_message', 'whatsapp', $founder['id'], null, "To: $targetJid | Text: " . substr($message, 0, 100));
+                api_response(true, [
+                    'sent' => true,
+                    'target_jid' => $targetJid,
+                    'message' => $message,
+                    'session' => $wahaSession
+                ]);
+            } else {
+                api_response(false, null, "WAHA API failed (HTTP $httpCode): " . ($res ?: $curlErr), 502);
+            }
+        }
+
+        case 'get_whatsapp_chat_history': {
+            $limit = min(100, max(1, (int)($input['limit'] ?? 20)));
+            $chatId = trim($input['chat_id'] ?? '');
+
+            $where = [];
+            $params = [];
+            if (!empty($chatId)) {
+                $where[] = 'chat_id = ?';
+                $params[] = $chatId;
+            }
+
+            $whereSql = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+            $params[] = $limit;
+
+            $messages = Database::all(
+                "SELECT id, chat_id, sender_name, sender_phone, message, is_bot, created_at 
+                 FROM wa_chat_history 
+                 $whereSql 
+                 ORDER BY id DESC LIMIT ?",
+                $params
+            );
+
+            api_response(true, [
+                'count' => count($messages),
+                'messages' => array_reverse($messages)
+            ]);
+        }
+
         default: {
             api_response(false, null, "Unknown action: '$action'. Available actions: overview, get_leads, create_lead, update_lead, get_tasks, create_task, update_task, get_reports, submit_report, get_clients, update_client_deliverables, get_team, sql_query", 400);
         }

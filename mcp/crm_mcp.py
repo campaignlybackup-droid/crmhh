@@ -255,6 +255,41 @@ TOOLS = [
             },
             "required": ["query"]
         }
+    },
+    {
+        "name": "crm_send_whatsapp_message",
+        "description": "Send a WhatsApp message to an agency team group or staff member (e.g. 'group', 'Ansh', 'Zainab') in real time.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "recipient": {
+                    "type": "string",
+                    "description": "Recipient: 'group' (for active team group), 'Ansh', 'Zainab', 'Founder', or phone with country code (e.g. '919306260247')."
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Exact text message to send on WhatsApp."
+                }
+            },
+            "required": ["recipient", "message"]
+        }
+    },
+    {
+        "name": "crm_get_whatsapp_chat_history",
+        "description": "View recent WhatsApp messages sent in team groups or chats to check team updates, reports, and bot replies.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of recent messages to return (default 20, max 100)"
+                },
+                "chat_id": {
+                    "type": "string",
+                    "description": "Optional: filter by specific group JID or phone"
+                }
+            }
+        }
     }
 ]
 
@@ -309,6 +344,8 @@ def handle_request(req):
             "crm_update_client_deliverables": "update_client_deliverables",
             "crm_get_team_members": "get_team",
             "crm_sql_query": "sql_query",
+            "crm_send_whatsapp_message": "send_whatsapp_message",
+            "crm_get_whatsapp_chat_history": "get_whatsapp_chat_history",
         }
 
         action = action_map.get(tool_name)

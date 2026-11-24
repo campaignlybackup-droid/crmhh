@@ -147,6 +147,12 @@ if (!empty($rawInput)) {
             exit;
         }
         $fromJid = $payload['from'] ?? '';
+        $rawParticipant = $payload['participant'] ?? $fromJid;
+        $cleanParticipant = preg_replace('/[^0-9]/', '', explode('@', $rawParticipant)[0]);
+        if ($cleanParticipant === '971541311988' || strpos($rawParticipant, '971541311988') !== false) {
+            echo json_encode(['ok' => true]);
+            exit;
+        }
         $replyToJid = $fromJid;
         $isGroup = (strpos($fromJid, '@g.us') !== false);
         if ($isGroup) {
@@ -742,6 +748,24 @@ function execute_crm_tool_wa(string $name, array $args, ?array $senderUser, stri
 
 // Check if bot was mentioned or tagged in this message
 $botPhone = '971541311988';
+$botVariants = [
+    '971541311988',
+    '541311988',
+    '+971 54 131 1988',
+    '+971 541311988',
+    '+971541311988',
+    '971 54 131 1988',
+    '971 541311988',
+    'crm bot',
+    'crmbot',
+    'crm_bot',
+    '@crm',
+    '@bot',
+    'bot',
+    'alex',
+    '@alex'
+];
+
 $mentionedJids = $payload['mentionedJidList'] ?? ($payload['mentions'] ?? []);
 $isTagged = false;
 if (is_array($mentionedJids)) {
@@ -753,14 +777,24 @@ if (is_array($mentionedJids)) {
     }
 }
 if (!$isTagged) {
-    $botKeywords = ['971541311988', 'crm bot', 'crmbot', 'crm_bot', '@crm', '@bot', 'bot', 'alex', '@alex'];
-    foreach ($botKeywords as $kw) {
-        if (stripos($text, $kw) !== false) {
-            $isTagged = true;
-            break;
+    $cleanTextDigits = preg_replace('/[^0-9]/', '', $text);
+    if (strpos($cleanTextDigits, '541311988') !== false || strpos($cleanTextDigits, '971541311988') !== false) {
+        $isTagged = true;
+    } else {
+        foreach ($botVariants as $kw) {
+            if (stripos($text, $kw) !== false) {
+                $isTagged = true;
+                break;
+            }
         }
     }
 }
+
+// Bot Identity
+$botIdentity = "YOUR IDENTITY & PHONE NUMBER:\n"
+             . "You are Alex (Crm Bot), the Operations Lead at Hekayahaus CRM.\n"
+             . "Your WhatsApp phone number is +971 54 131 1988 (+971 541311988 / 971541311988).\n"
+             . "Whenever anyone in the chat mentions +971 54 131 1988, @+971541311988, @Crm Bot, or Alex, they are speaking directly to you.\n\n";
 
 // Check if message is a simple greeting
 $cleanTextNoTags = trim(preg_replace('/@[a-zA-Z0-9_\-\.\s]+/i', '', $text));
@@ -794,7 +828,8 @@ $safetyRules = "STRICT CORE RULES:\n"
 if ($isGroup) {
     $tagNote = $isTagged ? "IMPORTANT: You were directly tagged or mentioned in this message. You MUST reply.\n" : "";
     $greetingNote = $isGreetingOnly ? "NOTE: This message is a greeting only. Reply with a warm, friendly greeting: 'Hi {$senderName}! How can I help you today?' Do NOT call tools.\n" : "";
-    $systemPrompt = $calendarContext
+    $systemPrompt = $botIdentity
+                  . $calendarContext
                   . $safetyRules
                   . $tagNote
                   . $greetingNote
@@ -802,7 +837,8 @@ if ($isGroup) {
                   . "Current Speaker: '{$senderName}' (Phone: +{$from}, User ID: " . ($senderUser['id'] ?? 'unmatched') . ").\n"
                   . "Always address them politely as {$senderName}, write clean human sentences without emojis, and explicitly confirm any updates made to the CRM.\n";
 } else {
-    $systemPrompt = $calendarContext
+    $systemPrompt = $botIdentity
+                  . $calendarContext
                   . $safetyRules
                   . "You are Alex, the AI Executive Operations Assistant for Founder Nimit Thawrani at Hekayahaus CRM.\n"
                   . "You are in a private 1-on-1 chat with the Founder. Be polite (e.g. 'Hi Nimit'), concise, and professional with ZERO emojis.\n"

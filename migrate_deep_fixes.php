@@ -281,6 +281,40 @@ try {
         echo "✓ Checked daily_reports table structure.\n";
     }
 
+    // 9. WhatsApp Integration Schema Migrations
+    $uCols = array_column($db->query("SHOW COLUMNS FROM `users`")->fetchAll(PDO::FETCH_ASSOC) ?: [], 'Field');
+    if (!in_array('whatsapp_lid', $uCols, true)) {
+        $db->exec("ALTER TABLE `users` ADD COLUMN `whatsapp_lid` VARCHAR(100) DEFAULT NULL AFTER `phone`");
+        echo "✓ Added whatsapp_lid column to users table.\n";
+    }
+
+    // Map known team members in users table
+    $db->exec("UPDATE `users` SET `whatsapp_lid` = '256559921770569', `phone` = '+919306260247' WHERE `id` = 2 OR `phone` LIKE '%9306260247%' OR `name` LIKE '%Ansh%'");
+    $db->exec("UPDATE `users` SET `phone` = '+917778080709' WHERE `id` = 4 OR `phone` LIKE '%7778080709%' OR `name` LIKE '%Zainab%'");
+    $db->exec("UPDATE `users` SET `phone` = '+971552489492', `is_founder` = 1 WHERE `id` = 1 OR `name` LIKE '%Nimit%'");
+    echo "✓ Synced team member phone numbers and WhatsApp LIDs (Ansh: +919306260247, Zainab: +917778080709, Nimit: +971552489492 / +971552628603).\n";
+
+    // Deduplication table
+    $db->exec("CREATE TABLE IF NOT EXISTS `wa_processed_messages` (
+        `msg_id` VARCHAR(191) PRIMARY KEY,
+        `status` VARCHAR(20) DEFAULT 'processed',
+        `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    echo "✓ Verified wa_processed_messages table.\n";
+
+    // Chat history table for contextual memory
+    $db->exec("CREATE TABLE IF NOT EXISTS `wa_chat_history` (
+        `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        `chat_id` VARCHAR(120) NOT NULL,
+        `sender_name` VARCHAR(100) NOT NULL,
+        `sender_phone` VARCHAR(50) DEFAULT NULL,
+        `message` TEXT NOT NULL,
+        `is_bot` TINYINT(1) NOT NULL DEFAULT 0,
+        `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY `idx_chat_time` (`chat_id`, `created_at`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    echo "✓ Verified wa_chat_history table.\n";
+
     echo "\n</pre><h3 style='color:green;'>Migration successfully completed with ZERO data loss!</h3>";
 } catch (Throwable $e) {
     echo "\n</pre><h3 style='color:red;'>Migration Error: " . htmlspecialchars($e->getMessage()) . "</h3>";

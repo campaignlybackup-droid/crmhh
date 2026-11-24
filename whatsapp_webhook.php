@@ -121,6 +121,8 @@ $isGroup     = false;
 $groupId     = null;        // Group JID if sent inside a group
 $replyToJid  = null;        // Where to send reply (group JID or individual JID)
 $senderName  = 'Team Member';
+$rawParticipant = null;
+$msgTimestamp = 0;
 
 $evoUrl      = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_evolution_url'");
 $evoKey      = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_evolution_key'");
@@ -131,12 +133,14 @@ $anthropicKey= Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 
 
 $rawInput = file_get_contents('php://input');
 
-// A. Check Evolution API / Baileys JSON payload
+// A. Check Evolution API / Baileys / WAHA JSON payload
 if (!empty($rawInput)) {
     $data = json_decode($rawInput, true);
+    $event = $data['event'] ?? '';
 
     // 1. WAHA (WhatsApp HTTP API) Payload
-    if (isset($data['event']) && strpos($data['event'], 'message') !== false && isset($data['payload'])) {
+    // Strictly filter: ONLY handle the primary 'message' event. Discard 'message.ack', 'message.any', etc.
+    if ($event === 'message' && isset($data['payload'])) {
         $source = 'waha';
         $wahaSession = $data['session'] ?? 'new1';
         Database::run("INSERT INTO app_settings (`key`, `value`) VALUES ('whatsapp_waha_session', ?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)", [$wahaSession]);
@@ -146,32 +150,36 @@ if (!empty($rawInput)) {
             echo json_encode(['ok' => true]);
             exit;
         }
+
         $fromJid = $payload['from'] ?? '';
-        $rawParticipant = $payload['participant'] ?? $fromJid;
+        $rawParticipant = $payload['participant'] ?? ($payload['author'] ?? ($payload['_data']['participant'] ?? $fromJid));
         $cleanParticipant = preg_replace('/[^0-9]/', '', explode('@', $rawParticipant)[0]);
+
+        // Ignore if sent by the bot's own number
         if ($cleanParticipant === '971541311988' || strpos($rawParticipant, '971541311988') !== false) {
             echo json_encode(['ok' => true]);
             exit;
         }
+
         $replyToJid = $fromJid;
         $isGroup = (strpos($fromJid, '@g.us') !== false);
         if ($isGroup) {
             $groupId = $fromJid;
-            $rawParticipant = $payload['participant'] ?? $fromJid;
-            $from = preg_replace('/[^0-9]/', '', explode('@', $rawParticipant)[0]);
+            $from = $cleanParticipant;
         } else {
             $from = preg_replace('/[^0-9]/', '', explode('@', $fromJid)[0]);
         }
-        $senderName = $payload['_data']['notifyName'] ?? ($payload['pushName'] ?? 'Team Member');
+
+        $senderName = $payload['_data']['notifyName'] ?? ($payload['pushName'] ?? ($payload['_data']['pushname'] ?? 'Team Member'));
         $text = trim($payload['body'] ?? '');
+        $msgTimestamp = (int)($payload['timestamp'] ?? 0);
     }
     // 2. Evolution API Payload
-    elseif (isset($data['event']) && strpos($data['event'], 'messages.upsert') !== false) {
+    elseif (strpos($event, 'messages.upsert') !== false && isset($data['data'])) {
         $source = 'evolution';
         $msgData = $data['data'] ?? [];
         $key = $msgData['key'] ?? [];
 
-        // Ignore messages sent by the bot itself
         if (!empty($key['fromMe'])) {
             echo json_encode(['ok' => true]);
             exit;
@@ -192,9 +200,10 @@ if (!empty($rawInput)) {
         $senderName = $msgData['pushName'] ?? 'Team Member';
         $messageObj = $msgData['message'] ?? [];
         $text = trim($messageObj['conversation'] ?? ($messageObj['extendedTextMessage']['text'] ?? ''));
+        $msgTimestamp = (int)($msgData['messageTimestamp'] ?? 0);
     }
     // B. Check Custom Bridge Payload
-    elseif (isset($data['event']) && $data['event'] === 'whatsapp_message') {
+    elseif ($event === 'whatsapp_message') {
         $source = 'bridge';
         $isGroup = !empty($data['is_group']);
         $from = preg_replace('/[^0-9]/', '', $data['sender_phone'] ?? $data['from'] ?? '');
@@ -209,6 +218,7 @@ if (!empty($rawInput)) {
         $from = preg_replace('/[^0-9]/', '', $entryMsg['from'] ?? '');
         $replyToJid = $from;
         $text = trim($entryMsg['text']['body'] ?? '');
+        $msgTimestamp = (int)($entryMsg['timestamp'] ?? 0);
     }
 }
 // D. Twilio Payload
@@ -224,21 +234,74 @@ if (empty($from) || empty($text)) {
     exit;
 }
 
-// ─── DEDUPLICATION CHECK ──────────────────────────────────────────────────────
-$msgId = $payload['id'] ?? ($msgData['key']['id'] ?? ($entryMsg['id'] ?? ''));
-if (!empty($msgId)) {
+// ─── CHAT HISTORY HELPERS ─────────────────────────────────────────────────────
+function wa_save_chat_history(string $chatId, string $senderName, ?string $senderPhone, string $message, bool $isBot): void {
+    if (empty($message) || stripos($message, '[NO_REPLY]') !== false) return;
     try {
-        Database::run("CREATE TABLE IF NOT EXISTS wa_processed_messages (msg_id VARCHAR(191) PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB");
-        $stmt = Database::run("INSERT IGNORE INTO wa_processed_messages (msg_id) VALUES (?)", [$msgId]);
-        if ($stmt && $stmt->rowCount() === 0) {
-            wa_log("Duplicate message ignored: {$msgId}");
-            echo json_encode(['ok' => true, 'ignored' => 'duplicate']);
-            exit;
-        }
-        if (random_int(1, 50) === 1) {
-            Database::run("DELETE FROM wa_processed_messages WHERE created_at < NOW() - INTERVAL 2 HOUR");
+        Database::run(
+            "INSERT INTO wa_chat_history (chat_id, sender_name, sender_phone, message, is_bot) VALUES (?, ?, ?, ?, ?)",
+            [$chatId, $senderName, $senderPhone, $message, $isBot ? 1 : 0]
+        );
+        if (random_int(1, 100) === 1) {
+            Database::run("DELETE FROM wa_chat_history WHERE created_at < NOW() - INTERVAL 7 DAY");
         }
     } catch (Throwable $e) {}
+}
+
+function wa_get_chat_history(string $chatId, int $limit = 8): array {
+    try {
+        $rows = Database::all(
+            "SELECT sender_name, message, is_bot FROM wa_chat_history WHERE chat_id = ? ORDER BY id DESC LIMIT ?",
+            [$chatId, $limit]
+        );
+        return array_reverse($rows ?: []);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+// ─── HISTORICAL MESSAGE FILTER ────────────────────────────────────────────────
+// If a message was sent over 90 seconds ago (e.g. historical messages synced on reconnect),
+// save it to conversation context for memory but DO NOT generate a reply.
+if ($msgTimestamp > 0 && $msgTimestamp < (time() - 90)) {
+    wa_save_chat_history($replyToJid, $senderName, $from, $text, false);
+    echo json_encode(['ok' => true, 'ignored' => 'historical_context_only']);
+    exit;
+}
+
+// ─── DEDUPLICATION & CONCURRENCY LOCK ─────────────────────────────────────────
+$rawMsgId = $payload['id'] ?? ($payload['_data']['id'] ?? ($msgData['key']['id'] ?? ($entryMsg['id'] ?? null)));
+if (is_array($rawMsgId)) {
+    $msgId = $rawMsgId['_serialized'] ?? ($rawMsgId['id'] ?? json_encode($rawMsgId));
+} else {
+    $msgId = (string)($rawMsgId ?? '');
+}
+if (empty($msgId)) {
+    $msgId = 'hash_' . md5(($from ?? '') . '_' . ($groupId ?? 'dm') . '_' . $msgTimestamp . '_' . substr($text, 0, 50));
+}
+
+try {
+    Database::run("CREATE TABLE IF NOT EXISTS wa_processed_messages (
+        msg_id VARCHAR(191) PRIMARY KEY,
+        status VARCHAR(20) DEFAULT 'processing',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $stmt = Database::run("INSERT IGNORE INTO wa_processed_messages (msg_id, status) VALUES (?, 'processing')", [$msgId]);
+    if ($stmt && $stmt->rowCount() === 0) {
+        wa_log("Duplicate message ignored: {$msgId}");
+        echo json_encode(['ok' => true, 'ignored' => 'duplicate_in_flight']);
+        exit;
+    }
+    if (random_int(1, 50) === 1) {
+        Database::run("DELETE FROM wa_processed_messages WHERE created_at < NOW() - INTERVAL 2 HOUR");
+    }
+} catch (Throwable $e) {}
+
+// Acknowledge webhook immediately to prevent WAHA / proxy timeout retries
+if (function_exists('fastcgi_finish_request')) {
+    echo json_encode(['ok' => true]);
+    fastcgi_finish_request();
 }
 
 // Helper to send WhatsApp messages back
@@ -325,53 +388,89 @@ function wa_send_message(string $source, string $targetJid, string $replyText, ?
 }
 
 // ─── 3. USER & FOUNDER IDENTIFICATION ────────────────────────────────────────
-$cleanFrom = preg_replace('/[^0-9]/', '', $from);
-$last9 = strlen($cleanFrom) >= 9 ? substr($cleanFrom, -9) : $cleanFrom;
-
-// 1. Try matching by WhatsApp LID (if sender has an @lid identity in group)
-$senderUser = null;
+$cleanFrom = preg_replace('/[^0-9]/', '', (string)$from);
 $participantLid = null;
-if (!empty($rawParticipant) && strpos($rawParticipant, '@lid') !== false) {
+if (!empty($rawParticipant)) {
     $participantLid = preg_replace('/[^0-9]/', '', explode('@', $rawParticipant)[0]);
-    if (!empty($participantLid)) {
-        $senderUser = Database::one("SELECT * FROM users WHERE whatsapp_lid = ? AND status = 'active' LIMIT 1", [$participantLid]);
+}
+
+// Known Team Members mapping (Unconditional & Instant Resolution)
+// Maps WhatsApp LIDs and phone numbers to real CRM user profiles
+$knownTeamMap = [
+    // Ansh (ID: 2)
+    '256559921770569' => ['name' => 'Ansh', 'phone' => '919306260247', 'user_id' => 2, 'role' => 'staff'],
+    '919306260247'    => ['name' => 'Ansh', 'phone' => '919306260247', 'user_id' => 2, 'role' => 'staff'],
+    '9306260247'      => ['name' => 'Ansh', 'phone' => '919306260247', 'user_id' => 2, 'role' => 'staff'],
+
+    // Zainab (ID: 4)
+    '917778080709'    => ['name' => 'Zainab', 'phone' => '917778080709', 'user_id' => 4, 'role' => 'staff'],
+    '7778080709'      => ['name' => 'Zainab', 'phone' => '917778080709', 'user_id' => 4, 'role' => 'staff'],
+
+    // Founder Nimit Thawrani Primary & Secondary (ID: 1)
+    '971552489492'    => ['name' => 'Nimit Thawrani (Founder)', 'phone' => '971552489492', 'user_id' => 1, 'role' => 'founder'],
+    '552489492'       => ['name' => 'Nimit Thawrani (Founder)', 'phone' => '971552489492', 'user_id' => 1, 'role' => 'founder'],
+    '971552628603'    => ['name' => 'Nimit Thawrani (Founder)', 'phone' => '971552628603', 'user_id' => 1, 'role' => 'founder'],
+    '552628603'       => ['name' => 'Nimit Thawrani (Founder)', 'phone' => '971552628603', 'user_id' => 1, 'role' => 'founder'],
+];
+
+$senderUser = null;
+$matchedProfile = null;
+
+// Check participant LID, cleanFrom, or last 9 digits against known team map
+foreach ([$participantLid, $cleanFrom, substr($cleanFrom, -9)] as $k) {
+    if (!empty($k) && isset($knownTeamMap[$k])) {
+        $matchedProfile = $knownTeamMap[$k];
+        break;
     }
 }
 
-// 2. Try matching by phone number
-if (!$senderUser && !empty($cleanFrom)) {
-    $senderUser = Database::one(
-        "SELECT * FROM users WHERE (REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '-', '') LIKE ? OR phone LIKE ?) AND status = 'active' LIMIT 1",
-        ["%$last9%", "%$cleanFrom%"]
-    );
-}
-
-// 3. Try matching by sender's name (e.g. notifyName or pushName like 'Ansh' or 'Zainab')
-if (!$senderUser && !empty($senderName) && $senderName !== 'Team Member') {
-    $senderUser = Database::one(
-        "SELECT * FROM users WHERE (name LIKE ? OR name = ?) AND status = 'active' LIMIT 1",
-        ['%' . trim($senderName) . '%', trim($senderName)]
-    );
-    // If matched by name and we have an LID, link it permanently
+if ($matchedProfile) {
+    $senderName = $matchedProfile['name'];
+    $cleanFrom  = $matchedProfile['phone'];
+    $from       = $matchedProfile['phone'];
+    $senderUser = Database::one("SELECT * FROM users WHERE id = ? LIMIT 1", [$matchedProfile['user_id']]);
     if ($senderUser && !empty($participantLid)) {
         Database::run("UPDATE users SET whatsapp_lid = ? WHERE id = ?", [$participantLid, $senderUser['id']]);
     }
-}
+} else {
+    // 1. Try matching by WhatsApp LID in database
+    if (!empty($participantLid)) {
+        $senderUser = Database::one("SELECT * FROM users WHERE whatsapp_lid = ? AND status = 'active' LIMIT 1", [$participantLid]);
+    }
 
-// If user is matched, normalize their name and phone so LIDs are NEVER exposed
-if ($senderUser) {
-    $senderName = $senderUser['name'];
-    if (!empty($senderUser['phone'])) {
-        $realPhone = preg_replace('/[^0-9]/', '', $senderUser['phone']);
-        if (!empty($realPhone)) {
-            $from = $realPhone;
-            $cleanFrom = $realPhone;
-            $last9 = substr($realPhone, -9);
+    // 2. Try matching by phone number
+    $last9 = strlen($cleanFrom) >= 9 ? substr($cleanFrom, -9) : $cleanFrom;
+    if (!$senderUser && !empty($cleanFrom)) {
+        $senderUser = Database::one(
+            "SELECT * FROM users WHERE (REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '-', '') LIKE ? OR phone LIKE ?) AND status = 'active' LIMIT 1",
+            ["%$last9%", "%$cleanFrom%"]
+        );
+    }
+
+    // 3. Try matching by sender's name
+    if (!$senderUser && !empty($senderName) && $senderName !== 'Team Member') {
+        $senderUser = Database::one(
+            "SELECT * FROM users WHERE (name LIKE ? OR name = ?) AND status = 'active' LIMIT 1",
+            ['%' . trim($senderName) . '%', trim($senderName)]
+        );
+        if ($senderUser && !empty($participantLid)) {
+            Database::run("UPDATE users SET whatsapp_lid = ? WHERE id = ?", [$participantLid, $senderUser['id']]);
+        }
+    }
+
+    if ($senderUser) {
+        $senderName = $senderUser['name'];
+        if (!empty($senderUser['phone'])) {
+            $realPhone = preg_replace('/[^0-9]/', '', $senderUser['phone']);
+            if (!empty($realPhone)) {
+                $from = $realPhone;
+                $cleanFrom = $realPhone;
+            }
         }
     }
 }
 
-// Authorized Founder Phone Numbers (Both of Nimit's numbers + any database-paired phone)
+// Authorized Founder Phone Numbers (Both of Nimit's numbers + paired phone)
 $founderPhones = [
     '971552489492', // Founder Nimit Primary
     '971552628603', // Founder Nimit Secondary
@@ -383,11 +482,10 @@ if ($dbFounderPhone) {
         $founderPhones[] = $cleanDbFounder;
     }
 }
-
 $founderLast9 = array_map(function($p) { return substr($p, -9); }, $founderPhones);
 
 $isFounder = in_array($cleanFrom, $founderPhones, true)
-    || in_array($last9, $founderLast9, true)
+    || in_array(substr($cleanFrom, -9), $founderLast9, true)
     || ($senderUser && (int)$senderUser['is_founder'] === 1);
 
 if ($isFounder) {
@@ -759,6 +857,7 @@ $botVariants = [
     'crm bot',
     'crmbot',
     'crm_bot',
+    '@crm bot',
     '@crm',
     '@bot',
     'bot',
@@ -770,7 +869,7 @@ $mentionedJids = $payload['mentionedJidList'] ?? ($payload['mentions'] ?? []);
 $isTagged = false;
 if (is_array($mentionedJids)) {
     foreach ($mentionedJids as $mjid) {
-        if (strpos($mjid, $botPhone) !== false) {
+        if (strpos($mjid, $botPhone) !== false || strpos($mjid, '541311988') !== false) {
             $isTagged = true;
             break;
         }
@@ -790,16 +889,52 @@ if (!$isTagged) {
     }
 }
 
+// ─── GREETING DETECTION (Immediate, warm, human response) ─────────────────────
+$cleanTextNoTags = trim(preg_replace('/@[a-zA-Z0-9_\-\.\s]+/iu', '', $text));
+$cleanTextNoPunct = trim(preg_replace('/[[:punct:]]+/u', ' ', $cleanTextNoTags));
+$cleanWords = trim(preg_replace('/\s+/', ' ', $cleanTextNoPunct));
+$isGreetingWord = (bool)preg_match('/^(hi|hello|hey|good\s+(morning|afternoon|evening)|namaste|ssup|howdy)\b/i', $cleanWords);
+$isGreetingOnly = $isGreetingWord && (strlen($cleanWords) <= 22);
+
+if ($isGreetingOnly && ($isTagged || !$isGroup)) {
+    $greetingReply = "Hi {$senderName}! How can I help you today?";
+    wa_save_chat_history($replyToJid, $senderName, $cleanFrom, $text, false);
+    wa_save_chat_history($replyToJid, 'Alex (CRM Bot)', $botPhone, $greetingReply, true);
+
+    $mentionsList = [];
+    if (!empty($rawParticipant) && strpos($rawParticipant, '@') !== false) {
+        $mentionsList[] = $rawParticipant;
+    }
+    wa_send_message($source, $replyToJid, $greetingReply, $evoUrl, $evoKey, $evoInstance, $mentionsList);
+
+    try {
+        Database::run("UPDATE wa_processed_messages SET status = 'completed' WHERE msg_id = ?", [$msgId]);
+    } catch (Throwable $e) {}
+
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+// Save current user message to conversation history
+wa_save_chat_history($replyToJid, $senderName, $cleanFrom, $text, false);
+
+// Retrieve previous recent messages for conversation context memory
+$recentHistory = wa_get_chat_history($replyToJid, 8);
+$conversationContext = "";
+if (!empty($recentHistory)) {
+    $conversationContext = "RECENT CONVERSATION CONTEXT (FOR CONTEXT & MEMORY ONLY):\n";
+    foreach ($recentHistory as $hr) {
+        $author = $hr['is_bot'] ? "Alex (CRM Bot)" : $hr['sender_name'];
+        $conversationContext .= "{$author}: " . trim($hr['message']) . "\n";
+    }
+    $conversationContext .= "CRITICAL: You are responding ONLY to the latest message below from {$senderName}. NEVER re-answer past messages.\n\n";
+}
+
 // Bot Identity
 $botIdentity = "YOUR IDENTITY & PHONE NUMBER:\n"
              . "You are Alex (Crm Bot), the Operations Lead at Hekayahaus CRM.\n"
              . "Your WhatsApp phone number is +971 54 131 1988 (+971 541311988 / 971541311988).\n"
-             . "Whenever anyone in the chat mentions +971 54 131 1988, @+971541311988, @Crm Bot, or Alex, they are speaking directly to you.\n\n";
-
-// Check if message is a simple greeting
-$cleanTextNoTags = trim(preg_replace('/@[a-zA-Z0-9_\-\.\s]+/i', '', $text));
-$isGreetingOnly = preg_match('/^(hi|hello|hey|good\s+morning|good\s+afternoon|good\s+evening)\b/i', $cleanTextNoTags)
-    && strlen($cleanTextNoTags) < 15;
+             . "Whenever anyone mentions +971 54 131 1988, @+971541311988, @Crm Bot, or Alex, they are speaking directly to you.\n\n";
 
 // Calendar Context
 $todayDateStr = date('Y-m-d');
@@ -817,28 +952,27 @@ $calendarContext = "CURRENT CALENDAR & TIME:\n"
 $safetyRules = "STRICT CORE RULES:\n"
              . "1. ZERO EMOJIS: Do NOT use any emojis anywhere in your messages. Use clean, professional text.\n"
              . "2. ZERO DELETIONS: Never delete, drop, purge, or remove any records or data from the CRM under any circumstances.\n"
-             . "3. GREETINGS: If the user sends a greeting (e.g. 'Hi', 'Hello @Crm Bot'), reply with a warm, friendly greeting like 'Hi {$senderName}! How can I help you today?' Do NOT query reports, deliverables, or tasks for a simple greeting.\n"
-             . "4. POLITE & HUMAN: Start conversations with a polite, natural greeting (e.g. 'Hi Nimit', 'Hello Zainab', 'Hi Ansh'). Keep answers short, precise, conversational, and human (1 to 2 sentences maximum).\n"
-             . "5. EXPLICIT CRM WRITE CONFIRMATION: Whenever you make any update or save to the CRM (such as logging daily work reports, incrementing client reels/posts deliverables, creating or updating tasks), you MUST explicitly state what was updated in the CRM (for example: 'I have updated BuFaisal in the CRM: completed reels is now 8.' or 'I have logged your daily report for today in the CRM.').\n"
-             . "6. TAGGING IN GROUPS: In groups, address team members naturally by their name (e.g. 'Hi {$senderName}'). If tagging, use @{$senderName} or their real phone number @{$from}. NEVER invent or write strange international numbers or LID codes like +256.\n"
-             . "7. TALK ONLY ABOUT ASSIGNED WORK: In groups, only discuss tasks and client deliverables specifically assigned to that team member.\n"
-             . "8. NOISE FILTER: In groups, if the message is casual banter, jokes, or general chatter and you are NOT tagged, output '[NO_REPLY]' so the group is never spammed.\n\n";
+             . "3. POLITE & HUMAN: Start conversations with a polite greeting (e.g. 'Hi {$senderName}'). Keep answers short, precise, conversational, and human (1 to 2 sentences maximum).\n"
+             . "4. EXPLICIT CRM WRITE CONFIRMATION: Whenever you make any update or save to the CRM (such as logging daily work reports, incrementing client reels/posts deliverables, creating or updating tasks), you MUST explicitly state what was updated in the CRM (for example: 'I have logged your daily report for today in the CRM.').\n"
+             . "5. TAGGING IN GROUPS: Address team members naturally by their name (e.g. 'Hi {$senderName}'). NEVER output phone numbers or LID codes like @+256... or @256... Always use their first name.\n"
+             . "6. TALK ONLY ABOUT ASSIGNED WORK: In groups, only discuss tasks and client deliverables specifically assigned to that team member.\n"
+             . "7. NOISE FILTER: In groups, if the message is casual banter, jokes, or general chatter and you are NOT tagged, output '[NO_REPLY]' so the group is never spammed. If tagged, you MUST reply.\n\n";
 
 // Build Context-Aware System Prompt
 if ($isGroup) {
     $tagNote = $isTagged ? "IMPORTANT: You were directly tagged or mentioned in this message. You MUST reply.\n" : "";
-    $greetingNote = $isGreetingOnly ? "NOTE: This message is a greeting only. Reply with a warm, friendly greeting: 'Hi {$senderName}! How can I help you today?' Do NOT call tools.\n" : "";
     $systemPrompt = $botIdentity
                   . $calendarContext
+                  . $conversationContext
                   . $safetyRules
                   . $tagNote
-                  . $greetingNote
                   . "You are Alex, the friendly Operations Lead at Hekayahaus CRM. You are reading this Team WhatsApp group in real time.\n"
                   . "Current Speaker: '{$senderName}' (Phone: +{$from}, User ID: " . ($senderUser['id'] ?? 'unmatched') . ").\n"
                   . "Always address them politely as {$senderName}, write clean human sentences without emojis, and explicitly confirm any updates made to the CRM.\n";
 } else {
     $systemPrompt = $botIdentity
                   . $calendarContext
+                  . $conversationContext
                   . $safetyRules
                   . "You are Alex, the AI Executive Operations Assistant for Founder Nimit Thawrani at Hekayahaus CRM.\n"
                   . "You are in a private 1-on-1 chat with the Founder. Be polite (e.g. 'Hi Nimit'), concise, and professional with ZERO emojis.\n"
@@ -877,7 +1011,7 @@ $claudeData = json_decode($claudeRes, true);
 $finalText = "";
 
 if (isset($claudeData['error']['message'])) {
-    $finalText = "⚠️ *Claude API Error:* " . $claudeData['error']['message'] . "\n\n👉 *Note:* If your Anthropic account has \$0 credits, Anthropic blocks the key until you click 'Add credits' in your Anthropic Console (minimum \$5).";
+    $finalText = "Claude API Error: " . $claudeData['error']['message'];
 } elseif (isset($claudeData['content'])) {
     $hasToolUse = false;
     $toolUseBlock = null;
@@ -938,12 +1072,32 @@ if (isset($claudeData['error']['message'])) {
     }
 }
 
+// ─── OUTPUT SANITIZATION & SINGLE OUTBOUND SEND ──────────────────────────────
 if (!empty($finalText) && stripos($finalText, '[NO_REPLY]') === false) {
+    // 1. Strip any emojis
+    $finalText = preg_replace('/[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{1F1E0}-\x{1F1FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{FE00}-\x{FE0F}\x{1F900}-\x{1F9FF}\x{1FA00}-\x{1FA6F}\x{1FA70}-\x{1FAFF}]/u', '', $finalText);
+
+    // 2. Eradicate any accidental @+256... or +256... LID mentions
+    $finalText = preg_replace('/@\+?256\s*[0-9]+/i', '@Ansh', $finalText);
+    $finalText = preg_replace('/\+?256\s*[0-9]+/i', 'Ansh', $finalText);
+
+    // 3. Clean whitespace
+    $finalText = preg_replace('/[ \t]{2,}/', ' ', $finalText);
+    $finalText = trim($finalText);
+
+    // 4. Send message once
     $mentionsList = [];
     if (!empty($rawParticipant) && strpos($rawParticipant, '@') !== false) {
         $mentionsList[] = $rawParticipant;
     }
     wa_send_message($source, $replyToJid, $finalText, $evoUrl, $evoKey, $evoInstance, $mentionsList);
+
+    // 5. Save bot reply to chat history
+    wa_save_chat_history($replyToJid, 'Alex (CRM Bot)', $botPhone, $finalText, true);
+
+    try {
+        Database::run("UPDATE wa_processed_messages SET status = 'completed' WHERE msg_id = ?", [$msgId]);
+    } catch (Throwable $e) {}
 }
 
 echo json_encode(['ok' => true]);

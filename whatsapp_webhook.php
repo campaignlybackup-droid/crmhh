@@ -402,11 +402,11 @@ $claudeTools = [
     ],
     [
         'name' => 'crm_get_daily_reports',
-        'description' => 'View daily work reports for any date. See what staff completed and any blockers.',
+        'description' => 'View daily work reports for any date. Today is ' . date('Y-m-d') . ', yesterday was ' . date('Y-m-d', strtotime('-1 day')) . '. Defaults to today.',
         'input_schema' => [
             'type' => 'object',
             'properties' => [
-                'date' => ['type' => 'string', 'description' => 'Date in YYYY-MM-DD. Defaults to today.']
+                'date' => ['type' => 'string', 'description' => 'Date in YYYY-MM-DD (e.g. yesterday is ' . date('Y-m-d', strtotime('-1 day')) . ', today is ' . date('Y-m-d') . '). Defaults to today.']
             ]
         ]
     ],
@@ -493,8 +493,22 @@ function execute_crm_tool_wa(string $name, array $args, ?array $senderUser, stri
             ];
 
         case 'crm_get_daily_reports':
-            $date = $args['date'] ?? date('Y-m-d');
-            return ['date' => $date, 'reports' => Database::all("SELECT dr.*, u.name AS user_name FROM daily_reports dr JOIN users u ON u.id = dr.user_id WHERE DATE(dr.report_date) = ? ORDER BY u.name ASC", [$date])];
+            $rawDate = trim($args['date'] ?? '');
+            if (empty($rawDate) || strtolower($rawDate) === 'today') {
+                $date = date('Y-m-d');
+            } elseif (strtolower($rawDate) === 'yesterday') {
+                $date = date('Y-m-d', strtotime('-1 day'));
+            } else {
+                $parsed = strtotime($rawDate);
+                $date = $parsed ? date('Y-m-d', $parsed) : date('Y-m-d');
+            }
+            $reports = Database::all("SELECT dr.*, u.name AS user_name, u.role AS user_role FROM daily_reports dr JOIN users u ON u.id = dr.user_id WHERE DATE(dr.report_date) = ? ORDER BY u.name ASC", [$date]);
+            return [
+                'target_date' => $date,
+                'target_day_name' => date('l, F j, Y', strtotime($date)),
+                'reports_found' => count($reports),
+                'reports' => $reports
+            ];
 
         case 'crm_submit_or_update_report':
             $targetUserId = !empty($args['user_id']) ? (int)$args['user_id'] : ($senderUser['id'] ?? $founder['id']);
@@ -573,9 +587,23 @@ function execute_crm_tool_wa(string $name, array $args, ?array $senderUser, stri
     }
 }
 
+// Calendar Context
+$todayDateStr = date('Y-m-d');
+$todayReadable = date('l, F j, Y');
+$yesterdayDateStr = date('Y-m-d', strtotime('-1 day'));
+$yesterdayReadable = date('l, F j, Y', strtotime('-1 day'));
+$currentTime = date('h:i A T');
+
+$calendarContext = "📅 CURRENT CALENDAR & TIME:\n"
+                 . "- TODAY: {$todayReadable} ({$todayDateStr})\n"
+                 . "- YESTERDAY: {$yesterdayReadable} ({$yesterdayDateStr})\n"
+                 . "- CURRENT TIME: {$currentTime}\n"
+                 . "CRITICAL: When the user asks for 'today', 'yesterday', or recent reports/tasks, ALWAYS use these exact dates.\n\n";
+
 // Build Context-Aware System Prompt
 if ($isGroup) {
-    $systemPrompt = "You are Alex, the friendly Operations Lead at Hekayahaus CRM. You are inside the Team WhatsApp group.\n"
+    $systemPrompt = $calendarContext
+                  . "You are Alex, the friendly Operations Lead at Hekayahaus CRM. You are inside the Team WhatsApp group.\n"
                   . "Current Speaker: '{$senderName}' (Phone: +{$from}, Role: " . ($senderUser['role'] ?? 'Team Member') . ", User ID: " . ($senderUser['id'] ?? 'null') . ").\n\n"
                   . "Instructions:\n"
                   . "1. If the message reports work completed today, reels/posts edited, or blockers, call `crm_submit_or_update_report` and `crm_update_client_deliverables` to log it.\n"
@@ -583,12 +611,14 @@ if ($isGroup) {
                   . "3. If someone asks a question about tasks or clients, answer concisely.\n"
                   . "4. If the message is casual chatter (not work-related), output '[NO_REPLY]' so you do not clutter the group.";
 } elseif ($isFounder) {
-    $systemPrompt = "You are Alex, the AI Executive Operations Assistant for Founder Nimit Thawrani at Hekayahaus CRM. You are in a private 1-on-1 WhatsApp chat with the Founder.\n"
+    $systemPrompt = $calendarContext
+                  . "You are Alex, the AI Executive Operations Assistant for Founder Nimit Thawrani at Hekayahaus CRM. You are in a private 1-on-1 WhatsApp chat with the Founder.\n"
                   . "You have live tools to view leads, daily reports, tasks, client deliverables, and assign tasks.\n"
                   . "If the Founder asks you to take a follow-up from any team member (e.g., 'Take a follow-up from Rahul about the reels'), use the `whatsapp_send_dm` tool to message that team member warmly and politely, then let the Founder know you have reached out.\n"
                   . "Keep all replies concise, structured, and WhatsApp-friendly.";
 } else {
-    $systemPrompt = "You are Alex, the friendly Operations Lead at Hekayahaus. You are in a private 1-on-1 chat with team member '{$senderName}'.\n"
+    $systemPrompt = $calendarContext
+                  . "You are Alex, the friendly Operations Lead at Hekayahaus. You are in a private 1-on-1 chat with team member '{$senderName}'.\n"
                   . "Be warm, polite, and helpful. If they report their daily work, call `crm_submit_or_update_report` to save it. If they ask about their tasks, check their tasks.";
 }
 

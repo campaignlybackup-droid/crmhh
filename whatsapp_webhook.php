@@ -398,7 +398,7 @@ $claudeTools = [
     [
         'name' => 'crm_get_overview',
         'description' => 'Get real-time agency dashboard metrics: total leads, tasks, overdue tasks, today reports, active clients.',
-        'input_schema' => ['type' => 'object', 'properties' => []]
+        'input_schema' => ['type' => 'object', 'properties' => (object)[]]
     ],
     [
         'name' => 'crm_get_daily_reports',
@@ -464,7 +464,7 @@ $claudeTools = [
     [
         'name' => 'crm_list_clients',
         'description' => 'Get client deliverables status (reels and posts completed vs required).',
-        'input_schema' => ['type' => 'object', 'properties' => []]
+        'input_schema' => ['type' => 'object', 'properties' => (object)[]]
     ],
     [
         'name' => 'whatsapp_send_dm',

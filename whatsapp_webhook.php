@@ -592,10 +592,10 @@ if ($isGroup) {
                   . "Be warm, polite, and helpful. If they report their daily work, call `crm_submit_or_update_report` to save it. If they ask about their tasks, check their tasks.";
 }
 
-// Call Claude 3.5 Sonnet
+// Call Claude Sonnet
 $apiUrl = "https://api.anthropic.com/v1/messages";
 $payload = [
-    'model' => 'claude-3-5-sonnet-latest',
+    'model' => 'claude-sonnet-4-6',
     'max_tokens' => 1024,
     'system' => $systemPrompt,
     'messages' => [
@@ -642,7 +642,7 @@ if (isset($claudeData['error']['message'])) {
         $toolResult = execute_crm_tool_wa($toolUseBlock['name'], $toolUseBlock['input'] ?? [], $senderUser, $source, $evoUrl, $evoKey, $evoInstance);
 
         $followUpPayload = [
-            'model' => 'claude-3-5-sonnet-latest',
+            'model' => 'claude-sonnet-4-6',
             'max_tokens' => 1024,
             'system' => $systemPrompt . "\nSummarize the tool result concisely for WhatsApp.",
             'messages' => [

@@ -502,7 +502,7 @@ function execute_crm_tool_wa(string $name, array $args, ?array $senderUser, stri
                 $parsed = strtotime($rawDate);
                 $date = $parsed ? date('Y-m-d', $parsed) : date('Y-m-d');
             }
-            $reports = Database::all("SELECT dr.*, u.name AS user_name, u.role AS user_role FROM daily_reports dr JOIN users u ON u.id = dr.user_id WHERE DATE(dr.report_date) = ? ORDER BY u.name ASC", [$date]);
+            $reports = Database::all("SELECT dr.*, u.name AS user_name FROM daily_reports dr JOIN users u ON u.id = dr.user_id WHERE DATE(dr.report_date) = ? ORDER BY u.name ASC", [$date]);
             return [
                 'target_date' => $date,
                 'target_day_name' => date('l, F j, Y', strtotime($date)),

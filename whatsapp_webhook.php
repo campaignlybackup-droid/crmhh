@@ -289,11 +289,43 @@ function wa_send_message(string $source, string $targetJid, string $replyText, ?
 }
 
 // ─── 3. USER & FOUNDER IDENTIFICATION ────────────────────────────────────────
-$senderUser = Database::one("SELECT * FROM users WHERE phone LIKE ? AND status = 'active' LIMIT 1", ["%$from%"]);
+$cleanFrom = preg_replace('/[^0-9]/', '', $from);
+$last9 = strlen($cleanFrom) >= 9 ? substr($cleanFrom, -9) : $cleanFrom;
+
+// Lookup user by phone
+$senderUser = Database::one(
+    "SELECT * FROM users WHERE (REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '-', '') LIKE ? OR phone LIKE ?) AND status = 'active' LIMIT 1",
+    ["%$last9%", "%$cleanFrom%"]
+);
 if ($senderUser && empty($senderName)) {
     $senderName = $senderUser['name'];
 }
-$isFounder = ($founderPhone && $from === $founderPhone) || ($senderUser && (int)$senderUser['is_founder'] === 1);
+
+// Authorized Founder Phone Numbers (Both of Nimit's numbers + any database-paired phone)
+$founderPhones = [
+    '971552489492', // Founder Nimit Primary
+    '971552628603', // Founder Nimit Secondary
+];
+$dbFounderPhone = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_founder_phone'");
+if ($dbFounderPhone) {
+    $cleanDbFounder = preg_replace('/[^0-9]/', '', $dbFounderPhone);
+    if (!empty($cleanDbFounder) && !in_array($cleanDbFounder, $founderPhones, true)) {
+        $founderPhones[] = $cleanDbFounder;
+    }
+}
+
+$founderLast9 = array_map(function($p) { return substr($p, -9); }, $founderPhones);
+
+$isFounder = in_array($cleanFrom, $founderPhones, true)
+    || in_array($last9, $founderLast9, true)
+    || ($senderUser && (int)$senderUser['is_founder'] === 1);
+
+if ($isFounder) {
+    $senderName = 'Nimit Thawrani (Founder)';
+    if (!$senderUser) {
+        $senderUser = Database::one("SELECT * FROM users WHERE is_founder = 1 ORDER BY id ASC LIMIT 1");
+    }
+}
 
 // Security Pairing for Founder
 $founderSecret = 'crm_founder_secure_hh_2026';

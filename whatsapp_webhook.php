@@ -138,6 +138,9 @@ if (!empty($rawInput)) {
     // 1. WAHA (WhatsApp HTTP API) Payload
     if (isset($data['event']) && strpos($data['event'], 'message') !== false && isset($data['payload'])) {
         $source = 'waha';
+        $wahaSession = $data['session'] ?? 'new1';
+        Database::run("INSERT INTO app_settings (`key`, `value`) VALUES ('whatsapp_waha_session', ?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)", [$wahaSession]);
+
         $payload = $data['payload'] ?? [];
         if (!empty($payload['fromMe'])) {
             echo json_encode(['ok' => true]);
@@ -223,6 +226,7 @@ function wa_send_message(string $source, string $targetJid, string $replyText, ?
 
     $wahaUrl = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_waha_url'");
     $wahaKey = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_waha_key'") ?: 'admin123';
+    $wahaSession = Database::scalar("SELECT `value` FROM app_settings WHERE `key` = 'whatsapp_waha_session'") ?: 'new1';
 
     // WAHA reply
     if ($source === 'waha' || (!empty($wahaUrl) && $source !== 'evolution')) {
@@ -230,7 +234,7 @@ function wa_send_message(string $source, string $targetJid, string $replyText, ?
         $payload = [
             'chatId'  => $targetJid,
             'text'    => $replyText,
-            'session' => 'default'
+            'session' => $wahaSession
         ];
         $headers = ['Content-Type: application/json'];
         if (!empty($wahaKey)) {

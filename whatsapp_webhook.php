@@ -623,7 +623,9 @@ curl_close($ch);
 $claudeData = json_decode($claudeRes, true);
 $finalText = "";
 
-if (isset($claudeData['content'])) {
+if (isset($claudeData['error']['message'])) {
+    $finalText = "⚠️ *Claude API Error:* " . $claudeData['error']['message'] . "\n\n👉 *Note:* If your Anthropic account has \$0 credits, Anthropic blocks the key until you click 'Add credits' in your Anthropic Console (minimum \$5).";
+} elseif (isset($claudeData['content'])) {
     $hasToolUse = false;
     $toolUseBlock = null;
 

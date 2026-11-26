@@ -147,6 +147,22 @@ if (!empty($rawInput)) {
 
         $payload = $data['payload'] ?? [];
         if (!empty($payload['fromMe'])) {
+            $selfBody = trim($payload['body'] ?? '');
+            $selfTo = $payload['to'] ?? ($payload['from'] ?? '');
+            if ($selfBody !== '' && $selfTo !== '') {
+                try {
+                    $recentDup = Database::scalar(
+                        "SELECT id FROM wa_chat_history WHERE chat_id = ? AND message = ? AND is_bot = 1 AND created_at > NOW() - INTERVAL 15 SECOND LIMIT 1",
+                        [$selfTo, $selfBody]
+                    );
+                    if (!$recentDup) {
+                        Database::run(
+                            "INSERT INTO wa_chat_history (chat_id, sender_name, sender_phone, message, is_bot) VALUES (?, 'Me (WhatsApp)', '971541311988', ?, 1)",
+                            [$selfTo, $selfBody]
+                        );
+                    }
+                } catch (Throwable $e) {}
+            }
             echo json_encode(['ok' => true]);
             exit;
         }
@@ -506,7 +522,9 @@ if (stripos($text, $founderSecret) !== false) {
 }
 
 // Strict Privacy Guard: The bot NEVER speaks to anyone on private 1-on-1 chat except the Founder
+// Log the incoming DM to wa_chat_history so Claude Code can read it, then exit without replying.
 if (!$isGroup && !$isFounder) {
+    wa_save_chat_history($replyToJid, $senderName, $cleanFrom, $text, false);
     wa_log("Ignored private DM from non-founder (+{$from})");
     echo json_encode(['ok' => true, 'ignored' => 'non_founder_private_chat']);
     exit;

@@ -501,12 +501,23 @@ try {
         case 'get_whatsapp_chat_history': {
             $limit = min(100, max(1, (int)($input['limit'] ?? 20)));
             $chatId = trim($input['chat_id'] ?? '');
+            $sender = trim($input['sender'] ?? '');
+            $search = trim($input['search'] ?? '');
 
             $where = [];
             $params = [];
             if (!empty($chatId)) {
                 $where[] = 'chat_id = ?';
                 $params[] = $chatId;
+            }
+            if (!empty($sender)) {
+                $where[] = '(sender_name LIKE ? OR sender_phone LIKE ?)';
+                $params[] = "%$sender%";
+                $params[] = "%$sender%";
+            }
+            if (!empty($search)) {
+                $where[] = 'message LIKE ?';
+                $params[] = "%$search%";
             }
 
             $whereSql = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -523,6 +534,33 @@ try {
             api_response(true, [
                 'count' => count($messages),
                 'messages' => array_reverse($messages)
+            ]);
+        }
+
+        case 'list_whatsapp_chats': {
+            $limit = min(50, max(1, (int)($input['limit'] ?? 20)));
+            $chats = Database::all(
+                "SELECT w.chat_id,
+                        CASE WHEN w.chat_id LIKE '%@g.us' THEN 'group' ELSE 'dm' END AS chat_type,
+                        w.sender_name AS last_sender,
+                        w.sender_phone AS last_sender_phone,
+                        w.message AS last_message,
+                        w.created_at AS last_message_at,
+                        agg.message_count
+                 FROM wa_chat_history w
+                 JOIN (
+                     SELECT chat_id, MAX(id) AS max_id, COUNT(*) AS message_count
+                     FROM wa_chat_history
+                     GROUP BY chat_id
+                 ) agg ON agg.max_id = w.id
+                 ORDER BY w.id DESC
+                 LIMIT ?",
+                [$limit]
+            );
+
+            api_response(true, [
+                'count' => count($chats),
+                'chats' => $chats
             ]);
         }
 

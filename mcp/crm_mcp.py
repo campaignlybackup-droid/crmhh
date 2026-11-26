@@ -276,7 +276,7 @@ TOOLS = [
     },
     {
         "name": "crm_get_whatsapp_chat_history",
-        "description": "View recent WhatsApp messages sent in team groups or chats to check team updates, reports, and bot replies.",
+        "description": "Read recent WhatsApp messages from team groups, DMs, or specific senders. Supports filtering by chat_id, sender name/phone, or keyword search.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -286,7 +286,28 @@ TOOLS = [
                 },
                 "chat_id": {
                     "type": "string",
-                    "description": "Optional: filter by specific group JID or phone"
+                    "description": "Optional: filter by specific group JID or phone chat_id"
+                },
+                "sender": {
+                    "type": "string",
+                    "description": "Optional: filter by sender name or phone (e.g. 'Ansh', 'Nimit', 'Zainab')"
+                },
+                "search": {
+                    "type": "string",
+                    "description": "Optional: search keyword inside message text"
+                }
+            }
+        }
+    },
+    {
+        "name": "crm_list_whatsapp_chats",
+        "description": "List all recent WhatsApp chats and groups with their chat_id, last sender, last message, and message count.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Max chats to return (default 20, max 50)"
                 }
             }
         }
@@ -346,6 +367,7 @@ def handle_request(req):
             "crm_sql_query": "sql_query",
             "crm_send_whatsapp_message": "send_whatsapp_message",
             "crm_get_whatsapp_chat_history": "get_whatsapp_chat_history",
+            "crm_list_whatsapp_chats": "list_whatsapp_chats",
         }
 
         action = action_map.get(tool_name)

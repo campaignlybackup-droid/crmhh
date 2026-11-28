@@ -864,30 +864,14 @@ function execute_crm_tool_wa(string $name, array $args, ?array $senderUser, stri
 
 // Check if bot was mentioned or tagged in this message
 $botPhone = '971541311988';
-$botVariants = [
-    '971541311988',
-    '541311988',
-    '+971 54 131 1988',
-    '+971 541311988',
-    '+971541311988',
-    '971 54 131 1988',
-    '971 541311988',
-    'crm bot',
-    'crmbot',
-    'crm_bot',
-    '@crm bot',
-    '@crm',
-    '@bot',
-    'bot',
-    'alex',
-    '@alex'
-];
+$mentionedJids = $payload['mentionedJidList']
+    ?? ($payload['mentions']
+    ?? ($payload['_data']['message']['extendedTextMessage']['contextInfo']['mentionedJid'] ?? []));
 
-$mentionedJids = $payload['mentionedJidList'] ?? ($payload['mentions'] ?? []);
 $isTagged = false;
 if (is_array($mentionedJids)) {
     foreach ($mentionedJids as $mjid) {
-        if (strpos($mjid, $botPhone) !== false || strpos($mjid, '541311988') !== false) {
+        if (is_string($mjid) && (strpos($mjid, $botPhone) !== false || strpos($mjid, '541311988') !== false)) {
             $isTagged = true;
             break;
         }
@@ -897,13 +881,8 @@ if (!$isTagged) {
     $cleanTextDigits = preg_replace('/[^0-9]/', '', $text);
     if (strpos($cleanTextDigits, '541311988') !== false || strpos($cleanTextDigits, '971541311988') !== false) {
         $isTagged = true;
-    } else {
-        foreach ($botVariants as $kw) {
-            if (stripos($text, $kw) !== false) {
-                $isTagged = true;
-                break;
-            }
-        }
+    } elseif (preg_match('/(@crm\s*bot|@crm|@bot|@alex|\bcrm\s*bot\b|\bcrmbot\b|\bcrm_bot\b|\balex\b|\bbot\b)/i', $text)) {
+        $isTagged = true;
     }
 }
 
@@ -933,11 +912,26 @@ if ($isGreetingOnly && ($isTagged || !$isGroup)) {
     exit;
 }
 
-// Save current user message to conversation history
+// Save current user message to conversation history (ALWAYS read and remember all messages)
 wa_save_chat_history($replyToJid, $senderName, $cleanFrom, $text, false);
 
-// Retrieve previous recent messages for conversation context memory
-$recentHistory = wa_get_chat_history($replyToJid, 8);
+// Strict Group Rule: In groups, NEVER reply or talk to anyone unless tagged.
+// If untagged in a group: still read and remember the message in wa_chat_history.
+// Only invoke Claude in SILENT OBSERVER MODE if the message appears to contain a work/CRM update.
+$isSilentObserver = ($isGroup && !$isTagged);
+if ($isSilentObserver) {
+    $hasWorkSignal = (bool)preg_match('/\b(report|done|completed|finished|reel|reels|post|posts|task|tasks|client|clients|blocker|blockers|submitted|pending|update|updated|delivered|edited|script|shoot|upload|uploaded|lead|leads|meeting|status)\b/i', $text);
+    if (!$hasWorkSignal) {
+        try {
+            Database::run("UPDATE wa_processed_messages SET status = 'context_saved_only' WHERE msg_id = ?", [$msgId]);
+        } catch (Throwable $e) {}
+        echo json_encode(['ok' => true, 'ignored' => 'untagged_group_saved_to_context']);
+        exit;
+    }
+}
+
+// Retrieve previous recent messages for conversation context memory (25-message rolling window)
+$recentHistory = wa_get_chat_history($replyToJid, 25);
 $conversationContext = "";
 if (!empty($recentHistory)) {
     $conversationContext = "RECENT CONVERSATION CONTEXT (FOR CONTEXT & MEMORY ONLY):\n";
@@ -978,7 +972,11 @@ $safetyRules = "STRICT CORE RULES:\n"
 
 // Build Context-Aware System Prompt
 if ($isGroup) {
-    $tagNote = $isTagged ? "IMPORTANT: You were directly tagged or mentioned in this message. You MUST reply.\n" : "";
+    if ($isSilentObserver) {
+        $tagNote = "SILENT OBSERVER MODE (CRITICAL): You were NOT tagged in this group message. NEVER reply or talk to anyone in the group. Do NOT write a conversational response. Only call CRM tools silently if {$senderName} reported completed work, a daily report, task progress, or client deliverables that should be updated in the CRM. After any tool call (or if no CRM update is needed), output ONLY '[NO_REPLY]'.\n";
+    } else {
+        $tagNote = "IMPORTANT: You were directly tagged or mentioned in this message. You MUST reply.\n";
+    }
     $systemPrompt = $botIdentity
                   . $calendarContext
                   . $conversationContext
@@ -1046,52 +1044,55 @@ if (isset($claudeData['error']['message'])) {
     if ($hasToolUse && $toolUseBlock) {
         $toolResult = execute_crm_tool_wa($toolUseBlock['name'], $toolUseBlock['input'] ?? [], $senderUser, $source, $evoUrl, $evoKey, $evoInstance);
 
-        $followUpPayload = [
-            'model' => 'claude-sonnet-4-6',
-            'max_tokens' => 1024,
-            'system' => $systemPrompt . "\nCRITICAL: If you updated or saved anything to the CRM (such as daily report, client deliverables count, or task status), explicitly state what you updated in the CRM. Keep the response polite, natural, short (1 to 2 sentences), and do NOT use any emojis.",
-            'messages' => [
-                ['role' => 'user', 'content' => $text],
-                ['role' => 'assistant', 'content' => $claudeData['content']],
-                [
-                    'role' => 'user',
-                    'content' => [
-                        [
-                            'type' => 'tool_result',
-                            'tool_use_id' => $toolUseBlock['id'],
-                            'content' => json_encode($toolResult)
+        if (!$isSilentObserver) {
+            $followUpPayload = [
+                'model' => 'claude-sonnet-4-6',
+                'max_tokens' => 1024,
+                'system' => $systemPrompt . "\nCRITICAL: If you updated or saved anything to the CRM (such as daily report, client deliverables count, or task status), explicitly state what you updated in the CRM. Keep the response polite, natural, short (1 to 2 sentences), and do NOT use any emojis.",
+                'messages' => [
+                    ['role' => 'user', 'content' => $text],
+                    ['role' => 'assistant', 'content' => $claudeData['content']],
+                    [
+                        'role' => 'user',
+                        'content' => [
+                            [
+                                'type' => 'tool_result',
+                                'tool_use_id' => $toolUseBlock['id'],
+                                'content' => json_encode($toolResult)
+                            ]
                         ]
                     ]
-                ]
-            ],
-            'tools' => $claudeTools
-        ];
+                ],
+                'tools' => $claudeTools
+            ];
 
-        $ch2 = curl_init($apiUrl);
-        curl_setopt_array($ch2, [
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode($followUpPayload),
-            CURLOPT_HTTPHEADER => [
-                'Content-Type: application/json',
-                'x-api-key: ' . $anthropicKey,
-                'anthropic-version: 2023-06-01'
-            ],
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 30,
-            CURLOPT_SSL_VERIFYPEER => false,
-        ]);
-        $followUpRes = curl_exec($ch2);
-        curl_close($ch2);
+            $ch2 = curl_init($apiUrl);
+            curl_setopt_array($ch2, [
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($followUpPayload),
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
+                    'x-api-key: ' . $anthropicKey,
+                    'anthropic-version: 2023-06-01'
+                ],
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_SSL_VERIFYPEER => false,
+            ]);
+            $followUpRes = curl_exec($ch2);
+            curl_close($ch2);
 
-        $followUpData = json_decode($followUpRes, true);
-        if (isset($followUpData['content'][0]['text'])) {
-            $finalText = $followUpData['content'][0]['text'];
+            $followUpData = json_decode($followUpRes, true);
+            if (isset($followUpData['content'][0]['text'])) {
+                $finalText = $followUpData['content'][0]['text'];
+            }
         }
     }
 }
 
 // ─── OUTPUT SANITIZATION & SINGLE OUTBOUND SEND ──────────────────────────────
-if (!empty($finalText) && stripos($finalText, '[NO_REPLY]') === false) {
+// Hard guard: NEVER send a message to a group unless directly tagged!
+if (!$isSilentObserver && !empty($finalText) && stripos($finalText, '[NO_REPLY]') === false) {
     // 1. Strip any emojis
     $finalText = preg_replace('/[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{1F1E0}-\x{1F1FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{FE00}-\x{FE0F}\x{1F900}-\x{1F9FF}\x{1FA00}-\x{1FA6F}\x{1FA70}-\x{1FAFF}]/u', '', $finalText);
 
@@ -1115,6 +1116,10 @@ if (!empty($finalText) && stripos($finalText, '[NO_REPLY]') === false) {
 
     try {
         Database::run("UPDATE wa_processed_messages SET status = 'completed' WHERE msg_id = ?", [$msgId]);
+    } catch (Throwable $e) {}
+} elseif ($isSilentObserver) {
+    try {
+        Database::run("UPDATE wa_processed_messages SET status = 'silent_observer_done' WHERE msg_id = ?", [$msgId]);
     } catch (Throwable $e) {}
 }
 

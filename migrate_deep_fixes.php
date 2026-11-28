@@ -300,6 +300,11 @@ try {
         `status` VARCHAR(20) DEFAULT 'processed',
         `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pmCols = array_column($db->query("SHOW COLUMNS FROM `wa_processed_messages`")->fetchAll(PDO::FETCH_ASSOC) ?: [], 'Field');
+    if (!in_array('status', $pmCols, true)) {
+        $db->exec("ALTER TABLE `wa_processed_messages` ADD COLUMN `status` VARCHAR(20) DEFAULT 'processed' AFTER `msg_id`");
+        echo "✓ Added status column to wa_processed_messages.\n";
+    }
     echo "✓ Verified wa_processed_messages table.\n";
 
     // Chat history table for contextual memory

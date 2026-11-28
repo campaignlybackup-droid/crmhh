@@ -299,12 +299,11 @@ if (empty($msgId)) {
 try {
     Database::run("CREATE TABLE IF NOT EXISTS wa_processed_messages (
         msg_id VARCHAR(191) PRIMARY KEY,
-        status VARCHAR(20) DEFAULT 'processing',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
     // Database::run() returns affected row count (int), NOT a PDOStatement.
-    $affected = Database::run("INSERT IGNORE INTO wa_processed_messages (msg_id, status) VALUES (?, 'processing')", [$msgId]);
+    $affected = Database::run("INSERT IGNORE INTO wa_processed_messages (msg_id) VALUES (?)", [$msgId]);
     if ($affected === 0) {
         wa_log("Duplicate message ignored: {$msgId}");
         echo json_encode(['ok' => true, 'ignored' => 'duplicate_in_flight']);
@@ -314,7 +313,7 @@ try {
     // Secondary 10-second content+sender+chat lock in case WAHA sends duplicate webhooks with different IDs
     $windowBucket = (int)floor(($msgTimestamp > 0 ? $msgTimestamp : time()) / 10);
     $windowHash = 'win_' . md5(($replyToJid ?? '') . '|' . ($from ?? '') . '|' . $text . '|' . $windowBucket);
-    $winAffected = Database::run("INSERT IGNORE INTO wa_processed_messages (msg_id, status) VALUES (?, 'processing')", [$windowHash]);
+    $winAffected = Database::run("INSERT IGNORE INTO wa_processed_messages (msg_id) VALUES (?)", [$windowHash]);
     if ($winAffected === 0) {
         wa_log("Duplicate window message ignored: {$windowHash}");
         echo json_encode(['ok' => true, 'ignored' => 'duplicate_window']);
@@ -323,7 +322,9 @@ try {
     if (random_int(1, 50) === 1) {
         Database::run("DELETE FROM wa_processed_messages WHERE created_at < NOW() - INTERVAL 2 HOUR");
     }
-} catch (Throwable $e) {}
+} catch (Throwable $e) {
+    wa_log("Dedup DB error: " . $e->getMessage());
+}
 
 // Acknowledge webhook immediately to prevent WAHA / proxy timeout retries
 if (function_exists('fastcgi_finish_request')) {

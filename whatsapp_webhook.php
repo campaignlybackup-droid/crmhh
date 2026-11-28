@@ -171,8 +171,8 @@ if (!empty($rawInput)) {
         $rawParticipant = $payload['participant'] ?? ($payload['author'] ?? ($payload['_data']['participant'] ?? $fromJid));
         $cleanParticipant = preg_replace('/[^0-9]/', '', explode('@', $rawParticipant)[0]);
 
-        // Ignore if sent by the bot's own number
-        if ($cleanParticipant === '971541311988' || strpos($rawParticipant, '971541311988') !== false) {
+        // Ignore if sent by the bot's own number or LID
+        if ($cleanParticipant === '971541311988' || $cleanParticipant === '121131717656587' || strpos($rawParticipant, '971541311988') !== false || strpos($rawParticipant, '121131717656587') !== false) {
             echo json_encode(['ok' => true]);
             exit;
         }
@@ -303,10 +303,21 @@ try {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-    $stmt = Database::run("INSERT IGNORE INTO wa_processed_messages (msg_id, status) VALUES (?, 'processing')", [$msgId]);
-    if ($stmt && $stmt->rowCount() === 0) {
+    // Database::run() returns affected row count (int), NOT a PDOStatement.
+    $affected = Database::run("INSERT IGNORE INTO wa_processed_messages (msg_id, status) VALUES (?, 'processing')", [$msgId]);
+    if ($affected === 0) {
         wa_log("Duplicate message ignored: {$msgId}");
         echo json_encode(['ok' => true, 'ignored' => 'duplicate_in_flight']);
+        exit;
+    }
+
+    // Secondary 10-second content+sender+chat lock in case WAHA sends duplicate webhooks with different IDs
+    $windowBucket = (int)floor(($msgTimestamp > 0 ? $msgTimestamp : time()) / 10);
+    $windowHash = 'win_' . md5(($replyToJid ?? '') . '|' . ($from ?? '') . '|' . $text . '|' . $windowBucket);
+    $winAffected = Database::run("INSERT IGNORE INTO wa_processed_messages (msg_id, status) VALUES (?, 'processing')", [$windowHash]);
+    if ($winAffected === 0) {
+        wa_log("Duplicate window message ignored: {$windowHash}");
+        echo json_encode(['ok' => true, 'ignored' => 'duplicate_window']);
         exit;
     }
     if (random_int(1, 50) === 1) {
@@ -864,6 +875,7 @@ function execute_crm_tool_wa(string $name, array $args, ?array $senderUser, stri
 
 // Check if bot was mentioned or tagged in this message
 $botPhone = '971541311988';
+$botLid = '121131717656587';
 $mentionedJids = $payload['mentionedJidList']
     ?? ($payload['mentions']
     ?? ($payload['_data']['message']['extendedTextMessage']['contextInfo']['mentionedJid'] ?? []));
@@ -871,7 +883,7 @@ $mentionedJids = $payload['mentionedJidList']
 $isTagged = false;
 if (is_array($mentionedJids)) {
     foreach ($mentionedJids as $mjid) {
-        if (is_string($mjid) && (strpos($mjid, $botPhone) !== false || strpos($mjid, '541311988') !== false)) {
+        if (is_string($mjid) && (strpos($mjid, $botPhone) !== false || strpos($mjid, '541311988') !== false || strpos($mjid, $botLid) !== false)) {
             $isTagged = true;
             break;
         }
@@ -879,9 +891,9 @@ if (is_array($mentionedJids)) {
 }
 if (!$isTagged) {
     $cleanTextDigits = preg_replace('/[^0-9]/', '', $text);
-    if (strpos($cleanTextDigits, '541311988') !== false || strpos($cleanTextDigits, '971541311988') !== false) {
+    if (strpos($cleanTextDigits, '541311988') !== false || strpos($cleanTextDigits, '971541311988') !== false || strpos($cleanTextDigits, $botLid) !== false) {
         $isTagged = true;
-    } elseif (preg_match('/(@crm\s*bot|@crm|@bot|@alex|\bcrm\s*bot\b|\bcrmbot\b|\bcrm_bot\b|\balex\b|\bbot\b)/i', $text)) {
+    } elseif (preg_match('/(@crm\s*bot|@crm|@bot|@alex|@hekayahaus|\bcrm\s*bot\b|\bcrmbot\b|\bcrm_bot\b|\balex\b|\bbot\b)/i', $text)) {
         $isTagged = true;
     }
 }
